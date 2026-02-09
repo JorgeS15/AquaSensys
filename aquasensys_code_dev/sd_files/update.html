@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AquaSensys - Firmware Update</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="topnav">
+        <h1><i class="fas fa-microchip"></i> <span data-i18n="mainTitle">AquaSensys</span></h1>
+        <div class="nav-right">
+            <a href="/"><i class="fas fa-tachometer-alt"></i> <span data-i18n="dashboard">Dashboard</span></a>
+            <a href="/settings.html"><i class="fas fa-cog"></i> <span data-i18n="settings">Settings</span></a>
+            <div class="language-selector">
+                <label for="languageSelector" data-i18n="language">Language</label>
+                <select id="languageSelector" onchange="changeLanguage(this.value)">
+                    <option value="en" data-i18n="english">English</option>
+                    <option value="pt" data-i18n="portuguese">Portuguese</option>
+                </select>
+            </div>
+            <div class="wifi-status" id="wifiStatus">
+                <i class="fas fa-wifi"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="content">
+        <div class="card">
+            <h2><i class="fas fa-download"></i> <span data-i18n="firmwareUpdate">Firmware Update</span></h2>
+            
+            <div class="warning-box">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>
+                    <strong data-i18n="important">Important:</strong> <span data-i18n="updateWarning">Do not power off or disconnect the device during the update process. The update may take several minutes to complete.</span>
+                </div>
+            </div>
+            
+            <div class="info-box">
+                <div class="info-item">
+                    <span data-i18n="currentVersion">Current Version:</span>
+                    <strong id="currentVersion">%VERSION%</strong>
+                </div>
+                <div class="info-item">
+                    <span data-i18n="device">Device:</span>
+                    <strong>AquaSensys C3</strong>
+                </div>
+                <div class="info-item">
+                    <span data-i18n="freeSpace">Free Space:</span>
+                    <strong id="freeSpace" data-i18n="checking">Checking...</strong>
+                </div>
+                <div class="info-item">
+                    <span data-i18n="lastUpdate">Last Update:</span>
+                    <strong id="lastUpdate" data-i18n="unknown">Unknown</strong>
+                </div>
+            </div>
+            
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <i class="fas fa-cloud-upload-alt" style="font-size: 48px; color: var(--secondary); margin-bottom: 15px;"></i>
+                <h3 data-i18n="selectFirmwareFile">Select Firmware File</h3>
+                <p class="file-info" data-i18n="uploadInstruction">Click to browse or drag and drop your .bin file here</p>
+                <input type="file" id="fileInput" class="file-input" accept=".bin">
+            </div>
+            
+            <div class="selected-file" id="selectedFile">
+                <i class="fas fa-file-code"></i>
+                <span class="selected-file-name" id="fileName"></span>
+                <span id="fileSize" style="color: #666; margin-left: 10px;"></span>
+            </div>
+            
+            <div class="button-group">
+                <button class="button success" id="updateBtn" onclick="startUpdate()" disabled>
+                    <i class="fas fa-rocket"></i> <span data-i18n="startUpdate">Start Update</span>
+                </button>
+                <button class="button" onclick="checkForUpdates()">
+                    <i class="fas fa-sync"></i> <span data-i18n="checkSDCard">Check SD Card</span>
+                </button>
+            </div>
+            
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-text" id="progressText">0%</div>
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="stats" id="stats">
+                    <div class="stat-item">
+                        <div class="stat-label" data-i18n="uploaded">Uploaded</div>
+                        <div class="stat-value" id="statUploaded">0 KB</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label" data-i18n="speed">Speed</div>
+                        <div class="stat-value" id="statSpeed">0 KB/s</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label" data-i18n="timeElapsed">Time Elapsed</div>
+                        <div class="stat-value" id="statElapsed">0s</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label" data-i18n="timeRemaining">Time Remaining</div>
+                        <div class="stat-value" id="statRemaining">0s</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="status-message" id="statusMessage"></div>
+        </div>
+    </div>
+
+    <script src="translations.js"></script>
+    <script src="language.js"></script>
+    <script>
+        let updateFile = null;
+        let startTime = null;
+        let uploadXHR = null;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkDeviceInfo();
+            setupDragDrop();
+        });
+        
+        // File input handler
+        document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+        
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                updateFile = file;
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileSize').textContent = '(' + formatBytes(file.size) + ')';
+                document.getElementById('selectedFile').style.display = 'block';
+                document.getElementById('updateBtn').disabled = false;
+            }
+        }
+        
+        // Drag and drop
+        function setupDragDrop() {
+            const uploadArea = document.getElementById('uploadArea');
+            
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => {
+                    uploadArea.classList.add('dragover');
+                }, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => {
+                    uploadArea.classList.remove('dragover');
+                }, false);
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                const file = e.dataTransfer.files[0];
+                if (file && file.name.endsWith('.bin')) {
+                    document.getElementById('fileInput').files = e.dataTransfer.files;
+                    handleFileSelect({ target: { files: e.dataTransfer.files } });
+                }
+            }, false);
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function formatTime(seconds) {
+            if (seconds < 60) return seconds + 's';
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return mins + 'm ' + secs + 's';
+        }
+        
+        function showStatus(message, type, icon) {
+            const status = document.getElementById('statusMessage');
+            const iconHtml = icon ? `<i class="fas fa-${icon}"></i>` : '';
+            status.innerHTML = iconHtml + message;
+            status.className = 'status-message ' + type;
+            status.style.display = 'block';
+        }
+        
+        async function checkDeviceInfo() {
+            try {
+                const response = await fetch('/diagnostics');
+                const data = await response.json();
+                
+                document.getElementById('freeSpace').textContent = 
+                    formatBytes(data.heap || 0) + ' RAM';
+                
+            } catch (error) {
+                console.error('Failed to get device info:', error);
+            }
+        }
+        
+        async function checkForUpdates() {
+            showStatus(i18n('checkingSDCard'), 'info', 'spinner fa-spin');
+            
+            try {
+                const response = await fetch('/api/ota/status');
+                const data = await response.json();
+                
+                if (data.hasUpdateFile) {
+                    showStatus(i18n('updateFileFound'), 'success', 'check-circle');
+                    
+                    // Add button to apply update from SD
+                    const applyBtn = document.createElement('button');
+                    applyBtn.className = 'button success';
+                    applyBtn.innerHTML = '<i class="fas fa-download"></i> ' + i18n('applyUpdateFromSD');
+                    applyBtn.onclick = applySDUpdate;
+                    applyBtn.style.marginTop = '10px';
+                    document.getElementById('statusMessage').appendChild(applyBtn);
+                } else {
+                    showStatus(i18n('noUpdateFile'), 'info', 'info-circle');
+                }
+            } catch (error) {
+                showStatus(i18n('checkUpdateError') + ': ' + error.message, 'error', 'times-circle');
+            }
+        }
+        
+        async function applySDUpdate() {
+            if (confirm(i18n('confirmSDUpdate'))) {
+                try {
+                    const response = await fetch('/api/ota/update-from-file', { method: 'POST' });
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showStatus(i18n('applyingSDUpdate'), 'info', 'spinner fa-spin');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 5000);
+                    } else {
+                        showStatus(i18n('applyUpdateFailed') + ': ' + (data.error || 'Unknown error'), 'error', 'times-circle');
+                    }
+                } catch (error) {
+                    showStatus(i18n('applyUpdateFailed') + ': ' + error.message, 'error', 'times-circle');
+                }
+            }
+        }
+        
+        async function startUpdate() {
+            if (!updateFile) return;
+            
+            if (!confirm(i18n('confirmUpdate'))) {
+                return;
+            }
+            
+            document.getElementById('updateBtn').disabled = true;
+            document.getElementById('progressContainer').style.display = 'block';
+            showStatus(i18n('uploadingFirmware'), 'info', 'upload');
+            
+            startTime = Date.now();
+            
+            const formData = new FormData();
+            formData.append('firmware', updateFile);
+            
+            try {
+                uploadXHR = new XMLHttpRequest();
+                
+                uploadXHR.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        updateProgress(e.loaded, e.total);
+                    }
+                });
+                
+                uploadXHR.addEventListener('load', function() {
+                    if (uploadXHR.status === 200) {
+                        showStatus(i18n('updateSuccessful'), 'success', 'check-circle');
+                        document.getElementById('progressFill').style.background = 
+                            'linear-gradient(90deg, var(--success), #3d9970)';
+                        
+                        // Auto redirect after restart
+                        setTimeout(() => {
+                            showStatus(i18n('waitingRestart'), 'info', 'spinner fa-spin');
+                            checkReconnection();
+                        }, 5000);
+                    } else {
+                        showStatus(i18n('updateFailed') + ': ' + uploadXHR.responseText, 'error', 'times-circle');
+                        document.getElementById('updateBtn').disabled = false;
+                    }
+                });
+                
+                uploadXHR.addEventListener('error', function() {
+                    // Check if this is actually a successful update that caused a disconnect
+                    const progress = document.getElementById('progressText').textContent;
+                    if (progress === '100%') {
+                        // Likely successful update with device restart
+                        showStatus(i18n('updateAppearSuccessful'), 'success', 'check-circle');
+                        document.getElementById('progressFill').style.background = 
+                            'linear-gradient(90deg, var(--success), #3d9970)';
+                        setTimeout(() => {
+                            showStatus(i18n('waitingRestart'), 'info', 'spinner fa-spin');
+                            checkReconnection();
+                        }, 2000);
+                    } else {
+                        showStatus(i18n('uploadFailedNetwork'), 'error', 'times-circle');
+                        document.getElementById('updateBtn').disabled = false;
+                    }
+                });
+                
+                uploadXHR.addEventListener('abort', function() {
+                    showStatus(i18n('updateCancelled'), 'error', 'times-circle');
+                    document.getElementById('updateBtn').disabled = false;
+                });
+                
+                uploadXHR.open('POST', '/update/upload');
+                uploadXHR.send(formData);
+                
+            } catch (error) {
+                showStatus(i18n('updateFailed') + ': ' + error.message, 'error', 'times-circle');
+                document.getElementById('updateBtn').disabled = false;
+            }
+        }
+        
+        function updateProgress(loaded, total) {
+            const percent = Math.round((loaded / total) * 100);
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = percent + '%';
+            
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const speed = loaded / elapsed;
+            const remaining = (total - loaded) / speed;
+            
+            document.getElementById('statUploaded').textContent = 
+                formatBytes(loaded) + ' / ' + formatBytes(total);
+            document.getElementById('statSpeed').textContent = formatBytes(speed) + '/s';
+            document.getElementById('statElapsed').textContent = formatTime(elapsed);
+            document.getElementById('statRemaining').textContent = formatTime(Math.floor(remaining));
+        }
+        
+        function checkReconnection() {
+            const checkInterval = setInterval(() => {
+                fetch('/', { method: 'HEAD' })
+                    .then(() => {
+                        clearInterval(checkInterval);
+                        showStatus(i18n('deviceOnline'), 'success', 'check-circle');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 1000);
+                    })
+                    .catch(() => {
+                        // Still rebooting
+                    });
+            }, 2000);
+            
+            // Timeout after 60 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                showStatus(i18n('deviceNotOnline'), 'error', 'times-circle');
+            }, 60000);
+        }
+        
+        // Listen for SSE updates if available
+        if (typeof EventSource !== 'undefined') {
+            const eventSource = new EventSource('/events');
+            eventSource.addEventListener('ota_update', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'ota_progress' && !uploadXHR) {
+                        // Update from another source (like SD card)
+                        updateProgress(data.current, data.total);
+                    }
+                } catch (err) {
+                    console.error('Error parsing OTA update:', err);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

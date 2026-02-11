@@ -1,4 +1,4 @@
-// language.js - Language management for the Water Pressure Controller
+// language.js - Language management for the AquaSensys
 let currentLanguage = 'en';
 
 // Initialize language on page load
@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initializeLanguage() {
   // Try to load language from localStorage
-  const savedLanguage = localStorage.getItem('wpc_language');
+  const savedLanguage = localStorage.getItem('aquasensys_language');
   if (savedLanguage && ['en', 'pt'].includes(savedLanguage)) {
     currentLanguage = savedLanguage;
   } else {
@@ -21,7 +21,7 @@ function initializeLanguage() {
     }
     
     // Save the default language
-    localStorage.setItem('wpc_language', currentLanguage);
+    localStorage.setItem('aquasensys_language', currentLanguage);
   }
   
   // Initialize the language selector
@@ -37,7 +37,7 @@ function initializeLanguage() {
 function changeLanguage(lang) {
   if (['en', 'pt'].includes(lang)) {
     currentLanguage = lang;
-    localStorage.setItem('wpc_language', lang);
+    localStorage.setItem('aquasensys_language', lang);
     applyTranslations();
   }
 }

@@ -2,7 +2,9 @@ const translations = {
   en: {
     // Navigation
     "dashboard": "Dashboard",
+    "diagnostics": "Diagnostics",
     "settings": "Settings",
+    "fileUpload": "File Upload",
     "connecting": "Connecting...",
     
     // Dashboard cards
@@ -151,8 +153,8 @@ const translations = {
     "factoryResetError": "Failed to perform factory reset",
     
     // Page titles
-    "mainTitle": "Water Pressure Controller",
-    "settingsTitle": "WPC - Settings",
+    "mainTitle": "AquaSensys",
+    "settingsTitle": "AquaSensys - Settings",
     
     // Language
     "language": "Language",
@@ -162,7 +164,9 @@ const translations = {
   pt: {
     // Navigation
     "dashboard": "Painel",
+    "diagnostics": "Diagnósticos",
     "settings": "Configurações",
+    "fileUpload": "Envio de Ficheiros",
     "connecting": "A conectar...",
     
     // Dashboard cards

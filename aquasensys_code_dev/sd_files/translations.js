@@ -2,7 +2,9 @@ const translations = {
   en: {
     // Navigation
     "dashboard": "Dashboard",
+    "diagnostics": "Diagnostics",
     "settings": "Settings",
+    "fileUpload": "File Upload",
     "connecting": "Connecting...",
     
     // Dashboard cards
@@ -151,9 +153,39 @@ const translations = {
     "factoryResetError": "Failed to perform factory reset",
     
     // Page titles
-    "mainTitle": "Water Pressure Controller",
-    "settingsTitle": "WPC - Settings",
-    
+    "mainTitle": "AquaSensys",
+    "settingsTitle": "AquaSensys - Settings",
+
+    // Diagnostics page
+    "systemDiagnostics": "System Diagnostics",
+    "currentSensorCalibration": "Current Sensor Calibration",
+    "pressureSensorCalibration": "Pressure Sensor Calibration",
+    "motorMustBeOff": "Motor must be OFF for accurate calibration. This will set zero-current baseline for all three phases.",
+    "pressureAtmospheric": "Ensure both inlet and outlet are at atmospheric pressure (0 bar gauge). This will set zero-pressure baseline for both sensors.",
+    "calibrateCurrentSensors": "Calibrate Current Sensors",
+    "calibratePressureSensors": "Calibrate Pressure Sensors",
+    "calibrating": "Calibrating...",
+    "calibratingPressure": "Calibrating pressure sensors... Please wait",
+    "calibrationSuccessful": "Calibration successful!",
+    "calibrationFailed": "Calibration failed!",
+    "motorCurrent3Phase": "Motor Current (3-Phase)",
+    "phaseL1": "Phase L1",
+    "phaseL2": "Phase L2",
+    "phaseL3": "Phase L3",
+    "totalCurrent": "Total Current",
+    "temperatureSensors": "Temperature Sensors",
+    "ambientTemp": "Ambient Temp",
+    "waterTemp": "Water Temp",
+    "pressureSensors": "Pressure Sensors",
+    "inletPressure": "Inlet Pressure",
+    "outletPressure": "Outlet Pressure",
+    "systemInformation": "System Information",
+    "lastUpdated": "Last updated",
+    "never": "Never",
+    "inletOffset": "Inlet offset",
+    "outletOffset": "Outlet offset",
+    "rawReadings": "Raw readings",
+
     // Language
     "language": "Language",
     "english": "English",
@@ -162,7 +194,9 @@ const translations = {
   pt: {
     // Navigation
     "dashboard": "Painel",
+    "diagnostics": "Diagnósticos",
     "settings": "Configurações",
+    "fileUpload": "Envio de Ficheiros",
     "connecting": "A conectar...",
     
     // Dashboard cards
@@ -313,7 +347,37 @@ const translations = {
     // Page titles
     "mainTitle": "AquaSensys",
     "settingsTitle": "AquaSensys - Configurações",
-    
+
+    // Diagnostics page
+    "systemDiagnostics": "Diagnósticos do Sistema",
+    "currentSensorCalibration": "Calibração do Sensor de Corrente",
+    "pressureSensorCalibration": "Calibração do Sensor de Pressão",
+    "motorMustBeOff": "O motor deve estar DESLIGADO para calibração precisa. Isso definirá a linha de base de corrente zero para as três fases.",
+    "pressureAtmospheric": "Certifique-se de que a entrada e saída estão à pressão atmosférica (0 bar manométrico). Isso definirá a linha de base de pressão zero para ambos os sensores.",
+    "calibrateCurrentSensors": "Calibrar Sensores de Corrente",
+    "calibratePressureSensors": "Calibrar Sensores de Pressão",
+    "calibrating": "A calibrar...",
+    "calibratingPressure": "A calibrar sensores de pressão... Aguarde",
+    "calibrationSuccessful": "Calibração bem-sucedida!",
+    "calibrationFailed": "Calibração falhada!",
+    "motorCurrent3Phase": "Corrente do Motor (3 Fases)",
+    "phaseL1": "Fase L1",
+    "phaseL2": "Fase L2",
+    "phaseL3": "Fase L3",
+    "totalCurrent": "Corrente Total",
+    "temperatureSensors": "Sensores de Temperatura",
+    "ambientTemp": "Temp. Ambiente",
+    "waterTemp": "Temp. Água",
+    "pressureSensors": "Sensores de Pressão",
+    "inletPressure": "Pressão de Entrada",
+    "outletPressure": "Pressão de Saída",
+    "systemInformation": "Informações do Sistema",
+    "lastUpdated": "Última atualização",
+    "never": "Nunca",
+    "inletOffset": "Offset de entrada",
+    "outletOffset": "Offset de saída",
+    "rawReadings": "Leituras brutas",
+
     // Language
     "language": "Idioma",
     "english": "Inglês",

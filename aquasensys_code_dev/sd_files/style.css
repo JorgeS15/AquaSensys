@@ -1,11 +1,13 @@
 :root {
-  --primary: #143642;
-  --secondary: #0f8b8d;
+  --primary: #0d7a7c;
+  --secondary: #17a2b8;
   --danger: #ec0b43;
   --warning: #ff9505;
   --success: #4bb543;
   --light: #F8F7F9;
   --dark: #1a1a1a;
+  --aqua: #00bcd4;
+  --teal: #009688;
 }
 
 html {

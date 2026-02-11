@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>SD Card File Upload - %DEVICE_NAME%</title>
+    <title>AquaSensys - File Upload</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="style.css">
@@ -10,9 +10,10 @@
 </head>
 <body>
     <div class="topnav">
-        <h1><i class="fas fa-microchip"></i> <span data-i18n="mainTitle">Water Pressure Controller</span></h1>
+        <h1><i class="fas fa-microchip"></i> <span data-i18n="mainTitle">AquaSensys</span></h1>
         <div class="nav-right">
             <a href="/"><i class="fas fa-tachometer-alt"></i> <span data-i18n="dashboard">Dashboard</span></a>
+            <a href="/diagnostics.html"><i class="fas fa-chart-line"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
             <a href="/settings.html"><i class="fas fa-cog"></i> <span data-i18n="settings">Settings</span></a>
             <div class="language-selector">
                 <label for="languageSelector" data-i18n="language">Language</label>
@@ -33,7 +34,7 @@
             
             <div class="upload-instructions">
                 <i class="fas fa-info-circle"></i>
-                <strong data-i18n="instructions">Instructions:</strong> <span data-i18n="uploadInstructions">Select your web files (index.html, app.js, style.css, etc.) and upload them to the SD card root directory. This will make them available for your %DEVICE_NAME% web interface.</span>
+                <strong data-i18n="instructions">Instructions:</strong> <span data-i18n="uploadInstructions">Select your web files (index.html, app.js, style.css, etc.) and upload them to the SD card root directory. This will make them available for your AquaSensys web interface.</span>
             </div>
             
             <div class="upload-area" id="uploadArea">

@@ -147,11 +147,11 @@ float readAmbientTemp() {
  */
 float readInPressure() {
     float voltage = readMCP3208Average(MCP_CH_PRESSURE_IN, NUM_SAMPLES);
-    
+
     // Convert voltage to pressure (bar)
     // For 0.5-4.5V = 0-5bar: pressure = (voltage - 0.5) * 1.25
-    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset;
-    
+    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset + config.pressure_in_offset;
+
     return pressure;
 }
 
@@ -160,10 +160,10 @@ float readInPressure() {
  */
 float readOutPressure() {
     float voltage = readMCP3208Average(MCP_CH_PRESSURE_OUT, NUM_SAMPLES);
-    
+
     // Convert voltage to pressure (bar)
-    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset;
-    
+    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset + config.pressure_out_offset;
+
     return pressure;
 }
 
@@ -780,11 +780,11 @@ void webRoutes() {
     server.on("/api/calibrate-current", HTTP_POST, [](AsyncWebServerRequest *request) {
         // Check if motor is off
         if (motor) {
-            request->send(400, "application/json", 
+            request->send(400, "application/json",
                 "{\"error\":\"Motor must be OFF for calibration\",\"motor_status\":\"ON\"}");
             return;
         }
-        
+
         // Perform calibration
         Serial.println("\n=== Manual Calibration Requested via API ===");
         if (currentSensor.performAutoCalibration(100)) {
@@ -793,22 +793,62 @@ void webRoutes() {
             config.current_offset_l2 = cal.offsetL2;
             config.current_offset_l3 = cal.offsetL3;
             saveConfig();
-            
+
             DynamicJsonDocument doc(256);
             doc["status"] = "success";
             doc["offset_l1"] = config.current_offset_l1;
             doc["offset_l2"] = config.current_offset_l2;
             doc["offset_l3"] = config.current_offset_l3;
-            
+
             String response;
             serializeJson(doc, response);
             request->send(200, "application/json", response);
         } else {
-            request->send(500, "application/json", 
+            request->send(500, "application/json",
                 "{\"error\":\"Calibration failed - check motor is OFF and retry\"}");
         }
     });
-    
+
+    // Pressure sensor calibration endpoint
+    server.on("/api/calibrate-pressure", HTTP_POST, [](AsyncWebServerRequest *request) {
+        Serial.println("\n=== Pressure Calibration Requested via API ===");
+
+        // Read current pressure values (without offsets)
+        float voltageIn = readMCP3208Average(MCP_CH_PRESSURE_IN, NUM_SAMPLES);
+        float voltageOut = readMCP3208Average(MCP_CH_PRESSURE_OUT, NUM_SAMPLES);
+
+        // Calculate raw pressure (without any offsets)
+        float rawPressureIn = (voltageIn - 0.5) * 1.25;
+        float rawPressureOut = (voltageOut - 0.5) * 1.25;
+
+        // Set offsets to zero out current readings
+        // offset = -raw_pressure (so raw_pressure + offset = 0)
+        config.pressure_in_offset = -(rawPressureIn + config.pressure_offset);
+        config.pressure_out_offset = -(rawPressureOut + config.pressure_offset);
+        config.pressure_calibrated = true;
+
+        // Save to config
+        if (saveConfig()) {
+            Serial.printf("Pressure calibration successful:\n");
+            Serial.printf("  Inlet offset: %.3f bar\n", config.pressure_in_offset);
+            Serial.printf("  Outlet offset: %.3f bar\n", config.pressure_out_offset);
+
+            DynamicJsonDocument doc(256);
+            doc["status"] = "success";
+            doc["offset_in"] = config.pressure_in_offset;
+            doc["offset_out"] = config.pressure_out_offset;
+            doc["raw_in"] = rawPressureIn;
+            doc["raw_out"] = rawPressureOut;
+
+            String response;
+            serializeJson(doc, response);
+            request->send(200, "application/json", response);
+        } else {
+            request->send(500, "application/json",
+                "{\"error\":\"Failed to save calibration to config\"}");
+        }
+    });
+
     // Diagnostics JSON endpoint (for backward compatibility)
     server.on("/diagnostics", HTTP_GET, [](AsyncWebServerRequest *request) {
         DynamicJsonDocument doc(512);

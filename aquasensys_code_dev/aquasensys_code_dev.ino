@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.18"; 
+const char* DEVICE_VERSION = "3.0.19"; //PWM for LEDs
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -306,16 +306,7 @@ void setup() {
     setupPins();
     digitalWrite(MOTOR_PIN, LOW);
     
-    // Test LEDs
-    digitalWrite(LED_RED, HIGH);
-    delay(500);
-    digitalWrite(LED_RED, LOW);
-    digitalWrite(LED_GREEN, HIGH);
-    delay(500);
-    digitalWrite(LED_GREEN, LOW);
-    digitalWrite(LED_BLUE, HIGH);
-    delay(500);
-    digitalWrite(LED_BLUE, LOW);
+    testLEDs();
     
     lastTime = millis();
     Serial.println("=== Setup Complete ===\n");
@@ -325,6 +316,7 @@ void loop() {
     // ============================================================
     // DEBUG MODE - Test all sensor readings
     // ============================================================
+
     if (debug) {
         static unsigned long lastDebugTime = 0;
         
@@ -468,13 +460,27 @@ void controlMotor() {
     digitalWrite(MOTOR_PIN, motor ? HIGH : LOW);
 }
 
+void testLEDs(){
+    ledcWrite(LED_RED, 255);
+    delay(500);
+    ledcWrite(LED_RED, 0);
+    ledcWrite(LED_GREEN, 255); 
+    delay(500);
+    ledcWrite(LED_GREEN, 0);
+    ledcWrite(LED_BLUE, 255); 
+    delay(500);
+    ledcWrite(LED_BLUE, 0); 
+}
+
 void setupPins() {
     pinMode(FLOW_PIN, INPUT_PULLDOWN);
     attachInterrupt(digitalPinToInterrupt(FLOW_PIN), pulseCounter, RISING);
     pinMode(MOTOR_PIN, OUTPUT);
-    pinMode(LED_RED, OUTPUT);
-    pinMode(LED_GREEN, OUTPUT);
-    pinMode(LED_BLUE, OUTPUT);
+
+    // RGB LED - PWM via LEDC
+    ledcAttachChannel(LED_RED,   5000, 8, 0);  // pin, freq, resolution, channel
+    ledcAttachChannel(LED_GREEN, 5000, 8, 1);
+    ledcAttachChannel(LED_BLUE,  5000, 8, 2);
 }
 
 void updateSerial() {
@@ -513,9 +519,9 @@ void updateLights() {
         } 
         else if (manualOverride) {
             // Manual mode - Yellow (red + green) when off, Blue when on
-            digitalWrite(LED_RED, !motor ? HIGH : LOW);
-            digitalWrite(LED_GREEN, !motor ? HIGH : LOW);
-            digitalWrite(LED_BLUE, motor ? HIGH : LOW);
+            ledcWrite(LED_RED, !motor ? 255 : 0);  // ~100% brightness
+            ledcWrite(LED_GREEN, !motor ? 64 : 0);  // ~25% brightness
+            ledcWrite(LED_BLUE, motor ? 255 : 0);  // ~100% brightness
         } 
         else {
             // Auto mode - Blink Green when off, Blue when on

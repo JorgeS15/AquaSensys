@@ -440,6 +440,7 @@ void loop() {
     if (millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
         lastDiagnosticsUpdate = millis();
         publishDiagnostics();
+        publishDebugData(); // Also publish debug data for debug page
     }
     
     // Check for error conditions
@@ -627,10 +628,12 @@ void notifyClients() {
     doc["flow"] = flow;
     doc["motor"] = motor;
     doc["manualOverride"] = manualOverride;
-    
+    doc["mainSwitch"] = mainSwitch;
+    doc["error"] = error;
+
     String json;
     serializeJson(doc, json);
-    
+
     events.send(json.c_str(), "update", millis());
 }
 
@@ -665,6 +668,93 @@ void publishDiagnostics() {
     serializeJson(doc, json);
     
     events.send(json.c_str(), "diagnostics", millis());
+}
+
+/**
+ * Publish comprehensive debug data for troubleshooting hardware issues
+ */
+void publishDebugData() {
+    if (!events.count()) return; // No clients connected
+
+    DynamicJsonDocument doc(1536);
+
+    // SD Card Status
+    doc["sd_detected"] = (SD.cardType() != CARD_NONE);
+    doc["sd_type"] = (SD.cardType() == CARD_MMC) ? "MMC" :
+                     (SD.cardType() == CARD_SD) ? "SD" :
+                     (SD.cardType() == CARD_SDHC) ? "SDHC" : "UNKNOWN";
+    doc["sd_size"] = SD.cardSize();
+
+    // Count files on SD
+    int fileCount = 0;
+    File root = SD.open("/");
+    if (root) {
+        File file = root.openNextFile();
+        while (file) {
+            fileCount++;
+            file = root.openNextFile();
+        }
+        root.close();
+    }
+    doc["sd_files"] = fileCount;
+
+    // MCP3208 Status
+    doc["mcp_init"] = true; // MCP3208 initialized in setup()
+    doc["mcp_vref"] = MCP3208_VREF;
+    doc["mcp_errors"] = 0; // TODO: track errors if MCP has error counter
+    doc["spi_status"] = "OK"; // TODO: add actual SPI status if available
+
+    // Raw ADC Values (0-4095)
+    for (int i = 0; i < 8; i++) {
+        doc["adc_ch" + String(i)] = adc.analogRead(i);
+    }
+
+    // Voltage Readings
+    for (int i = 0; i < 4; i++) {
+        doc["volt_ch" + String(i)] = readMCP3208Average(i, NUM_SAMPLES);
+    }
+
+    // Processed Sensor Values
+    doc["pressure_in"] = pressureIn;
+    doc["pressure_out"] = pressureOut;
+    doc["temp_ambient"] = ambientTemp;
+    doc["temp_water"] = waterTemp;
+
+    // Calibration Offsets
+    doc["cal_press_in"] = config.pressure_in_offset;
+    doc["cal_press_out"] = config.pressure_out_offset;
+    doc["cal_curr_l1"] = config.current_offset_l1;
+    doc["cal_curr_l2"] = config.current_offset_l2;
+    doc["cal_curr_l3"] = config.current_offset_l3;
+
+    // System Information
+    doc["free_heap"] = ESP.getFreeHeap();
+    doc["uptime"] = millis() / 1000;
+    doc["reset_reason"] = esp_reset_reason();
+    doc["cpu_freq"] = ESP.getCpuFreqMHz();
+
+    // WiFi Status
+    doc["wifi_connected"] = WiFi.isConnected();
+    doc["wifi_ssid"] = WiFi.SSID();
+    doc["wifi_rssi"] = WiFi.RSSI();
+    doc["wifi_ip"] = WiFi.localIP().toString();
+
+    // MQTT Status
+    doc["mqtt_connected"] = mqttClient.connected();
+    doc["mqtt_server"] = config.mqtt_server;
+    doc["mqtt_port"] = config.mqtt_port;
+    doc["mqtt_last"] = (millis() - lastMqttReconnectAttempt) / 1000; // seconds since last attempt
+
+    // Motor & Control State
+    doc["motor"] = motor;
+    doc["main_switch"] = mainSwitch;
+    doc["manual_override"] = manualOverride;
+    doc["error"] = error;
+
+    String json;
+    serializeJson(doc, json);
+
+    events.send(json.c_str(), "debug", millis());
 }
 
 void webRoutes() {
@@ -887,9 +977,9 @@ void webRoutes() {
     server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         DynamicJsonDocument doc(128);
-        DeserializationError error = deserializeJson(doc, data, len);
-        
-        if (!error) {
+        DeserializationError jsonError = deserializeJson(doc, data, len);
+
+        if (!jsonError) {
             if (doc.containsKey("command")) {
                 String command = doc["command"];
                 if (command == "toggle") {
@@ -897,8 +987,14 @@ void webRoutes() {
                     manualMotorState = !manualMotorState;
                 } else if (command == "override") {
                     manualOverride = !manualOverride;
+                } else if (command == "mainSwitch") {
+                    mainSwitch = !mainSwitch;
+                    // If turning off main switch, clear error state
+                    if (mainSwitch) {
+                        error = false;
+                    }
                 }
-                
+
                 notifyClients();
                 publishState();
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -908,35 +1004,39 @@ void webRoutes() {
         request->send(400, "application/json", "{\"error\":\"invalid request\"}");
     });
 
-    // Debug route
+    // Debug page route - serve debug.html or fallback to simple debug info
     server.on("/debug", HTTP_GET, [](AsyncWebServerRequest *request) {
-        String html = "<html><body><h1>SD Card Files:</h1><ul>";
-        
-        File root = SD.open("/");
-        if (root) {
-            File file = root.openNextFile();
-            while (file) {
-                html += "<li>" + String(file.name()) + " (" + String(file.size()) + " bytes)</li>";
-                file = root.openNextFile();
-            }
-            root.close();
+        if (SD.exists("/debug.html")) {
+            request->send(SD, "/debug.html", "text/html");
         } else {
-            html += "<li>Could not open root directory</li>";
-        }
-        
-        html += "</ul>";
-        html += "<h2>Current Config:</h2><pre>" + getConfigJson() + "</pre>";
-        html += "<h2>Device Info:</h2><pre>";
-        html += "Device Name: " + String(DEVICE_NAME) + "\n";
-        html += "Device ID: " + String(DEVICE_ID) + "\n";
-        html += "Device Version: " + String(DEVICE_VERSION) + "\n";
-        html += "Device Model: " + String(DEVICE_MODEL) + "\n";
-        html += "ADC Type: MCP3208 (Rodolfo Prieto)\n";
-        html += "Current Sensors: ACS712-05B (3-Phase)\n";
-        html += "</pre>";
-        html += "<h2>Live Readings:</h2><pre>";
-        html += "Ambient Temp: " + String(ambientTemp) + " °C\n";
-        html += "Water Temp: " + String(waterTemp) + " °C\n";
+            // Fallback to simple debug info if debug.html not found
+            String html = "<html><body><h1>SD Card Files:</h1><ul>";
+
+            File root = SD.open("/");
+            if (root) {
+                File file = root.openNextFile();
+                while (file) {
+                    html += "<li>" + String(file.name()) + " (" + String(file.size()) + " bytes)</li>";
+                    file = root.openNextFile();
+                }
+                root.close();
+            } else {
+                html += "<li>Could not open root directory</li>";
+            }
+
+            html += "</ul>";
+            html += "<h2>Current Config:</h2><pre>" + getConfigJson() + "</pre>";
+            html += "<h2>Device Info:</h2><pre>";
+            html += "Device Name: " + String(DEVICE_NAME) + "\n";
+            html += "Device ID: " + String(DEVICE_ID) + "\n";
+            html += "Device Version: " + String(DEVICE_VERSION) + "\n";
+            html += "Device Model: " + String(DEVICE_MODEL) + "\n";
+            html += "ADC Type: MCP3208 (Rodolfo Prieto)\n";
+            html += "Current Sensors: ACS712-05B (3-Phase)\n";
+            html += "</pre>";
+            html += "<h2>Live Readings:</h2><pre>";
+            html += "Ambient Temp: " + String(ambientTemp) + " °C\n";
+            html += "Water Temp: " + String(waterTemp) + " °C\n";
         html += "Pressure In: " + String(pressureIn) + " bar\n";
         html += "Pressure Out: " + String(pressureOut) + " bar\n";
         html += "Current L1: " + String(currentL1) + " A\n";
@@ -946,11 +1046,13 @@ void webRoutes() {
         html += "</pre>";
         html += "</body></html>";
         request->send(200, "text/html", html);
+        }
     });
 
     events.onConnect([](AsyncEventSourceClient *client) {
         Serial.println("Client connected to /events");
         notifyClients();
         publishDiagnostics(); // Send initial diagnostics data
+        publishDebugData(); // Send initial debug data
     });
 }

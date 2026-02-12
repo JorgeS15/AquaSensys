@@ -66,17 +66,25 @@
             <span data-i18n="mode">Mode:</span>
             <span class="status-indicator" id="mode" data-i18n="auto">AUTO</span>
           </div>
+          <div class="status-item">
+            <span data-i18n="mainSwitch">Main Switch:</span>
+            <span class="status-indicator" id="mainSwitch" data-i18n="on">ON</span>
+          </div>
+          <div class="status-item">
+            <span data-i18n="systemStatus">System Status:</span>
+            <span class="status-indicator" id="systemStatus" data-i18n="statusOk">OK</span>
+          </div>
         </div>
-        
+
         <div class="control-buttons">
           <button id="toggleBtn" class="button">
             <i class="fas fa-power-off"></i> <span data-i18n="toggleMotor">Toggle Motor</span>
           </button>
+          <button id="mainSwitchBtn" class="button">
+            <i class="fas fa-toggle-on"></i> <span data-i18n="toggleMainSwitch">Toggle Main Switch</span>
+          </button>
           <button id="overrideBtn" class="button">
             <i class="fas fa-user-cog"></i> <span data-i18n="manualOverride">Manual Override</span>
-          </button>
-          <button onclick="rebootDevice()" class="button">
-            <i class="fas fa-undo"></i> <span data-i18n="rebootDevice">Reboot Device</span>
           </button>
         </div>
       </div>

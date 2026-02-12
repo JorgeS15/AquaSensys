@@ -628,10 +628,12 @@ void notifyClients() {
     doc["flow"] = flow;
     doc["motor"] = motor;
     doc["manualOverride"] = manualOverride;
-    
+    doc["mainSwitch"] = mainSwitch;
+    doc["error"] = error;
+
     String json;
     serializeJson(doc, json);
-    
+
     events.send(json.c_str(), "update", millis());
 }
 
@@ -985,8 +987,14 @@ void webRoutes() {
                     manualMotorState = !manualMotorState;
                 } else if (command == "override") {
                     manualOverride = !manualOverride;
+                } else if (command == "mainSwitch") {
+                    mainSwitch = !mainSwitch;
+                    // If turning off main switch, clear error state
+                    if (mainSwitch) {
+                        error = false;
+                    }
                 }
-                
+
                 notifyClients();
                 publishState();
                 request->send(200, "application/json", "{\"status\":\"ok\"}");

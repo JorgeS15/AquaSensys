@@ -991,7 +991,7 @@ void webRoutes() {
                     mainSwitch = !mainSwitch;
                     // If turning off main switch, clear error state
                     if (mainSwitch) {
-                        error = false;
+                        ::error = false;  // Use global scope to avoid collision with local 'error'
                     }
                 }
 

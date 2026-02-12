@@ -13,14 +13,14 @@
 #include <SPI.h>
 #include <SD.h>
 #include "MCP3208.h"
-#include "ACS712_handler.h"  // NEW: ACS712 current sensor handler
+#include "ACS712_handler.h"
 
 // Device constants (not saved to config)
 const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.3.0";  // Updated version
+const char* DEVICE_VERSION = "3.0.18"; 
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -28,14 +28,14 @@ unsigned long lastMqttReconnectAttempt = 0;
 const unsigned long MQTT_RECONNECT_INTERVAL = 5000;
 
 // Pin definitions
-#define TF_CS_PIN 21      // SD Card CS pin
-#define MCP_CS_PIN 19     // MCP3208 CS pin
+#define TF_CS_PIN 21      
+#define MCP_CS_PIN 19    
 #define LED_RED 32
 #define LED_GREEN 23
 #define MOTOR_PIN 26
 #define LED_BLUE 22
 #define FLOW_PIN 33
-#define TEMP_PIN 35       // ESP32 ADC for water temperature
+#define TEMP_PIN 35      
 
 // MCP3208 Channels - UPDATED MAPPING
 #define MCP_CH_AMBIENT_TEMP  0   // Channel 0 for ambient temperature sensor (LM35)
@@ -191,9 +191,9 @@ float readAverageTemperature(int read) {
     countTemp++;
     
     if (read) {
-        float temp_voltage = totalTemp / countTemp * (3.3 / 4096.0) + config.temp_offset;
-        float temp_resistance = 97 * (1 / ((3.3 / temp_voltage) - 1));
-        float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29;
+        float temp_voltage = totalTemp / countTemp * (5.0 / 4096.0) + config.temp_offset;
+        float temp_resistance = 97 * (1 / ((5.0 / temp_voltage) - 1));
+        float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
         totalTemp = 0;
         countTemp = 0;
         return temp;
@@ -537,6 +537,9 @@ void checkForErrors() {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;
         }
+    }
+    else{
+        error = false;
     }
     if (error) {
         motor = false;
@@ -978,7 +981,7 @@ void webRoutes() {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         DynamicJsonDocument doc(128);
         DeserializationError jsonError = deserializeJson(doc, data, len);
-
+        
         if (!jsonError) {
             if (doc.containsKey("command")) {
                 String command = doc["command"];

@@ -977,9 +977,9 @@ void webRoutes() {
     server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         DynamicJsonDocument doc(128);
-        DeserializationError error = deserializeJson(doc, data, len);
-        
-        if (!error) {
+        DeserializationError jsonError = deserializeJson(doc, data, len);
+
+        if (!jsonError) {
             if (doc.containsKey("command")) {
                 String command = doc["command"];
                 if (command == "toggle") {
@@ -991,7 +991,7 @@ void webRoutes() {
                     mainSwitch = !mainSwitch;
                     // If turning off main switch, clear error state
                     if (mainSwitch) {
-                        ::error = false;  // Use global scope to avoid collision with local 'error'
+                        error = false;
                     }
                 }
 

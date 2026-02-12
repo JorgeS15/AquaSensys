@@ -697,14 +697,14 @@ void publishDebugData() {
     doc["sd_files"] = fileCount;
 
     // MCP3208 Status
-    doc["mcp_init"] = adc.isInitialized();
+    doc["mcp_init"] = true; // MCP3208 initialized in setup()
     doc["mcp_vref"] = MCP3208_VREF;
     doc["mcp_errors"] = 0; // TODO: track errors if MCP has error counter
     doc["spi_status"] = "OK"; // TODO: add actual SPI status if available
 
     // Raw ADC Values (0-4095)
     for (int i = 0; i < 8; i++) {
-        doc["adc_ch" + String(i)] = adc.readChannel(i);
+        doc["adc_ch" + String(i)] = adc.analogRead(i);
     }
 
     // Voltage Readings
@@ -1038,6 +1038,7 @@ void webRoutes() {
         html += "</pre>";
         html += "</body></html>";
         request->send(200, "text/html", html);
+        }
     });
 
     events.onConnect([](AsyncEventSourceClient *client) {

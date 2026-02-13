@@ -52,6 +52,23 @@ const int DELAY = 5;
 // MCP3208 Reference Voltage
 const float MCP3208_VREF = 5.0;  // 5V reference
 
+// Non-blocking sensor sampling accumulators
+float totalAmbientTemp = 0;
+float totalWaterTemp = 0;
+float totalPressureIn = 0;
+float totalPressureOut = 0;
+int sampleCount = 0;
+
+// Timing for continuous non-blocking sampling
+unsigned long lastSampleTime = 0;
+const unsigned long SAMPLE_INTERVAL = 5; // 5ms sampling interval
+
+// Current sensor state machine for non-blocking reads
+enum CurrentSensorPhase { PHASE_L1, PHASE_L2, PHASE_L3, PHASE_IDLE };
+CurrentSensorPhase currentPhase = PHASE_L1;
+unsigned long lastCurrentReadTime = 0;
+const unsigned long CURRENT_READ_INTERVAL = 20; // Read one phase every 20ms
+
 // Create MCP3208 object
 MCP3208 adc;
 
@@ -112,6 +129,7 @@ void IRAM_ATTR pulseCounter() {
 /**
  * Read voltage from MCP3208 channel with averaging
  * Simple integer channel numbers (0-7)
+ * NOTE: This function is deprecated in favor of non-blocking sampling
  */
 float readMCP3208Average(int channel, int samples) {
     float total = 0.0;
@@ -124,6 +142,17 @@ float readMCP3208Average(int channel, int samples) {
         delay(DELAY);
     }
     return (total / samples);
+}
+
+/**
+ * Read single voltage sample from MCP3208 channel (non-blocking)
+ * Returns voltage in volts (0-5V range)
+ */
+float readMCP3208Single(int channel) {
+    // Library function: readADC(channel) returns raw value (0-4095)
+    uint16_t rawValue = adc.analogRead(channel);
+    // Convert to voltage
+    return (rawValue * MCP3208_VREF) / 4095.0;
 }
 
 // ============================================================
@@ -173,13 +202,56 @@ float readOutPressure() {
  */
 float readWaterTemp() {
     float voltage = readMCP3208Average(MCP_CH_WATER_TEMP, NUM_SAMPLES);
-    
+
     // Convert voltage to temperature
     // This is a placeholder - adjust based on your actual sensor
     // Example for NTC thermistor with voltage divider
     float tempC = (voltage - 0.5) * 100.0 + config.temp_offset;
-    
+
     return tempC;
+}
+
+/**
+ * NON-BLOCKING: Continuous sensor sampling
+ * Call this in loop() to accumulate sensor readings without delays
+ * Samples are taken every SAMPLE_INTERVAL (5ms) and accumulated
+ */
+void sampleSensorsContinuous() {
+    // Take single samples from each sensor and accumulate
+    totalAmbientTemp += readMCP3208Single(MCP_CH_AMBIENT_TEMP);
+    totalWaterTemp += readMCP3208Single(MCP_CH_WATER_TEMP);
+    totalPressureIn += readMCP3208Single(MCP_CH_PRESSURE_IN);
+    totalPressureOut += readMCP3208Single(MCP_CH_PRESSURE_OUT);
+    sampleCount++;
+}
+
+/**
+ * NON-BLOCKING: Current sensor state machine
+ * Reads one phase per call to avoid blocking the main loop
+ * Call this in loop() to update current readings progressively
+ */
+void updateCurrentSensors() {
+    switch (currentPhase) {
+        case PHASE_L1:
+            currentL1 = currentSensor.readL1();
+            currentPhase = PHASE_L2;
+            break;
+
+        case PHASE_L2:
+            currentL2 = currentSensor.readL2();
+            currentPhase = PHASE_L3;
+            break;
+
+        case PHASE_L3:
+            currentL3 = currentSensor.readL3();
+            currentTotal = currentL1 + currentL2 + currentL3;
+            currentPhase = PHASE_IDLE;
+            break;
+
+        case PHASE_IDLE:
+            // Wait for next read cycle (triggered by 1-second timer)
+            break;
+    }
 }
 
 /**
@@ -202,25 +274,41 @@ float readAverageTemperature(int read) {
 }
 
 /**
- * NEW: Read all sensors including current sensors
+ * NEW: Calculate final sensor values from accumulated samples
+ * This is non-blocking and uses the accumulated samples from sampleSensorsContinuous()
  */
 void readAllSensors() {
-    // Read temperature sensors
-    ambientTemp = readAmbientTemp();
-    waterTemp = readWaterTemp();
-    temperature = waterTemp; // Use water temp as primary temperature
-    
-    // Read pressure sensors
-    pressureIn = readInPressure();
-    pressureOut = readOutPressure();
-    pressure = pressureIn; // Use inlet pressure as primary pressure
-    
-    // Read current sensors - all three phases
-    CurrentReadings current = currentSensor.readAllPhases();
-    currentL1 = current.L1;
-    currentL2 = current.L2;
-    currentL3 = current.L3;
-    currentTotal = current.total;
+    // Calculate averages from accumulated samples
+    if (sampleCount > 0) {
+        // Calculate average voltages
+        float avgAmbientVoltage = totalAmbientTemp / sampleCount;
+        float avgWaterVoltage = totalWaterTemp / sampleCount;
+        float avgPressureInVoltage = totalPressureIn / sampleCount;
+        float avgPressureOutVoltage = totalPressureOut / sampleCount;
+
+        // Convert to physical values
+        // Ambient temperature (LM35: 10mV/°C, 0°C = 0V)
+        ambientTemp = avgAmbientVoltage * 100.0;
+
+        // Water temperature
+        waterTemp = (avgWaterVoltage - 0.5) * 100.0 + config.temp_offset;
+        temperature = waterTemp; // Use water temp as primary temperature
+
+        // Pressure sensors (0.5-4.5V = 0-5bar)
+        pressureIn = (avgPressureInVoltage - 0.5) * 1.25 + config.pressure_offset + config.pressure_in_offset;
+        pressureOut = (avgPressureOutVoltage - 0.5) * 1.25 + config.pressure_offset + config.pressure_out_offset;
+        pressure = pressureIn; // Use inlet pressure as primary pressure
+
+        // Reset accumulators for next cycle
+        totalAmbientTemp = 0;
+        totalWaterTemp = 0;
+        totalPressureIn = 0;
+        totalPressureOut = 0;
+        sampleCount = 0;
+    }
+
+    // Current sensors are already updated by updateCurrentSensors() state machine
+    // No need to read them here - they're continuously updated in the loop
 }
 
 // ============================================================
@@ -381,7 +469,7 @@ void loop() {
     // ============================================================
     // NORMAL OPERATION MODE
     // ============================================================
-    
+
     // Reboot if requested
     if (rebootRequested) {
         delay(1000);
@@ -396,7 +484,7 @@ void loop() {
     }
 
     // MQTT reconnection
-    if (wifiConnected && !mqttClient.connected() && 
+    if (wifiConnected && !mqttClient.connected() &&
         millis() - lastMqttReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
         lastMqttReconnectAttempt = millis();
         mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
@@ -405,8 +493,29 @@ void loop() {
         }
     }
     mqttClient.loop();
+
+    // ============================================================
+    // NON-BLOCKING CONTINUOUS SENSOR SAMPLING
+    // Sample sensors every 5ms to accumulate readings without blocking
+    // ============================================================
+    if (millis() - lastSampleTime >= SAMPLE_INTERVAL) {
+        lastSampleTime = millis();
+        sampleSensorsContinuous();
+    }
+
+    // ============================================================
+    // NON-BLOCKING CURRENT SENSOR STATE MACHINE
+    // Read one phase every 20ms to avoid blocking
+    // ============================================================
+    if (millis() - lastCurrentReadTime >= CURRENT_READ_INTERVAL) {
+        lastCurrentReadTime = millis();
+        updateCurrentSensors();
+    }
     
-    // Main measurement and control loop (every 1 second)
+    // ============================================================
+    // MAIN MEASUREMENT AND CONTROL LOOP (every 1 second)
+    // Calculate final values from accumulated samples and update system
+    // ============================================================
     unsigned long currentTime = millis();
     if (currentTime - lastTime >= 1000) {
         // Read flow sensor
@@ -415,9 +524,12 @@ void loop() {
         pulseCount = 0;
         interrupts();
         lastTime = millis();
-        
-        // Read all sensors (temperatures, pressures, currents)
+
+        // Calculate final sensor values from accumulated samples
         readAllSensors();
+
+        // Reset current sensor state machine for next cycle
+        currentPhase = PHASE_L1;
 
         // Control logic
         controlMotor();

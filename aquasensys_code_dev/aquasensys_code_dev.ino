@@ -289,7 +289,8 @@ void setup() {
     OTA.enableBackup(true, "/backup");
     
     // Setup MQTT
-    mqttClient.setBufferSize(2048);
+    // Reduced from 2048 to 1024 bytes to free memory for OTA updates
+    mqttClient.setBufferSize(1024);
     mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
     setupMQTT();
     
@@ -424,12 +425,16 @@ void loop() {
 
         // Update clients and MQTT
         notifyClients();
-        publishState();
+        // Pause MQTT during OTA to free memory
+        if (!OTA.isUpdating()) {
+            publishState();
+        }
         updateSerial();
     }
     
     // NEW: Update diagnostics at 1Hz (separate from main update)
-    if (millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
+    // Pause diagnostics during OTA to free memory (~3-4KB saved)
+    if (!OTA.isUpdating() && millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
         lastDiagnosticsUpdate = millis();
         publishDiagnostics();
         publishDebugData(); // Also publish debug data for debug page

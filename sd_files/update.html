@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Firmware Update</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .update-form {
+            margin-bottom: 30px;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .file-input-wrapper:hover {
+            background: #0056b3;
+        }
+        input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+        .file-name {
+            margin-left: 15px;
+            color: #666;
+        }
+        .update-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        .update-btn:hover:not(:disabled) {
+            background: #218838;
+        }
+        .update-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .progress-container {
+            display: none;
+            margin-top: 30px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%;
+            transition: width 0.3s;
+            position: relative;
+        }
+        .progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            line-height: 30px;
+            color: #333;
+            font-weight: bold;
+            z-index: 1;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .stats {
+            display: none;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #ffeeba;
+        }
+        .current-version {
+            background: #e9ecef;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Firmware Update</h1>
+
+        <div class="warning">
+            ⚠️ <strong>Warning:</strong> Do not power off the device during update!
+        </div>
+
+        <div class="current-version">
+            Current Version: <strong>%VERSION%</strong>
+        </div>
+
+        <div class="update-form">
+            <div class="file-input-wrapper">
+                <span>Select Firmware File</span>
+                <input type="file" id="firmwareFile" accept=".bin" onchange="handleFileSelect(this)">
+            </div>
+            <span class="file-name" id="fileName"></span>
+
+            <br>
+
+            <button class="update-btn" id="updateBtn" onclick="startUpdate()" disabled>
+                Start Update
+            </button>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-text" id="progressText">0%</div>
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="status" id="statusMessage"></div>
+    </div>
+
+    <script>
+        let updateFile = null;
+        let startTime = null;
+
+        function handleFileSelect(input) {
+            updateFile = input.files[0];
+            if (updateFile) {
+                document.getElementById('fileName').textContent = updateFile.name + ' (' + formatBytes(updateFile.size) + ')';
+                document.getElementById('updateBtn').disabled = false;
+            } else {
+                document.getElementById('fileName').textContent = '';
+                document.getElementById('updateBtn').disabled = true;
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('statusMessage');
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+        }
+
+        async function startUpdate() {
+            if (!updateFile) return;
+
+            document.getElementById('updateBtn').disabled = true;
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('stats').style.display = 'block';
+            showStatus('Uploading firmware...', 'info');
+
+            startTime = Date.now();
+
+            const formData = new FormData();
+            formData.append('firmware', updateFile);
+
+            try {
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const progress = Math.round((e.loaded / e.total) * 100);
+                        updateProgress(progress, e.loaded, e.total);
+                    }
+                });
+
+                xhr.addEventListener('load', function() {
+                    if (xhr.status === 200) {
+                        showStatus('Update successful! Device will restart...', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 5000);
+                    } else {
+                        showStatus('Update failed: ' + xhr.responseText, 'error');
+                        document.getElementById('updateBtn').disabled = false;
+                    }
+                });
+
+                xhr.addEventListener('error', function() {
+                    showStatus('Upload failed: Network error', 'error');
+                    document.getElementById('updateBtn').disabled = false;
+                });
+
+                xhr.open('POST', '/update/upload');
+                xhr.send(formData);
+
+            } catch (error) {
+                showStatus('Update failed: ' + error.message, 'error');
+                document.getElementById('updateBtn').disabled = false;
+            }
+        }
+
+        function updateProgress(percent, loaded, total) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = percent + '%';
+
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const speed = loaded / elapsed;
+            const remaining = (total - loaded) / speed;
+
+            document.getElementById('stats').innerHTML =
+                `Uploaded: ${formatBytes(loaded)} / ${formatBytes(total)} | ` +
+                `Speed: ${formatBytes(speed)}/s | ` +
+                `Time: ${formatTime(elapsed)} | ` +
+                `Remaining: ${formatTime(Math.floor(remaining))}`;
+        }
+    </script>
+</body>
+</html>

@@ -512,15 +512,15 @@ void updateLights() {
     if (lights) {
         if (error) {
             // Error state - Red blinking
-            digitalWrite(LED_RED, (millis() % 1000) < 500);
-            digitalWrite(LED_GREEN, LOW);
-            digitalWrite(LED_BLUE, LOW);
+            ledcWrite(LED_RED, ((millis() % 1000) < 500) ? 255 : 0); 
+            ledcWrite(LED_GREEN, 0);
+            ledcWrite(LED_BLUE, 0);
         }
         else if (!mainSwitch) {
             // System off - Solid red
-            digitalWrite(LED_RED, HIGH);
-            digitalWrite(LED_GREEN, LOW);
-            digitalWrite(LED_BLUE, LOW);
+            ledcWrite(LED_RED, 255);  // ON
+            ledcWrite(LED_GREEN, 0); //OFf
+            ledcWrite(LED_BLUE, 0); //Off
         } 
         else if (manualOverride) {
             // Manual mode - Yellow (red + green) when off, Blue when on
@@ -529,17 +529,16 @@ void updateLights() {
             ledcWrite(LED_BLUE, motor ? 255 : 0);  // ~100% brightness
         } 
         else {
-            // Auto mode - Blink Green when off, Blue when on
-            digitalWrite(LED_RED, LOW);
-            digitalWrite(LED_GREEN, (!motor && (millis() % 1000) < 50) ? HIGH : LOW);
-            digitalWrite(LED_BLUE, motor ? HIGH : LOW);
+            ledcWrite(LED_RED, 0);  // Off
+            ledcWrite(LED_GREEN, (!motor && (millis() % 1000) < 50) ? 255 : 0);  // Blinking quick
+            ledcWrite(LED_BLUE, motor ? 255 : 0);  // ~100% brightness
         }
     }
     else {
         // Lights off
-        digitalWrite(LED_RED, LOW);
-        digitalWrite(LED_GREEN, LOW);
-        digitalWrite(LED_BLUE, LOW);
+        ledcWrite(LED_RED, 0);
+        ledcWrite(LED_GREEN, 0);
+        ledcWrite(LED_BLUE, 0);
     }
 }
 

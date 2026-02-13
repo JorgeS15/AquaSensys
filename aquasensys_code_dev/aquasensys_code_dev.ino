@@ -13,14 +13,14 @@
 #include <SPI.h>
 #include <SD.h>
 #include "MCP3208.h"
-#include "ACS712_handler.h"  // NEW: ACS712 current sensor handler
+#include "ACS712_handler.h"
 
 // Device constants (not saved to config)
 const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.3.0";  // Updated version
+const char* DEVICE_VERSION = "3.0.20"; //LEDs Fixed + Memory Optimization
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -28,14 +28,14 @@ unsigned long lastMqttReconnectAttempt = 0;
 const unsigned long MQTT_RECONNECT_INTERVAL = 5000;
 
 // Pin definitions
-#define TF_CS_PIN 21      // SD Card CS pin
-#define MCP_CS_PIN 19     // MCP3208 CS pin
+#define TF_CS_PIN 21      
+#define MCP_CS_PIN 19    
 #define LED_RED 32
 #define LED_GREEN 23
 #define MOTOR_PIN 26
 #define LED_BLUE 22
 #define FLOW_PIN 33
-#define TEMP_PIN 35       // ESP32 ADC for water temperature
+#define TEMP_PIN 35      
 
 // MCP3208 Channels - UPDATED MAPPING
 #define MCP_CH_AMBIENT_TEMP  0   // Channel 0 for ambient temperature sensor (LM35)
@@ -147,11 +147,11 @@ float readAmbientTemp() {
  */
 float readInPressure() {
     float voltage = readMCP3208Average(MCP_CH_PRESSURE_IN, NUM_SAMPLES);
-    
+
     // Convert voltage to pressure (bar)
     // For 0.5-4.5V = 0-5bar: pressure = (voltage - 0.5) * 1.25
-    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset;
-    
+    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset + config.pressure_in_offset;
+
     return pressure;
 }
 
@@ -160,10 +160,10 @@ float readInPressure() {
  */
 float readOutPressure() {
     float voltage = readMCP3208Average(MCP_CH_PRESSURE_OUT, NUM_SAMPLES);
-    
+
     // Convert voltage to pressure (bar)
-    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset;
-    
+    float pressure = (voltage - 0.5) * 1.25 + config.pressure_offset + config.pressure_out_offset;
+
     return pressure;
 }
 
@@ -191,9 +191,9 @@ float readAverageTemperature(int read) {
     countTemp++;
     
     if (read) {
-        float temp_voltage = totalTemp / countTemp * (3.3 / 4096.0) + config.temp_offset;
-        float temp_resistance = 97 * (1 / ((3.3 / temp_voltage) - 1));
-        float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29;
+        float temp_voltage = totalTemp / countTemp * (5.0 / 4096.0) + config.temp_offset;
+        float temp_resistance = 97 * (1 / ((5.0 / temp_voltage) - 1));
+        float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
         totalTemp = 0;
         countTemp = 0;
         return temp;
@@ -289,7 +289,8 @@ void setup() {
     OTA.enableBackup(true, "/backup");
     
     // Setup MQTT
-    mqttClient.setBufferSize(2048);
+    // Reduced from 2048 to 1024 bytes to free memory for OTA updates
+    mqttClient.setBufferSize(1024);
     mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
     setupMQTT();
     
@@ -306,16 +307,7 @@ void setup() {
     setupPins();
     digitalWrite(MOTOR_PIN, LOW);
     
-    // Test LEDs
-    digitalWrite(LED_RED, HIGH);
-    delay(500);
-    digitalWrite(LED_RED, LOW);
-    digitalWrite(LED_GREEN, HIGH);
-    delay(500);
-    digitalWrite(LED_GREEN, LOW);
-    digitalWrite(LED_BLUE, HIGH);
-    delay(500);
-    digitalWrite(LED_BLUE, LOW);
+    testLEDs();
     
     lastTime = millis();
     Serial.println("=== Setup Complete ===\n");
@@ -325,6 +317,7 @@ void loop() {
     // ============================================================
     // DEBUG MODE - Test all sensor readings
     // ============================================================
+
     if (debug) {
         static unsigned long lastDebugTime = 0;
         
@@ -432,14 +425,19 @@ void loop() {
 
         // Update clients and MQTT
         notifyClients();
-        publishState();
+        // Pause MQTT during OTA to free memory
+        if (!OTA.isUpdating()) {
+            publishState();
+        }
         updateSerial();
     }
     
     // NEW: Update diagnostics at 1Hz (separate from main update)
-    if (millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
+    // Pause diagnostics during OTA to free memory (~3-4KB saved)
+    if (!OTA.isUpdating() && millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
         lastDiagnosticsUpdate = millis();
         publishDiagnostics();
+        publishDebugData(); // Also publish debug data for debug page
     }
     
     // Check for error conditions
@@ -467,13 +465,27 @@ void controlMotor() {
     digitalWrite(MOTOR_PIN, motor ? HIGH : LOW);
 }
 
+void testLEDs(){
+    ledcWrite(LED_RED, 255);
+    delay(500);
+    ledcWrite(LED_RED, 0);
+    ledcWrite(LED_GREEN, 255); 
+    delay(500);
+    ledcWrite(LED_GREEN, 0);
+    ledcWrite(LED_BLUE, 255); 
+    delay(500);
+    ledcWrite(LED_BLUE, 0); 
+}
+
 void setupPins() {
     pinMode(FLOW_PIN, INPUT_PULLDOWN);
     attachInterrupt(digitalPinToInterrupt(FLOW_PIN), pulseCounter, RISING);
     pinMode(MOTOR_PIN, OUTPUT);
-    pinMode(LED_RED, OUTPUT);
-    pinMode(LED_GREEN, OUTPUT);
-    pinMode(LED_BLUE, OUTPUT);
+
+    // RGB LED - PWM via LEDC
+    ledcAttachChannel(LED_RED,   5000, 8, 0);  // pin, freq, resolution, channel
+    ledcAttachChannel(LED_GREEN, 5000, 8, 1);
+    ledcAttachChannel(LED_BLUE,  5000, 8, 2);
 }
 
 void updateSerial() {
@@ -500,34 +512,34 @@ void updateLights() {
     if (lights) {
         if (error) {
             // Error state - Red blinking
-            digitalWrite(LED_RED, (millis() % 1000) < 500);
-            digitalWrite(LED_GREEN, LOW);
-            digitalWrite(LED_BLUE, LOW);
+            digitalWrite(LED_RED, ((millis() % 1000) < 500) ? 255 : 0 );
+            digitalWrite(LED_GREEN, 0);
+            digitalWrite(LED_BLUE, 0);
         }
         else if (!mainSwitch) {
             // System off - Solid red
-            digitalWrite(LED_RED, HIGH);
-            digitalWrite(LED_GREEN, LOW);
-            digitalWrite(LED_BLUE, LOW);
+            digitalWrite(LED_RED, 255);
+            digitalWrite(LED_GREEN, 0);
+            digitalWrite(LED_BLUE, 0);
         } 
         else if (manualOverride) {
             // Manual mode - Yellow (red + green) when off, Blue when on
-            digitalWrite(LED_RED, !motor ? HIGH : LOW);
-            digitalWrite(LED_GREEN, !motor ? HIGH : LOW);
-            digitalWrite(LED_BLUE, motor ? HIGH : LOW);
+            ledcWrite(LED_RED, !motor ? 255 : 0);  // ~100% brightness
+            ledcWrite(LED_GREEN, !motor ? 64 : 0);  // ~25% brightness
+            ledcWrite(LED_BLUE, motor ? 255 : 0);  // ~100% brightness
         } 
         else {
             // Auto mode - Blink Green when off, Blue when on
-            digitalWrite(LED_RED, LOW);
-            digitalWrite(LED_GREEN, (!motor && (millis() % 1000) < 50) ? HIGH : LOW);
-            digitalWrite(LED_BLUE, motor ? HIGH : LOW);
+            ledcWrite(LED_RED, 0);
+            ledcWrite(LED_GREEN, (!motor && (millis() % 1000) < 50) ? 255 : 0);
+            ledcWrite(LED_BLUE, motor ? 255 : 0);
         }
     }
     else {
         // Lights off
-        digitalWrite(LED_RED, LOW);
-        digitalWrite(LED_GREEN, LOW);
-        digitalWrite(LED_BLUE, LOW);
+        ledcWrite(LED_RED, 0);
+        ledcWrite(LED_GREEN, 0);
+        ledcWrite(LED_BLUE, 0);
     }
 }
 
@@ -536,6 +548,9 @@ void checkForErrors() {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;
         }
+    }
+    else{
+        error = false;
     }
     if (error) {
         motor = false;
@@ -627,10 +642,12 @@ void notifyClients() {
     doc["flow"] = flow;
     doc["motor"] = motor;
     doc["manualOverride"] = manualOverride;
-    
+    doc["mainSwitch"] = mainSwitch;
+    doc["error"] = error;
+
     String json;
     serializeJson(doc, json);
-    
+
     events.send(json.c_str(), "update", millis());
 }
 
@@ -665,6 +682,93 @@ void publishDiagnostics() {
     serializeJson(doc, json);
     
     events.send(json.c_str(), "diagnostics", millis());
+}
+
+/**
+ * Publish comprehensive debug data for troubleshooting hardware issues
+ */
+void publishDebugData() {
+    if (!events.count()) return; // No clients connected
+
+    DynamicJsonDocument doc(1536);
+
+    // SD Card Status
+    doc["sd_detected"] = (SD.cardType() != CARD_NONE);
+    doc["sd_type"] = (SD.cardType() == CARD_MMC) ? "MMC" :
+                     (SD.cardType() == CARD_SD) ? "SD" :
+                     (SD.cardType() == CARD_SDHC) ? "SDHC" : "UNKNOWN";
+    doc["sd_size"] = SD.cardSize();
+
+    // Count files on SD
+    int fileCount = 0;
+    File root = SD.open("/");
+    if (root) {
+        File file = root.openNextFile();
+        while (file) {
+            fileCount++;
+            file = root.openNextFile();
+        }
+        root.close();
+    }
+    doc["sd_files"] = fileCount;
+
+    // MCP3208 Status
+    doc["mcp_init"] = true; // MCP3208 initialized in setup()
+    doc["mcp_vref"] = MCP3208_VREF;
+    doc["mcp_errors"] = 0; // TODO: track errors if MCP has error counter
+    doc["spi_status"] = "OK"; // TODO: add actual SPI status if available
+
+    // Raw ADC Values (0-4095)
+    for (int i = 0; i < 8; i++) {
+        doc["adc_ch" + String(i)] = adc.analogRead(i);
+    }
+
+    // Voltage Readings
+    for (int i = 0; i < 4; i++) {
+        doc["volt_ch" + String(i)] = readMCP3208Average(i, NUM_SAMPLES);
+    }
+
+    // Processed Sensor Values
+    doc["pressure_in"] = pressureIn;
+    doc["pressure_out"] = pressureOut;
+    doc["temp_ambient"] = ambientTemp;
+    doc["temp_water"] = waterTemp;
+
+    // Calibration Offsets
+    doc["cal_press_in"] = config.pressure_in_offset;
+    doc["cal_press_out"] = config.pressure_out_offset;
+    doc["cal_curr_l1"] = config.current_offset_l1;
+    doc["cal_curr_l2"] = config.current_offset_l2;
+    doc["cal_curr_l3"] = config.current_offset_l3;
+
+    // System Information
+    doc["free_heap"] = ESP.getFreeHeap();
+    doc["uptime"] = millis() / 1000;
+    doc["reset_reason"] = esp_reset_reason();
+    doc["cpu_freq"] = ESP.getCpuFreqMHz();
+
+    // WiFi Status
+    doc["wifi_connected"] = WiFi.isConnected();
+    doc["wifi_ssid"] = WiFi.SSID();
+    doc["wifi_rssi"] = WiFi.RSSI();
+    doc["wifi_ip"] = WiFi.localIP().toString();
+
+    // MQTT Status
+    doc["mqtt_connected"] = mqttClient.connected();
+    doc["mqtt_server"] = config.mqtt_server;
+    doc["mqtt_port"] = config.mqtt_port;
+    doc["mqtt_last"] = (millis() - lastMqttReconnectAttempt) / 1000; // seconds since last attempt
+
+    // Motor & Control State
+    doc["motor"] = motor;
+    doc["main_switch"] = mainSwitch;
+    doc["manual_override"] = manualOverride;
+    doc["error"] = error;
+
+    String json;
+    serializeJson(doc, json);
+
+    events.send(json.c_str(), "debug", millis());
 }
 
 void webRoutes() {
@@ -780,11 +884,11 @@ void webRoutes() {
     server.on("/api/calibrate-current", HTTP_POST, [](AsyncWebServerRequest *request) {
         // Check if motor is off
         if (motor) {
-            request->send(400, "application/json", 
+            request->send(400, "application/json",
                 "{\"error\":\"Motor must be OFF for calibration\",\"motor_status\":\"ON\"}");
             return;
         }
-        
+
         // Perform calibration
         Serial.println("\n=== Manual Calibration Requested via API ===");
         if (currentSensor.performAutoCalibration(100)) {
@@ -793,22 +897,62 @@ void webRoutes() {
             config.current_offset_l2 = cal.offsetL2;
             config.current_offset_l3 = cal.offsetL3;
             saveConfig();
-            
+
             DynamicJsonDocument doc(256);
             doc["status"] = "success";
             doc["offset_l1"] = config.current_offset_l1;
             doc["offset_l2"] = config.current_offset_l2;
             doc["offset_l3"] = config.current_offset_l3;
-            
+
             String response;
             serializeJson(doc, response);
             request->send(200, "application/json", response);
         } else {
-            request->send(500, "application/json", 
+            request->send(500, "application/json",
                 "{\"error\":\"Calibration failed - check motor is OFF and retry\"}");
         }
     });
-    
+
+    // Pressure sensor calibration endpoint
+    server.on("/api/calibrate-pressure", HTTP_POST, [](AsyncWebServerRequest *request) {
+        Serial.println("\n=== Pressure Calibration Requested via API ===");
+
+        // Read current pressure values (without offsets)
+        float voltageIn = readMCP3208Average(MCP_CH_PRESSURE_IN, NUM_SAMPLES);
+        float voltageOut = readMCP3208Average(MCP_CH_PRESSURE_OUT, NUM_SAMPLES);
+
+        // Calculate raw pressure (without any offsets)
+        float rawPressureIn = (voltageIn - 0.5) * 1.25;
+        float rawPressureOut = (voltageOut - 0.5) * 1.25;
+
+        // Set offsets to zero out current readings
+        // offset = -raw_pressure (so raw_pressure + offset = 0)
+        config.pressure_in_offset = -(rawPressureIn + config.pressure_offset);
+        config.pressure_out_offset = -(rawPressureOut + config.pressure_offset);
+        config.pressure_calibrated = true;
+
+        // Save to config
+        if (saveConfig()) {
+            Serial.printf("Pressure calibration successful:\n");
+            Serial.printf("  Inlet offset: %.3f bar\n", config.pressure_in_offset);
+            Serial.printf("  Outlet offset: %.3f bar\n", config.pressure_out_offset);
+
+            DynamicJsonDocument doc(256);
+            doc["status"] = "success";
+            doc["offset_in"] = config.pressure_in_offset;
+            doc["offset_out"] = config.pressure_out_offset;
+            doc["raw_in"] = rawPressureIn;
+            doc["raw_out"] = rawPressureOut;
+
+            String response;
+            serializeJson(doc, response);
+            request->send(200, "application/json", response);
+        } else {
+            request->send(500, "application/json",
+                "{\"error\":\"Failed to save calibration to config\"}");
+        }
+    });
+
     // Diagnostics JSON endpoint (for backward compatibility)
     server.on("/diagnostics", HTTP_GET, [](AsyncWebServerRequest *request) {
         DynamicJsonDocument doc(512);
@@ -847,9 +991,9 @@ void webRoutes() {
     server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         DynamicJsonDocument doc(128);
-        DeserializationError error = deserializeJson(doc, data, len);
+        DeserializationError jsonError = deserializeJson(doc, data, len);
         
-        if (!error) {
+        if (!jsonError) {
             if (doc.containsKey("command")) {
                 String command = doc["command"];
                 if (command == "toggle") {
@@ -857,8 +1001,14 @@ void webRoutes() {
                     manualMotorState = !manualMotorState;
                 } else if (command == "override") {
                     manualOverride = !manualOverride;
+                } else if (command == "mainSwitch") {
+                    mainSwitch = !mainSwitch;
+                    // If turning off main switch, clear error state
+                    if (mainSwitch) {
+                        error = false;
+                    }
                 }
-                
+
                 notifyClients();
                 publishState();
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -868,35 +1018,39 @@ void webRoutes() {
         request->send(400, "application/json", "{\"error\":\"invalid request\"}");
     });
 
-    // Debug route
+    // Debug page route - serve debug.html or fallback to simple debug info
     server.on("/debug", HTTP_GET, [](AsyncWebServerRequest *request) {
-        String html = "<html><body><h1>SD Card Files:</h1><ul>";
-        
-        File root = SD.open("/");
-        if (root) {
-            File file = root.openNextFile();
-            while (file) {
-                html += "<li>" + String(file.name()) + " (" + String(file.size()) + " bytes)</li>";
-                file = root.openNextFile();
-            }
-            root.close();
+        if (SD.exists("/debug.html")) {
+            request->send(SD, "/debug.html", "text/html");
         } else {
-            html += "<li>Could not open root directory</li>";
-        }
-        
-        html += "</ul>";
-        html += "<h2>Current Config:</h2><pre>" + getConfigJson() + "</pre>";
-        html += "<h2>Device Info:</h2><pre>";
-        html += "Device Name: " + String(DEVICE_NAME) + "\n";
-        html += "Device ID: " + String(DEVICE_ID) + "\n";
-        html += "Device Version: " + String(DEVICE_VERSION) + "\n";
-        html += "Device Model: " + String(DEVICE_MODEL) + "\n";
-        html += "ADC Type: MCP3208 (Rodolfo Prieto)\n";
-        html += "Current Sensors: ACS712-05B (3-Phase)\n";
-        html += "</pre>";
-        html += "<h2>Live Readings:</h2><pre>";
-        html += "Ambient Temp: " + String(ambientTemp) + " °C\n";
-        html += "Water Temp: " + String(waterTemp) + " °C\n";
+            // Fallback to simple debug info if debug.html not found
+            String html = "<html><body><h1>SD Card Files:</h1><ul>";
+
+            File root = SD.open("/");
+            if (root) {
+                File file = root.openNextFile();
+                while (file) {
+                    html += "<li>" + String(file.name()) + " (" + String(file.size()) + " bytes)</li>";
+                    file = root.openNextFile();
+                }
+                root.close();
+            } else {
+                html += "<li>Could not open root directory</li>";
+            }
+
+            html += "</ul>";
+            html += "<h2>Current Config:</h2><pre>" + getConfigJson() + "</pre>";
+            html += "<h2>Device Info:</h2><pre>";
+            html += "Device Name: " + String(DEVICE_NAME) + "\n";
+            html += "Device ID: " + String(DEVICE_ID) + "\n";
+            html += "Device Version: " + String(DEVICE_VERSION) + "\n";
+            html += "Device Model: " + String(DEVICE_MODEL) + "\n";
+            html += "ADC Type: MCP3208 (Rodolfo Prieto)\n";
+            html += "Current Sensors: ACS712-05B (3-Phase)\n";
+            html += "</pre>";
+            html += "<h2>Live Readings:</h2><pre>";
+            html += "Ambient Temp: " + String(ambientTemp) + " °C\n";
+            html += "Water Temp: " + String(waterTemp) + " °C\n";
         html += "Pressure In: " + String(pressureIn) + " bar\n";
         html += "Pressure Out: " + String(pressureOut) + " bar\n";
         html += "Current L1: " + String(currentL1) + " A\n";
@@ -906,11 +1060,13 @@ void webRoutes() {
         html += "</pre>";
         html += "</body></html>";
         request->send(200, "text/html", html);
+        }
     });
 
     events.onConnect([](AsyncEventSourceClient *client) {
         Serial.println("Client connected to /events");
         notifyClients();
         publishDiagnostics(); // Send initial diagnostics data
+        publishDebugData(); // Send initial debug data
     });
 }

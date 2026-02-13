@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.19"; //PWM for LEDs
+const char* DEVICE_VERSION = "3.0.20"; //Memory optimization - phase1
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

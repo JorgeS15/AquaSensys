@@ -243,9 +243,9 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
 
             zipState.compressionMethod = (uint16_t)zipState.hdrBuf[4]
                                        | ((uint16_t)zipState.hdrBuf[5] << 8);
-            if (zipState.compressionMethod != 0 && zipState.compressionMethod != 8) {
+            if (zipState.compressionMethod != 0) {
                 zipState.hasError = true;
-                zipState.errorMsg = "Unsupported compression: " + String(zipState.compressionMethod);
+                zipState.errorMsg = "Compressed ZIP not supported — re-zip with 'zip -0' to disable compression";
                 return take;
             }
 
@@ -323,20 +323,6 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
 
         if (zipState.extraRemaining == 0) {
             zipState.dataRemaining = zipState.compressedSize;
-
-            if (!zipState.skipFile && zipState.compressionMethod == 8) {
-                zipState.zs.zalloc   = Z_NULL;
-                zipState.zs.zfree    = Z_NULL;
-                zipState.zs.opaque   = Z_NULL;
-                zipState.zs.avail_in = 0;
-                zipState.zs.next_in  = Z_NULL;
-                if (inflateInit2(&zipState.zs, -15) != Z_OK) {
-                    zipState.hasError = true;
-                    zipState.errorMsg = "inflateInit failed";
-                    return take;
-                }
-                zipState.zlibInit = true;
-            }
             zipState.state = ZIP_READ_DATA;
         }
         return take;
@@ -346,25 +332,7 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
         size_t take = (avail < zipState.dataRemaining) ? avail : zipState.dataRemaining;
 
         if (!zipState.skipFile) {
-            if (zipState.compressionMethod == 0) {
-                if (zipState.outFile) zipState.outFile.write(buf, take);
-            } else {
-                zipState.zs.avail_in = (uInt)take;
-                zipState.zs.next_in  = (Bytef*)buf;
-                int ret = Z_OK;
-                while (zipState.zs.avail_in > 0 && ret != Z_STREAM_END) {
-                    zipState.zs.avail_out = ZIP_OUT_BUF_SIZE;
-                    zipState.zs.next_out  = zipState.zlibOutBuf;
-                    ret = inflate(&zipState.zs, Z_SYNC_FLUSH);
-                    if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
-                        zipState.hasError = true;
-                        zipState.errorMsg = "inflate error: " + String(ret);
-                        return take;
-                    }
-                    size_t produced = ZIP_OUT_BUF_SIZE - zipState.zs.avail_out;
-                    if (produced && zipState.outFile) zipState.outFile.write(zipState.zlibOutBuf, produced);
-                }
-            }
+            if (zipState.outFile) zipState.outFile.write(buf, take);
         }
 
         zipState.dataRemaining -= (uint32_t)take;
@@ -372,10 +340,6 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
         if (zipState.dataRemaining == 0) {
             if (!zipState.skipFile) {
                 if (zipState.outFile) zipState.outFile.close();
-                if (zipState.zlibInit) {
-                    inflateEnd(&zipState.zs);
-                    zipState.zlibInit = false;
-                }
                 if (zipState.extractedCount < 32) {
                     zipState.extractedFiles[zipState.extractedCount++] = String(zipState.filename);
                 }
@@ -399,7 +363,6 @@ void handleZipUpload(AsyncWebServerRequest *request, String filename,
                      size_t index, uint8_t *data, size_t len, bool final) {
     if (index == 0) {
         if (zipState.outFile) zipState.outFile.close();
-        if (zipState.zlibInit) { inflateEnd(&zipState.zs); }
         zipState = ZipUploadState();
         zipState.state = ZIP_FIND_SIG;
         Serial.println("[ZIP] Upload started");
@@ -414,10 +377,6 @@ void handleZipUpload(AsyncWebServerRequest *request, String filename,
 
     if (final) {
         if (zipState.outFile) zipState.outFile.close();
-        if (zipState.zlibInit) {
-            inflateEnd(&zipState.zs);
-            zipState.zlibInit = false;
-        }
         Serial.printf("[ZIP] Upload complete, %d file(s) extracted\n", zipState.extractedCount);
     }
 }

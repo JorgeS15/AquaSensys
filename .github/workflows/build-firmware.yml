@@ -86,7 +86,7 @@ jobs:
 
       - name: Package SD assets
         run: |
-          cd code/sd && zip -r ../../build/sd-assets.zip . --exclude='config.json'
+          cd code/sd && zip -0 -r ../../build/sd-assets.zip . --exclude='config.json'
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4

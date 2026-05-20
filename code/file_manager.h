@@ -4,10 +4,8 @@
 #include <ESPAsyncWebServer.h>
 #include <SD.h>
 #include <ArduinoJson.h>
-#include <zlib.h>
 
 #define ZIP_MAX_FILENAME 128
-#define ZIP_OUT_BUF_SIZE 1024
 
 enum ZipParseState {
     ZIP_IDLE,
@@ -41,10 +39,6 @@ struct ZipUploadState {
 
     File     outFile;
     bool     skipFile;
-
-    z_stream zs;
-    bool     zlibInit;
-    uint8_t  zlibOutBuf[ZIP_OUT_BUF_SIZE];
 
     String   extractedFiles[32];
     uint8_t  extractedCount;

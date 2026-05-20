@@ -25,10 +25,13 @@ const elements = {
   flow: document.getElementById('flow'),
   motor: document.getElementById('motor'),
   mode: document.getElementById('mode'),
+  mainSwitch: document.getElementById('mainSwitch'),
+  systemStatus: document.getElementById('systemStatus'),
   pressureBar: document.getElementById('pressureBar'),
   wifiStatus: document.getElementById('wifiStatus'),
   ipAddress: document.getElementById('ipAddress'),
   toggleBtn: document.getElementById('toggleBtn'),
+  mainSwitchBtn: document.getElementById('mainSwitchBtn'),
   overrideBtn: document.getElementById('overrideBtn')
 };
 
@@ -90,8 +93,20 @@ function updateDashboard(data) {
   if (data.manualOverride !== undefined) {
     elements.mode.textContent = data.manualOverride ? "MANUAL" : "AUTO";
     elements.mode.dataset.status = data.manualOverride ? "MANUAL" : "AUTO";
-    elements.overrideBtn.style.backgroundColor = 
+    elements.overrideBtn.style.backgroundColor =
       data.manualOverride ? 'var(--warning)' : 'var(--secondary)';
+  }
+
+  if (data.mainSwitch !== undefined) {
+    elements.mainSwitch.textContent = data.mainSwitch ? "ON" : "OFF";
+    elements.mainSwitch.dataset.status = data.mainSwitch ? "ON" : "OFF";
+    elements.mainSwitchBtn.style.backgroundColor =
+      data.mainSwitch ? 'var(--success)' : 'var(--danger)';
+  }
+
+  if (data.error !== undefined) {
+    elements.systemStatus.textContent = data.error ? "ERROR" : "OK";
+    elements.systemStatus.dataset.status = data.error ? "ERROR" : "OK";
   }
 }
 
@@ -127,11 +142,12 @@ function updateConnectionStatus(connected) {
   elements.ipAddress.textContent = statusText;
   
   elements.toggleBtn.disabled = !connected;
+  elements.mainSwitchBtn.disabled = !connected;
   elements.overrideBtn.disabled = !connected;
 }
 
 function sendCommand(command) {
-  const validCommands = ['toggle', 'override'];
+  const validCommands = ['toggle', 'override', 'mainSwitch'];
   if (!validCommands.includes(command)) {
     console.error('Invalid command:', command);
     return;
@@ -189,6 +205,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Event listeners
   elements.toggleBtn.addEventListener('click', () => {
     sendCommand('toggle');
+  });
+
+  elements.mainSwitchBtn.addEventListener('click', () => {
+    sendCommand('mainSwitch');
   });
 
   elements.overrideBtn.addEventListener('click', () => {

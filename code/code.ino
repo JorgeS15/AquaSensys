@@ -13,7 +13,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include "MCP3208.h"
-#include "ACS712_handler.h"  // NEW: ACS712 current sensor handler
+#include "ACS712_handler.h"
 
 // Device constants (not saved to config)
 const char* DEVICE_NAME = "AquaSensys C3";

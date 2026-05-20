@@ -1,0 +1,110 @@
+name: Build & Release Firmware
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install arduino-cli
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
+            | BINDIR=/usr/local/bin sh
+
+      - name: Cache arduino-cli data
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-${{ runner.os }}-${{ hashFiles('**/build-firmware.yml') }}
+          restore-keys: |
+            arduino-${{ runner.os }}-
+
+      - name: Configure arduino-cli
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+
+      - name: Update board index
+        run: arduino-cli core update-index
+
+      - name: Install ESP32 core
+        run: arduino-cli core install esp32:esp32
+
+      - name: Install Arduino registry libraries
+        run: |
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "PubSubClient"
+
+      - name: Install AsyncTCP (GitHub)
+        run: |
+          git clone --depth 1 https://github.com/me-no-dev/AsyncTCP \
+            ~/Arduino/libraries/AsyncTCP
+
+      - name: Install ESPAsyncWebServer (GitHub)
+        run: |
+          git clone --depth 1 https://github.com/me-no-dev/ESPAsyncWebServer \
+            ~/Arduino/libraries/ESPAsyncWebServer
+
+      - name: Extract firmware version
+        id: version
+        run: |
+          VERSION=$(grep -oP '(?<=DEVICE_VERSION = ")[\d.]+(?=")' code/code.ino)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Compile firmware
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            --output-dir build/ \
+            code/
+
+      - name: Rename firmware binary
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          mv build/code.ino.bin "build/aquasensys-firmware-${TAG}.bin"
+          echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin" >> "$GITHUB_ENV"
+          echo "BIN_NAME=aquasensys-firmware-${TAG}.bin" >> "$GITHUB_ENV"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}
+          path: ${{ env.BIN_PATH }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "AquaSensys ${{ steps.version.outputs.tag }}"
+          body: |
+            ## AquaSensys Firmware ${{ steps.version.outputs.version }}
+
+            Built automatically from commit ${{ github.sha }} on `main`.
+
+            ### OTA Update
+            Use the OTA update page served by the device itself to upload the `.bin`.
+
+            ### Manual Flash
+            ```
+            esptool.py --chip esp32 write_flash 0x10000 ${{ env.BIN_NAME }}
+            ```
+
+            ### Board
+            - FQBN: `esp32:esp32:esp32`
+          files: ${{ env.BIN_PATH }}
+          fail_on_unmatched_files: true

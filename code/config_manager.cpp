@@ -50,8 +50,13 @@ bool loadConfig() {
     config.max_pressure = doc["max_pressure"] | config.max_pressure;
     config.pressure_offset = doc["pressure_offset"] | config.pressure_offset;
     config.temp_offset = doc["temp_offset"] | config.temp_offset;
-    
-    // Load calibration data (NEW)
+
+    // Load pressure calibration data
+    config.pressure_in_offset = doc["pressure_in_offset"] | config.pressure_in_offset;
+    config.pressure_out_offset = doc["pressure_out_offset"] | config.pressure_out_offset;
+    config.pressure_calibrated = doc["pressure_calibrated"] | config.pressure_calibrated;
+
+    // Load current calibration data
     config.current_offset_l1 = doc["current_offset_l1"] | config.current_offset_l1;
     config.current_offset_l2 = doc["current_offset_l2"] | config.current_offset_l2;
     config.current_offset_l3 = doc["current_offset_l3"] | config.current_offset_l3;
@@ -86,13 +91,18 @@ bool saveConfig() {
     doc["mqtt_port"] = config.mqtt_port;
     doc["mqtt_user"] = config.mqtt_user;
     doc["mqtt_password"] = config.mqtt_password;
-    
+
     doc["min_pressure"] = config.min_pressure;
     doc["max_pressure"] = config.max_pressure;
     doc["pressure_offset"] = config.pressure_offset;
     doc["temp_offset"] = config.temp_offset;
-    
-    // Add calibration data (NEW)
+
+    // Add pressure calibration data
+    doc["pressure_in_offset"] = config.pressure_in_offset;
+    doc["pressure_out_offset"] = config.pressure_out_offset;
+    doc["pressure_calibrated"] = config.pressure_calibrated;
+
+    // Add current calibration data
     doc["current_offset_l1"] = config.current_offset_l1;
     doc["current_offset_l2"] = config.current_offset_l2;
     doc["current_offset_l3"] = config.current_offset_l3;
@@ -138,13 +148,18 @@ String getConfigJson() {
     doc["mqtt_server"] = config.mqtt_server;
     doc["mqtt_port"] = config.mqtt_port;
     doc["mqtt_user"] = config.mqtt_user;
-    
+
     doc["min_pressure"] = config.min_pressure;
     doc["max_pressure"] = config.max_pressure;
     doc["pressure_offset"] = config.pressure_offset;
     doc["temp_offset"] = config.temp_offset;
-    
-    // Add calibration data (NEW)
+
+    // Add pressure calibration data
+    doc["pressure_in_offset"] = config.pressure_in_offset;
+    doc["pressure_out_offset"] = config.pressure_out_offset;
+    doc["pressure_calibrated"] = config.pressure_calibrated;
+
+    // Add current calibration data
     doc["current_offset_l1"] = config.current_offset_l1;
     doc["current_offset_l2"] = config.current_offset_l2;
     doc["current_offset_l3"] = config.current_offset_l3;
@@ -198,8 +213,19 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("temp_offset")) {
         config.temp_offset = doc["temp_offset"];
     }
-    
-    // Update calibration data (NEW)
+
+    // Update pressure calibration data
+    if (doc.containsKey("pressure_in_offset")) {
+        config.pressure_in_offset = doc["pressure_in_offset"];
+    }
+    if (doc.containsKey("pressure_out_offset")) {
+        config.pressure_out_offset = doc["pressure_out_offset"];
+    }
+    if (doc.containsKey("pressure_calibrated")) {
+        config.pressure_calibrated = doc["pressure_calibrated"];
+    }
+
+    // Update current calibration data
     if (doc.containsKey("current_offset_l1")) {
         config.current_offset_l1 = doc["current_offset_l1"];
     }

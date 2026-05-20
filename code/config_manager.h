@@ -22,8 +22,13 @@ struct Config {
     float max_pressure;
     float pressure_offset;
     float temp_offset;
-    
-    // Current sensor calibration (NEW)
+
+    // Pressure sensor calibration
+    float pressure_in_offset;
+    float pressure_out_offset;
+    bool pressure_calibrated;
+
+    // Current sensor calibration
     float current_offset_l1;
     float current_offset_l2;
     float current_offset_l3;
@@ -41,6 +46,9 @@ struct Config {
         max_pressure = 3.5;
         pressure_offset = 0.0;
         temp_offset = 0.16;
+        pressure_in_offset = 0.0;
+        pressure_out_offset = 0.0;
+        pressure_calibrated = false;
         current_offset_l1 = 0.0;
         current_offset_l2 = 0.0;
         current_offset_l3 = 0.0;

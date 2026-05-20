@@ -143,7 +143,18 @@ const translations = {
     "errorLoadingFileList": "Error loading file list",
     "fileManagerLoaded": "File manager loaded successfully!",
     "filesSelectedDragDrop": "%d file(s) selected via drag & drop",
-    
+    "tabIndividualFiles": "Individual Files",
+    "tabZipArchive": "ZIP Archive",
+    "zipUploadInstructions": "Select a ZIP archive containing your web files. All files will be extracted to the SD card root directory. config.json will not be overwritten.",
+    "uploadZipToSD": "Upload ZIP Archive to SD Card",
+    "selectZipFile": "Select a .zip archive to extract to the SD card root directory",
+    "extractAndUpload": "Extract & Upload",
+    "pleaseSelectZip": "Please select a .zip file to upload",
+    "uploadingZip": "Uploading and extracting ZIP archive...",
+    "zipFileSelected": "ZIP file selected: %s",
+    "zipExtractSuccess": "ZIP archive extracted successfully! %d file(s) installed.",
+    "zipExtractError": "ZIP extraction failed",
+
     // Notifications
     "configSaved": "Configuration saved successfully",
     "wifiUpdated": "WiFi settings updated. Device will reconnect if needed.",
@@ -383,7 +394,18 @@ const translations = {
     "errorLoadingFileList": "Erro ao carregar lista de ficheiros",
     "fileManagerLoaded": "Gestor de ficheiros carregado com sucesso!",
     "filesSelectedDragDrop": "%d ficheiro(s) selecionado(s) via arrastar e largar",
-    
+    "tabIndividualFiles": "Ficheiros Individuais",
+    "tabZipArchive": "Arquivo ZIP",
+    "zipUploadInstructions": "Selecione um arquivo ZIP contendo os seus ficheiros web. Todos os ficheiros serão extraídos para o diretório raiz do cartão SD. O ficheiro config.json não será sobrescrito.",
+    "uploadZipToSD": "Enviar Arquivo ZIP para o Cartão SD",
+    "selectZipFile": "Selecione um arquivo .zip para extrair para o diretório raiz do cartão SD",
+    "extractAndUpload": "Extrair e Enviar",
+    "pleaseSelectZip": "Por favor selecione um ficheiro .zip para enviar",
+    "uploadingZip": "A enviar e extrair arquivo ZIP...",
+    "zipFileSelected": "Ficheiro ZIP selecionado: %s",
+    "zipExtractSuccess": "Arquivo ZIP extraído com sucesso! %d ficheiro(s) instalado(s).",
+    "zipExtractError": "Falha na extração do ZIP",
+
     // Notifications
     "configSaved": "Configuração guardada com sucesso",
     "wifiUpdated": "Configurações WiFi atualizadas. O dispositivo reconectar-se-á se necessário.",

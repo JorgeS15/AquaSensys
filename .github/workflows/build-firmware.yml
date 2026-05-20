@@ -79,6 +79,10 @@ jobs:
           echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin" >> "$GITHUB_ENV"
           echo "BIN_NAME=aquasensys-firmware-${TAG}.bin" >> "$GITHUB_ENV"
 
+      - name: Package SD assets
+        run: |
+          cd code/sd && zip -r ../../build/sd-assets.zip . --exclude='config.json'
+
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -96,6 +100,10 @@ jobs:
 
             Built automatically from commit ${{ github.sha }} on `main`.
 
+            ### Assets
+            - `aquasensys-firmware-*.bin` — firmware binary for OTA or manual flash
+            - `sd-assets.zip` — web interface files; extract to the SD card via the ZIP upload tab (config.json is not included)
+
             ### OTA Update
             Use the OTA update page served by the device itself to upload the `.bin`.
 
@@ -106,5 +114,7 @@ jobs:
 
             ### Board
             - FQBN: `esp32:esp32:esp32`
-          files: ${{ env.BIN_PATH }}
+          files: |
+            ${{ env.BIN_PATH }}
+            build/sd-assets.zip
           fail_on_unmatched_files: true

@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -50,13 +53,15 @@ jobs:
 
       - name: Install AsyncTCP (GitHub)
         run: |
-          git clone --depth 1 https://github.com/me-no-dev/AsyncTCP \
-            ~/Arduino/libraries/AsyncTCP
+          [ -d ~/Arduino/libraries/AsyncTCP ] || \
+            git clone --depth 1 https://github.com/me-no-dev/AsyncTCP \
+              ~/Arduino/libraries/AsyncTCP
 
       - name: Install ESPAsyncWebServer (GitHub)
         run: |
-          git clone --depth 1 https://github.com/me-no-dev/ESPAsyncWebServer \
-            ~/Arduino/libraries/ESPAsyncWebServer
+          [ -d ~/Arduino/libraries/ESPAsyncWebServer ] || \
+            git clone --depth 1 https://github.com/me-no-dev/ESPAsyncWebServer \
+              ~/Arduino/libraries/ESPAsyncWebServer
 
       - name: Extract firmware version
         id: version

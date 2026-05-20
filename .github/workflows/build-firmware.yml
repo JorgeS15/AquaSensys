@@ -74,15 +74,21 @@ jobs:
         run: |
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
+            --build-property "build.partitions=default" \
+            --build-property "upload.maximum_size=1310720" \
             --output-dir build/ \
             code/
 
       - name: Rename firmware binary
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          mv build/code.ino.bin "build/aquasensys-firmware-${TAG}.bin"
-          echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin" >> "$GITHUB_ENV"
-          echo "BIN_NAME=aquasensys-firmware-${TAG}.bin" >> "$GITHUB_ENV"
+          mv build/code.ino.bin           "build/aquasensys-firmware-${TAG}.bin"
+          mv build/code.ino.bootloader.bin "build/bootloader-${TAG}.bin"
+          mv build/code.ino.partitions.bin "build/partitions-${TAG}.bin"
+          echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin"   >> "$GITHUB_ENV"
+          echo "BIN_NAME=aquasensys-firmware-${TAG}.bin"          >> "$GITHUB_ENV"
+          echo "BOOT_PATH=build/bootloader-${TAG}.bin"            >> "$GITHUB_ENV"
+          echo "PART_PATH=build/partitions-${TAG}.bin"            >> "$GITHUB_ENV"
 
       - name: Package SD assets
         run: |
@@ -106,20 +112,31 @@ jobs:
             Built automatically from commit ${{ github.sha }} on `main`.
 
             ### Assets
-            - `aquasensys-firmware-*.bin` — firmware binary for OTA or manual flash
-            - `sd-assets.zip` — web interface files; extract to the SD card via the ZIP upload tab (config.json is not included)
+            | File | Description |
+            |---|---|
+            | `aquasensys-firmware-*.bin` | Firmware — upload via OTA page |
+            | `bootloader-*.bin` | Bootloader (initial USB flash only) |
+            | `partitions-*.bin` | Partition table (initial USB flash only) |
+            | `sd-assets.zip` | Web UI files for SD card |
 
-            ### OTA Update
-            Use the OTA update page served by the device itself to upload the `.bin`.
+            ### OTA Update (device already running AquaSensys)
+            Use the firmware update page served by the device and upload `aquasensys-firmware-*.bin`.
 
-            ### Manual Flash
-            ```
-            esptool.py --chip esp32 write_flash 0x10000 ${{ env.BIN_NAME }}
+            ### Initial / Recovery Flash via USB
+            Use this when flashing for the first time or if OTA returns "Flash Erase Failed":
+            ```bash
+            esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \
+              0x1000  bootloader-${{ steps.version.outputs.tag }}.bin \
+              0x8000  partitions-${{ steps.version.outputs.tag }}.bin \
+              0x10000 aquasensys-firmware-${{ steps.version.outputs.tag }}.bin
             ```
 
             ### Board
             - FQBN: `esp32:esp32:esp32`
+            - Partition scheme: `default` (OTA, 1.25 MB per app slot)
           files: |
             ${{ env.BIN_PATH }}
+            ${{ env.BOOT_PATH }}
+            ${{ env.PART_PATH }}
             build/sd-assets.zip
           fail_on_unmatched_files: true

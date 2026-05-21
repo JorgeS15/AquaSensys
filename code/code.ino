@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.30"; //BSSID pin for dual-band WiFi
+const char* DEVICE_VERSION = "3.0.31"; //AP SSID uses MAC address
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -605,8 +605,13 @@ void initSDCard() {
 // ============================================================
 
 void setupAPMode() {
-    String ssid = String("AquaSensys") + DEVICE_VERSION;
     WiFi.mode(WIFI_AP);
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char macSuffix[13];
+    snprintf(macSuffix, sizeof(macSuffix), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    String ssid = String("AquaSensys-") + macSuffix;
     WiFi.softAP(ssid.c_str());
     apModeActive = true;
     Serial.println("[AP] No WiFi credentials found. Access Point started.");

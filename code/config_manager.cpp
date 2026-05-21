@@ -7,6 +7,14 @@ const char* CONFIG_FILE = "/config.json";
 static const char* CONFIG_TMP  = "/config.tmp";
 
 bool loadConfig() {
+    // Recover an interrupted atomic save: if the main file is missing but the
+    // temp file exists, the device was reset between SD.remove() and SD.rename().
+    // Complete the rename now so the saved data is not lost.
+    if (!SD.exists(CONFIG_FILE) && SD.exists(CONFIG_TMP)) {
+        Serial.println("[Config] Recovering interrupted save from config.tmp");
+        SD.rename(CONFIG_TMP, CONFIG_FILE);
+    }
+
     if (!SD.exists(CONFIG_FILE)) {
         Serial.println("Config file not found, creating with defaults");
         return saveConfig();

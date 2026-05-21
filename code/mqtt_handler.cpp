@@ -6,6 +6,11 @@
 
 // MQTT client object
 extern PubSubClient mqttClient;
+extern bool wifiConnected;
+extern unsigned long lastMqttReconnectAttempt;
+extern const unsigned long MQTT_RECONNECT_INTERVAL;
+
+volatile bool publishStatePending = false;
 
 // Pre-built topic strings — populated once in setupMQTT(), reused everywhere
 static char mqttTopicMotor[64];
@@ -78,10 +83,16 @@ bool reconnectMQTT() {
     return false;
 }
 
+bool isMqttConfigured() {
+    return !config.mqtt_server.isEmpty() &&
+           config.mqtt_server != "YOUR_MQTT_IP" &&
+           config.mqtt_port > 0;
+}
+
 void publishState() {
     if (!mqttClient.connected()) return;
 
-    DynamicJsonDocument doc(512);
+    StaticJsonDocument<512> doc;
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
@@ -99,6 +110,26 @@ void publishState() {
     mqttClient.publish(mqttTopicState, state, true);
 
     Serial.printf("Published state: %s\n", state);
+}
+
+void mqttTask(void* pvParameters) {
+    for (;;) {
+        if (wifiConnected && isMqttConfigured()) {
+            if (!mqttClient.connected()) {
+                if (millis() - lastMqttReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
+                    lastMqttReconnectAttempt = millis();
+                    reconnectMQTT();
+                }
+            } else {
+                mqttClient.loop();
+                if (publishStatePending) {
+                    publishStatePending = false;
+                    publishState();
+                }
+            }
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
 }
 
 void sendAutoDiscoveryConfigs() {

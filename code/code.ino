@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.35"; //Fix WDT on SSE connect: no SPI in onConnect callback
+const char* DEVICE_VERSION = "3.0.36"; //Non-blocking MQTT task + StaticJsonDocument heap fix
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -77,14 +77,14 @@ float currentL2 = 0.0;       // Phase L2 current
 float currentL3 = 0.0;       // Phase L3 current
 float currentTotal = 0.0;    // Total current
 
-// Control variables
-bool motor = false;
-bool manualOverride = false;
-bool manualMotorState = false;
-bool mainSwitch = true;
+// Control variables — volatile: shared between loop() task and MQTT FreeRTOS task
+volatile bool motor = false;
+volatile bool manualOverride = false;
+volatile bool manualMotorState = false;
+volatile bool mainSwitch = true;
 bool lights = true;
-bool error = false;
-bool rebootRequested = false;
+volatile bool error = false;
+volatile bool rebootRequested = false;
 bool shouldRead = false;
 bool debug = false;  // Debug mode disabled by default
 
@@ -303,7 +303,11 @@ void setup() {
     
     // Setup WiFi
     setupWiFi();
-    
+
+    // MQTT runs on its own FreeRTOS task (Core 0) so blocking TCP connect()
+    // calls never stall the Arduino loop() task
+    xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 1, NULL, 0);
+
     // Setup OTA updates
     OTA.begin(&server, "/update");
     OTA.enableBackup(true, "/backup");
@@ -422,16 +426,6 @@ void loop() {
             setupWiFi();
         }
 
-        // MQTT reconnection
-        if (wifiConnected && !mqttClient.connected() &&
-            millis() - lastMqttReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
-            lastMqttReconnectAttempt = millis();
-            mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
-            if (reconnectMQTT()) {
-                lastMqttReconnectAttempt = 0;
-            }
-        }
-        mqttClient.loop();
     }
     
     // Main measurement and control loop (every 1 second)
@@ -472,11 +466,10 @@ void loop() {
             appendLogEntry();
         }
 
-        // Update clients and MQTT
+        // Update clients and signal MQTT task to publish state
         notifyClients();
-        // Pause MQTT during OTA to free memory
         if (!OTA.isUpdating()) {
-            publishState();
+            publishStatePending = true;
         }
         updateSerial();
     }
@@ -785,7 +778,7 @@ void notifyClients() {
     // In AP mode the network is up, so SSE sends are safe
     if (!events.count()) return;
     if (!apModeActive && !wifiConnected) return;
-    DynamicJsonDocument doc(256);
+    StaticJsonDocument<256> doc;
     doc["pressure"] = pressure;
     doc["temperature"] = temperature;
     doc["ambientTemp"] = ambientTemp;
@@ -807,8 +800,8 @@ void notifyClients() {
 void publishDiagnostics() {
     if (!events.count()) return; // No clients connected
     
-    DynamicJsonDocument doc(512);
-    
+    StaticJsonDocument<512> doc;
+
     // Current readings
     doc["current_l1"] = currentL1;
     doc["current_l2"] = currentL2;
@@ -1161,7 +1154,6 @@ void webRoutes() {
                 }
 
                 notifyClients();
-                publishState();
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
                 return;
             }

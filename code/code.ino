@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.26"; //Fix MQTT heap churn + serial debug gate
+const char* DEVICE_VERSION = "3.0.27"; //Fix WiFi reboot + async_tcp watchdog
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -620,10 +620,10 @@ void setupWiFi() {
         setupAPMode();
         return;
     }
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.disconnect(false);
+    WiFi.persistent(false);  // credentials managed via config.json, not NVS
+    WiFi.mode(WIFI_OFF);     // stop any auto-connect retained from previous session
     delay(100);
+    WiFi.mode(WIFI_STA);
     Serial.print("Connecting to ");
     Serial.println(config.wifi_ssid);
     WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str());
@@ -664,6 +664,7 @@ void castDNS() {
 // ============================================================
 
 void notifyClients() {
+    if (!wifiConnected || !events.count()) return;
     DynamicJsonDocument doc(256);
     doc["pressure"] = pressure;
     doc["temperature"] = temperature;

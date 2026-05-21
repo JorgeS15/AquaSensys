@@ -7,53 +7,51 @@
 // MQTT client object
 extern PubSubClient mqttClient;
 
+// Pre-built topic strings — populated once in setupMQTT(), reused everywhere
+static char mqttTopicMotor[64];
+static char mqttTopicOverride[64];
+static char mqttTopicMain[64];
+static char mqttTopicError[64];
+static char mqttTopicReboot[64];
+static char mqttTopicState[64];
+
 void setupMQTT() {
+    snprintf(mqttTopicMotor,    sizeof(mqttTopicMotor),    "homeassistant/%s/motor/set",    DEVICE_ID);
+    snprintf(mqttTopicOverride, sizeof(mqttTopicOverride),  "homeassistant/%s/override/set", DEVICE_ID);
+    snprintf(mqttTopicMain,     sizeof(mqttTopicMain),      "homeassistant/%s/main/set",     DEVICE_ID);
+    snprintf(mqttTopicError,    sizeof(mqttTopicError),     "homeassistant/%s/error/set",    DEVICE_ID);
+    snprintf(mqttTopicReboot,   sizeof(mqttTopicReboot),    "homeassistant/%s/reboot/set",   DEVICE_ID);
+    snprintf(mqttTopicState,    sizeof(mqttTopicState),     "homeassistant/%s/state",        DEVICE_ID);
+
     mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
     mqttClient.setCallback(mqttCallback);
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-    // Convert payload to string
-    String message;
-    for (int i = 0; i < length; i++) {
-        message += (char)payload[i];
+    // Build message string with length guard
+    if (length > 256) {
+        Serial.println("MQTT message too long, ignoring");
+        return;
     }
-    
-    Serial.print("MQTT message arrived [");
-    Serial.print(topic);
-    Serial.print("]: ");
-    Serial.println(message);
+    char message[257];
+    memcpy(message, payload, length);
+    message[length] = '\0';
 
-    // Define command topics
-    String motorTopic = String("homeassistant/") + DEVICE_ID + "/motor/set";
-    String overrideTopic = String("homeassistant/") + DEVICE_ID + "/override/set";
-    String mainTopic = String("homeassistant/") + DEVICE_ID + "/main/set";
-    String errorTopic = String("homeassistant/") + DEVICE_ID + "/error/set";
-    String rebootTopic = String("homeassistant/") + DEVICE_ID + "/reboot/set";
+    Serial.printf("MQTT [%s]: %s\n", topic, message);
 
-    // Handle incoming commands
-    if (String(topic) == motorTopic) {
-        manualMotorState = (message == "ON");
-        Serial.print("Manual motor control set to: ");
-        Serial.println(manualMotorState ? "ON" : "OFF");
-    } 
-    else if (String(topic) == overrideTopic) {
-        manualOverride = (message == "ON");
-        Serial.print("Manual override set to: ");
-        Serial.println(manualOverride ? "ON" : "OFF");
-    }
-    else if (String(topic) == mainTopic) {
-        mainSwitch = (message == "ON");
-        Serial.print("Main switch set to: ");
-        Serial.println(mainSwitch ? "ON" : "OFF");
-    }
-    else if (String(topic) == errorTopic) {
-        error = (message == "ON");
-        Serial.print("Error state set to: ");
-        Serial.println(error ? "ON" : "OFF");
-    }
-    else if (String(topic) == rebootTopic && message == "PRESS") 
-    {
+    if (strcmp(topic, mqttTopicMotor) == 0) {
+        manualMotorState = (strcmp(message, "ON") == 0);
+        Serial.printf("Manual motor: %s\n", manualMotorState ? "ON" : "OFF");
+    } else if (strcmp(topic, mqttTopicOverride) == 0) {
+        manualOverride = (strcmp(message, "ON") == 0);
+        Serial.printf("Manual override: %s\n", manualOverride ? "ON" : "OFF");
+    } else if (strcmp(topic, mqttTopicMain) == 0) {
+        mainSwitch = (strcmp(message, "ON") == 0);
+        Serial.printf("Main switch: %s\n", mainSwitch ? "ON" : "OFF");
+    } else if (strcmp(topic, mqttTopicError) == 0) {
+        error = (strcmp(message, "ON") == 0);
+        Serial.printf("Error state: %s\n", error ? "ON" : "OFF");
+    } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
         Serial.println("Reboot requested via MQTT");
         rebootRequested = true;
     }
@@ -64,27 +62,19 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 bool reconnectMQTT() {
     if (mqttClient.connect(DEVICE_ID, config.mqtt_user.c_str(), config.mqtt_password.c_str())) {
         Serial.println("MQTT connected");
-        
-        // Subscribe to all command topics
-        String motorTopic = String("homeassistant/") + DEVICE_ID + "/motor/set";
-        String overrideTopic = String("homeassistant/") + DEVICE_ID + "/override/set";
-        String mainTopic = String("homeassistant/") + DEVICE_ID + "/main/set";
-        String errorTopic = String("homeassistant/") + DEVICE_ID + "/error/set";
-        String rebootTopic = String("homeassistant/") + DEVICE_ID + "/reboot/set";
-        
-        mqttClient.subscribe(motorTopic.c_str());
-        mqttClient.subscribe(overrideTopic.c_str());
-        mqttClient.subscribe(mainTopic.c_str());
-        mqttClient.subscribe(errorTopic.c_str());
-        mqttClient.subscribe(rebootTopic.c_str());
-        
+
+        mqttClient.subscribe(mqttTopicMotor);
+        mqttClient.subscribe(mqttTopicOverride);
+        mqttClient.subscribe(mqttTopicMain);
+        mqttClient.subscribe(mqttTopicError);
+        mqttClient.subscribe(mqttTopicReboot);
+
         Serial.println("Subscribed to command topics");
-        
+
         sendAutoDiscoveryConfigs();
         return true;
     }
-    Serial.print("MQTT connection failed, rc=");
-    Serial.println(mqttClient.state());
+    Serial.printf("MQTT connection failed, rc=%d\n", mqttClient.state());
     return false;
 }
 
@@ -92,232 +82,117 @@ void publishState() {
     if (!mqttClient.connected()) return;
 
     DynamicJsonDocument doc(512);
-    doc["pressure"] = pressure;
-    doc["temperature"] = temperature;
-    doc["flow"] = flow;
-    doc["motor"] = motor ? "ON" : "OFF";
-    doc["override"] = manualOverride ? "ON" : "OFF";
-    doc["main"] = mainSwitch ? "ON" : "OFF";
-    doc["error"] = error ? "ON" : "OFF";
+    doc["pressure"]         = pressure;
+    doc["temperature"]      = temperature;
+    doc["flow"]             = flow;
+    doc["motor"]            = motor ? "ON" : "OFF";
+    doc["override"]         = manualOverride ? "ON" : "OFF";
+    doc["main"]             = mainSwitch ? "ON" : "OFF";
+    doc["error"]            = error ? "ON" : "OFF";
     doc["reboot_requested"] = rebootRequested;
-    
-    // Add additional diagnostics
-    doc["uptime"] = millis() / 1000;
-    doc["free_heap"] = ESP.getFreeHeap();
-    doc["wifi_rssi"] = WiFi.RSSI();
-    
-    String state;
-    serializeJson(doc, state);
-    
-    String stateTopic = String("homeassistant/") + DEVICE_ID + "/state";
-    mqttClient.publish(stateTopic.c_str(), state.c_str(), true);
-    
-    Serial.print("Published state: ");
-    Serial.println(state);
+    doc["uptime"]           = millis() / 1000;
+    doc["free_heap"]        = ESP.getFreeHeap();
+    doc["wifi_rssi"]        = WiFi.RSSI();
+
+    char state[512];
+    serializeJson(doc, state, sizeof(state));
+    mqttClient.publish(mqttTopicState, state, true);
+
+    Serial.printf("Published state: %s\n", state);
 }
 
 void sendAutoDiscoveryConfigs() {
     if (!mqttClient.connected()) return;
 
     Serial.println("Sending auto-discovery configs...");
-    
-    // Device configuration
+
     DynamicJsonDocument deviceDoc(256);
     deviceDoc["identifiers"] = DEVICE_ID;
-    deviceDoc["name"] = DEVICE_NAME;
+    deviceDoc["name"]        = DEVICE_NAME;
     deviceDoc["manufacturer"] = DEVICE_MANUFACTURER;
-    deviceDoc["model"] = DEVICE_MODEL;
-    deviceDoc["sw_version"] = DEVICE_VERSION;
+    deviceDoc["model"]       = DEVICE_MODEL;
+    deviceDoc["sw_version"]  = DEVICE_VERSION;
 
-    // Common state topic
-    String stateTopic = String("homeassistant/") + DEVICE_ID + "/state";
+    String stateTopic = mqttTopicState;
 
-    // Pressure sensor
-    createSensorConfig(
-        "pressure", 
-        "Pressure", 
-        "bar", 
-        "pressure",
-        "mdi:gauge",
-        deviceDoc,
-        stateTopic,
-        "pressure"
-    );
+    createSensorConfig("pressure",    "Pressure",      "bar",   "pressure",         "mdi:gauge",         deviceDoc, stateTopic, "pressure");
+    createSensorConfig("temperature", "Temperature",   "°C",    "temperature",       "mdi:thermometer",   deviceDoc, stateTopic, "temperature");
+    createSensorConfig("flow",        "Flow Rate",     "L/min", nullptr,             "mdi:water",         deviceDoc, stateTopic, "flow");
+    createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
+    createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
+    createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");
 
-    // Temperature sensor
-    createSensorConfig(
-        "temperature", 
-        "Temperature", 
-        "°C", 
-        "temperature",
-        "mdi:thermometer",
-        deviceDoc,
-        stateTopic,
-        "temperature"
-    );
+    createSwitchConfig("motor",    "Pump Motor",      "mdi:pump",          deviceDoc, stateTopic, "motor",    mqttTopicMotor);
+    createSwitchConfig("main",     "Main Power",      "mdi:power",         deviceDoc, stateTopic, "main",     mqttTopicMain);
+    createSwitchConfig("override", "Manual Override", "mdi:account-wrench",deviceDoc, stateTopic, "override", mqttTopicOverride);
+    createSwitchConfig("error",    "System Error",    "mdi:alert",         deviceDoc, stateTopic, "error",    mqttTopicError);
 
-    // Flow sensor
-    createSensorConfig(
-        "flow", 
-        "Flow Rate", 
-        "L/min", 
-        nullptr,
-        "mdi:water",
-        deviceDoc,
-        stateTopic,
-        "flow"
-    );
-
-    // Motor switch
-    createSwitchConfig(
-        "motor",
-        "Pump Motor",
-        "mdi:pump",
-        deviceDoc,
-        stateTopic,
-        "motor",
-        String("homeassistant/") + DEVICE_ID + "/motor/set"
-    );
-    
-    // Main Switch
-    createSwitchConfig(
-        "main",
-        "Main Power",
-        "mdi:power",
-        deviceDoc,
-        stateTopic,
-        "main",
-        String("homeassistant/") + DEVICE_ID + "/main/set"
-    );
-
-    // Override switch
-    createSwitchConfig(
-        "override",
-        "Manual Override",
-        "mdi:account-wrench",
-        deviceDoc,
-        stateTopic,
-        "override",
-        String("homeassistant/") + DEVICE_ID + "/override/set"
-    );
-    
-    // Error indicator
-    createSwitchConfig(
-        "error",
-        "System Error",
-        "mdi:alert",
-        deviceDoc,
-        stateTopic,
-        "error",
-        String("homeassistant/") + DEVICE_ID + "/error/set"
-    );
-    
-    // Reboot button
-    createButtonConfig(
-        "reboot",
-        "Reboot Device",
-        "mdi:restart",
-        deviceDoc,
-        String("homeassistant/") + DEVICE_ID + "/reboot/set"
-    );
-    
-    // Diagnostics sensors
-    createSensorConfig(
-        "uptime", 
-        "Uptime", 
-        "s", 
-        "duration",
-        "mdi:clock-outline",
-        deviceDoc,
-        stateTopic,
-        "uptime"
-    );
-    
-    createSensorConfig(
-        "heap", 
-        "Free Memory", 
-        "bytes", 
-        nullptr,
-        "mdi:memory",
-        deviceDoc,
-        stateTopic,
-        "free_heap"
-    );
-    
-    createSensorConfig(
-        "wifi_strength", 
-        "WiFi Signal", 
-        "dBm", 
-        "signal_strength",
-        "mdi:wifi",
-        deviceDoc,
-        stateTopic,
-        "wifi_rssi"
-    );
+    createButtonConfig("reboot", "Reboot Device", "mdi:restart", deviceDoc, mqttTopicReboot);
 }
 
-void createSensorConfig(const char* sensorId, const char* name, const char* unit, 
-                      const char* deviceClass, const char* icon,
-                      JsonDocument& deviceDoc, const String& stateTopic,
-                      const char* valueKey) {
-    String configTopic = String("homeassistant/sensor/") + DEVICE_ID + "_" + sensorId + "/config";
-    
+void createSensorConfig(const char* sensorId, const char* name, const char* unit,
+                        const char* deviceClass, const char* icon,
+                        JsonDocument& deviceDoc, const String& stateTopic,
+                        const char* valueKey) {
+    char configTopic[96];
+    snprintf(configTopic, sizeof(configTopic), "homeassistant/sensor/%s_%s/config", DEVICE_ID, sensorId);
+
     DynamicJsonDocument doc(512);
-    doc["name"] = name;
-    doc["unique_id"] = String(DEVICE_ID) + "_" + sensorId;
+    doc["name"]        = name;
+    doc["unique_id"]   = String(DEVICE_ID) + "_" + sensorId;
     doc["state_topic"] = stateTopic;
     doc["value_template"] = String("{{ value_json.") + valueKey + " }}";
-    if (unit) doc["unit_of_measurement"] = unit;
-    if (deviceClass) doc["device_class"] = deviceClass;
-    if (icon) doc["icon"] = icon;
-    doc["device"] = deviceDoc;
-    
+    if (unit)        doc["unit_of_measurement"] = unit;
+    if (deviceClass) doc["device_class"]        = deviceClass;
+    if (icon)        doc["icon"]                = icon;
+    doc["device"]    = deviceDoc;
+
     publishDiscovery(configTopic, doc);
 }
 
 void createSwitchConfig(const char* switchId, const char* name, const char* icon,
-                      JsonDocument& deviceDoc, const String& stateTopic,
-                      const char* valueKey, const String& commandTopic) {
-    String configTopic = String("homeassistant/switch/") + DEVICE_ID + "_" + switchId + "/config";
-    
+                        JsonDocument& deviceDoc, const String& stateTopic,
+                        const char* valueKey, const char* commandTopic) {
+    char configTopic[96];
+    snprintf(configTopic, sizeof(configTopic), "homeassistant/switch/%s_%s/config", DEVICE_ID, switchId);
+
     DynamicJsonDocument doc(512);
-    doc["name"] = name;
-    doc["unique_id"] = String(DEVICE_ID) + "_" + switchId;
-    doc["state_topic"] = stateTopic;
-    doc["command_topic"] = commandTopic;
+    doc["name"]           = name;
+    doc["unique_id"]      = String(DEVICE_ID) + "_" + switchId;
+    doc["state_topic"]    = stateTopic;
+    doc["command_topic"]  = commandTopic;
     doc["value_template"] = String("{{ value_json.") + valueKey + " }}";
-    doc["payload_on"] = "ON";
-    doc["payload_off"] = "OFF";
+    doc["payload_on"]     = "ON";
+    doc["payload_off"]    = "OFF";
     if (icon) doc["icon"] = icon;
-    doc["device"] = deviceDoc;
-    
+    doc["device"]         = deviceDoc;
+
     publishDiscovery(configTopic, doc);
 }
 
 void createButtonConfig(const char* buttonId, const char* name, const char* icon,
-                      JsonDocument& deviceDoc, const String& commandTopic) {
-    String configTopic = String("homeassistant/button/") + DEVICE_ID + "_" + buttonId + "/config";
-    
+                        JsonDocument& deviceDoc, const char* commandTopic) {
+    char configTopic[96];
+    snprintf(configTopic, sizeof(configTopic), "homeassistant/button/%s_%s/config", DEVICE_ID, buttonId);
+
     DynamicJsonDocument doc(512);
-    doc["name"] = name;
-    doc["unique_id"] = String(DEVICE_ID) + "_" + buttonId;
-    doc["command_topic"] = commandTopic;
-    doc["payload_press"] = "PRESS";
+    doc["name"]           = name;
+    doc["unique_id"]      = String(DEVICE_ID) + "_" + buttonId;
+    doc["command_topic"]  = commandTopic;
+    doc["payload_press"]  = "PRESS";
     if (icon) doc["icon"] = icon;
-    doc["device"] = deviceDoc;
-    
+    doc["device"]         = deviceDoc;
+
     publishDiscovery(configTopic, doc);
 }
 
 void publishDiscovery(const String& topic, JsonDocument& config) {
     String payload;
     serializeJson(config, payload);
-    
-    Serial.print("Publishing discovery to: ");
-    Serial.println(topic);
-    
-    bool published = mqttClient.publish(topic.c_str(), payload.c_str(), true);
-    if (!published) {
+
+    Serial.printf("Publishing discovery: %s\n", topic.c_str());
+
+    if (!mqttClient.publish(topic.c_str(), payload.c_str(), true)) {
         Serial.println("Discovery publish failed!");
     }
 }

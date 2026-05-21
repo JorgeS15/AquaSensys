@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.21"; //Fix error state
+const char* DEVICE_VERSION = "3.0.22"; //Fix red led
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -435,11 +435,12 @@ void loop() {
         publishDiagnostics();
         publishDebugData(); // Also publish debug data for debug page
     }
+    // Check for error conditions
+    checkForErrors();
     // Control logic
     controlMotor();
     updateLights();
-    // Check for error conditions
-    checkForErrors();
+    delay(1);
 }
 
 // ============================================================
@@ -451,10 +452,12 @@ void controlMotor() {
         if (manualOverride) {
             motor = manualMotorState;
         } else {
-            if (pressure <= config.min_pressure) {
-                motor = true;
-            } else if (pressure >= config.max_pressure) {
-                motor = false;
+            if (!error){
+                if (pressure <= config.min_pressure) {
+                    motor = true;
+                } else if (pressure >= config.max_pressure) {
+                    motor = false;
+                }
             }
         }
     } else {
@@ -510,15 +513,15 @@ void updateLights() {
     if (lights) {
         if (error) {
             // Error state - Red blinking
-            digitalWrite(LED_RED, ((millis() % 1000) < 500) ? 255 : 0 );
-            digitalWrite(LED_GREEN, 0);
-            digitalWrite(LED_BLUE, 0);
+            ledcWrite(LED_RED, ((millis() % 1000) < 500) ? 255 : 0 );
+            ledcWrite(LED_GREEN, 0);
+            ledcWrite(LED_BLUE, 0);
         }
         else if (!mainSwitch) {
             // System off - Solid red
-            digitalWrite(LED_RED, 255);
-            digitalWrite(LED_GREEN, 0);
-            digitalWrite(LED_BLUE, 0);
+            ledcWrite(LED_RED, 255);
+            ledcWrite(LED_GREEN, 0);
+            ledcWrite(LED_BLUE, 0);
         } 
         else if (manualOverride) {
             // Manual mode - Yellow (red + green) when off, Blue when on
@@ -553,6 +556,7 @@ void checkForErrors() {
     if (error) {
         motor = false;
     }
+    digitalWrite(MOTOR_PIN, motor ? HIGH : LOW);
 }
 
 // ============================================================

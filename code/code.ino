@@ -805,6 +805,53 @@ void webRoutes() {
 
     // Route for root / web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (apModeActive) {
+            request->send(200, "text/html", R"rawliteral(
+<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AquaSensys Setup</title>
+<style>
+  body{font-family:sans-serif;background:#1a1a2e;color:#eee;display:flex;
+       align-items:center;justify-content:center;min-height:100vh;margin:0}
+  .card{background:#16213e;border-radius:12px;padding:2rem;max-width:360px;
+        width:90%;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+  h2{margin:0 0 1.5rem;color:#4fc3f7;text-align:center}
+  label{display:block;font-size:.85rem;margin-bottom:.25rem;color:#aaa}
+  input{width:100%;box-sizing:border-box;padding:.6rem .8rem;border-radius:6px;
+        border:1px solid #333;background:#0f3460;color:#eee;font-size:1rem;margin-bottom:1rem}
+  button{width:100%;padding:.75rem;border-radius:6px;border:none;
+         background:#4fc3f7;color:#0f3460;font-size:1rem;font-weight:bold;cursor:pointer}
+  #msg{margin-top:1rem;text-align:center;font-size:.9rem}
+</style></head><body>
+<div class="card">
+  <h2>&#128268; AquaSensys Setup</h2>
+  <label>WiFi Network (SSID)</label>
+  <input id="ssid" type="text" placeholder="Your WiFi name" autocomplete="off">
+  <label>Password</label>
+  <input id="pw" type="password" placeholder="Your WiFi password">
+  <button onclick="save()">Save &amp; Connect</button>
+  <div id="msg"></div>
+</div>
+<script>
+function save(){
+  var s=document.getElementById('ssid').value.trim();
+  var p=document.getElementById('pw').value;
+  if(!s){document.getElementById('msg').textContent='Please enter a network name.';return;}
+  document.getElementById('msg').textContent='Saving…';
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({wifi_ssid:s,wifi_password:p})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.status==='success')
+      document.getElementById('msg').innerHTML='<strong>Done! Rebooting…</strong><br>Reconnect to your WiFi and open <b>http://aquasensys.local</b>';
+    else
+      document.getElementById('msg').textContent='Error: '+(d.error||'unknown');
+  }).catch(function(){document.getElementById('msg').textContent='Request failed';});
+}
+</script></body></html>
+)rawliteral");
+            return;
+        }
         if (SD.exists("/index.html")) {
             request->send(SD, "/index.html", "text/html");
         } else {

@@ -36,8 +36,8 @@ void createSensorConfig(const char* sensorId, const char* name, const char* unit
                       const char* valueKey);
 void createSwitchConfig(const char* switchId, const char* name, const char* icon,
                       JsonDocument& deviceDoc, const String& stateTopic,
-                      const char* valueKey, const String& commandTopic);
+                      const char* valueKey, const char* commandTopic);
 void createButtonConfig(const char* buttonId, const char* name, const char* icon,
-                      JsonDocument& deviceDoc, const String& commandTopic);
+                      JsonDocument& deviceDoc, const char* commandTopic);
 
 #endif

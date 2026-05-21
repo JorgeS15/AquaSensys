@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.25"; //AP mode serves normal SD pages
+const char* DEVICE_VERSION = "3.0.26"; //Fix MQTT heap churn + serial debug gate
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -499,6 +499,7 @@ void setupPins() {
 }
 
 void updateSerial() {
+    if (!debug) return;
     Serial.print("Override: ");
     Serial.println(manualOverride ? "ON" : "OFF");
     Serial.print("Pressure In: ");

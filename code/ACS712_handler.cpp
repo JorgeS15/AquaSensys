@@ -1,4 +1,5 @@
 #include "ACS712_handler.h"
+#include <esp_task_wdt.h>
 
 // Global instance
 ACS712Handler currentSensor;
@@ -73,11 +74,12 @@ bool ACS712Handler::performAutoCalibration(uint16_t samples) {
         sumL2 += readRawRMSVoltage(ACS712_L2_CHANNEL);
         sumL3 += readRawRMSVoltage(ACS712_L3_CHANNEL);
         
-        // Progress indicator
-        if (i % 20 == 0) {
+        // Progress indicator + watchdog reset (calibration blocks async_tcp task)
+        if (i % 10 == 0) {
             Serial.print(".");
+            esp_task_wdt_reset();
         }
-        
+
         delay(10); // Small delay between samples
     }
     Serial.println();

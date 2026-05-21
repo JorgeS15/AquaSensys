@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.33"; //Reduce SSE frequency to fix async_tcp watchdog
+const char* DEVICE_VERSION = "3.0.34"; //Fix WDT during calibration + config recovery
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

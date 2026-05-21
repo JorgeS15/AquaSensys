@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.20"; //LEDs Fixed + Memory Optimization
+const char* DEVICE_VERSION = "3.0.21"; //Fix error state
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -419,10 +419,6 @@ void loop() {
         // Read all sensors (temperatures, pressures, currents)
         readAllSensors();
 
-        // Control logic
-        controlMotor();
-        updateLights();
-
         // Update clients and MQTT
         notifyClients();
         // Pause MQTT during OTA to free memory
@@ -439,7 +435,9 @@ void loop() {
         publishDiagnostics();
         publishDebugData(); // Also publish debug data for debug page
     }
-    
+    // Control logic
+    controlMotor();
+    updateLights();
     // Check for error conditions
     checkForErrors();
 }
@@ -554,7 +552,6 @@ void checkForErrors() {
     }
     if (error) {
         motor = false;
-        mainSwitch = false;
     }
 }
 

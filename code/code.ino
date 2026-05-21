@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.31"; //AP SSID uses MAC address
+const char* DEVICE_VERSION = "3.0.32"; //Reliability: watchdog, overcurrent, logging, atomic config
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -101,6 +101,17 @@ bool wifiConnected = false;
 bool apModeActive = false;
 unsigned long wifiReconnectInterval = 15000;
 unsigned long lastWifiReconnectAttempt = 0;
+
+// Motor dry-run watchdog
+unsigned long motorNoFlowStart = 0;
+const unsigned long NO_FLOW_TIMEOUT_MS = 10000;
+
+// Motor runtime accumulator
+unsigned long motorRuntimeSeconds = 0;
+unsigned long lastRuntimeSave = 0;
+
+// Data logging
+unsigned long lastLogTime = 0;
 
 void IRAM_ATTR pulseCounter() {
     pulseCount++;
@@ -224,6 +235,11 @@ void readAllSensors() {
     currentTotal = current.total;
 }
 
+// Forward declarations for functions defined after setup()/loop()
+void loadRuntime();
+void saveRuntime();
+void appendLogEntry();
+
 // ============================================================
 // Setup and Main Functions
 // ============================================================
@@ -253,7 +269,8 @@ void setup() {
     // Initialize SD Card
     initSDCard();
     loadConfig();
-    
+    loadRuntime();
+
     // NEW: Load saved calibration or perform auto-calibration
     if (config.current_offset_l1 != 0.0 || config.current_offset_l2 != 0.0 || config.current_offset_l3 != 0.0) {
         // Load saved calibration
@@ -428,6 +445,31 @@ void loop() {
         // Read all sensors (temperatures, pressures, currents)
         readAllSensors();
 
+        // Dry-run watchdog: motor on with no flow for > 10 s → error
+        if (motor && flow == 0.0f) {
+            if (motorNoFlowStart == 0) motorNoFlowStart = millis();
+            else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
+                error = true;
+                Serial.println("[Error] Motor running with no flow — possible dry run");
+            }
+        } else {
+            motorNoFlowStart = 0;
+        }
+
+        // Motor runtime accumulator
+        if (motor) motorRuntimeSeconds++;
+        if (millis() - lastRuntimeSave > 300000UL) {
+            lastRuntimeSave = millis();
+            saveRuntime();
+        }
+
+        // Periodic data logging to SD
+        if (config.log_interval_minutes > 0 &&
+            millis() - lastLogTime >= (unsigned long)config.log_interval_minutes * 60000UL) {
+            lastLogTime = millis();
+            appendLogEntry();
+        }
+
         // Update clients and MQTT
         notifyClients();
         // Pause MQTT during OTA to free memory
@@ -559,8 +601,19 @@ void checkForErrors() {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;
         }
-    }
-    else{
+        if (motor && currentTotal > config.max_current) {
+            error = true;
+            Serial.println("[Error] Overcurrent detected");
+        }
+        if (motor) {
+            float maxI = max(currentL1, max(currentL2, currentL3));
+            float minI = min(currentL1, min(currentL2, currentL3));
+            if (maxI - minI > config.max_phase_imbalance) {
+                error = true;
+                Serial.println("[Error] Phase imbalance detected");
+            }
+        }
+    } else {
         error = false;
     }
     if (error) {
@@ -572,6 +625,36 @@ void checkForErrors() {
 // ============================================================
 // SD Card Functions
 // ============================================================
+
+void loadRuntime() {
+    File f = SD.open("/runtime.json");
+    if (!f) return;
+    DynamicJsonDocument doc(128);
+    if (deserializeJson(doc, f) == DeserializationError::Ok)
+        motorRuntimeSeconds = doc["motor_runtime_s"] | (unsigned long)0;
+    f.close();
+    Serial.printf("[Runtime] Loaded motor runtime: %lu s\n", motorRuntimeSeconds);
+}
+
+void saveRuntime() {
+    File f = SD.open("/runtime.json", FILE_WRITE);
+    if (!f) return;
+    DynamicJsonDocument doc(128);
+    doc["motor_runtime_s"] = motorRuntimeSeconds;
+    serializeJson(doc, f);
+    f.close();
+}
+
+void appendLogEntry() {
+    File f = SD.open("/log.csv", FILE_APPEND);
+    if (!f) return;
+    if (f.size() == 0)
+        f.println("uptime_s,pressureIn,pressureOut,flow,currentL1,currentL2,currentL3,motor");
+    f.printf("%lu,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f,%s\n",
+        millis() / 1000, pressureIn, pressureOut, flow,
+        currentL1, currentL2, currentL3, motor ? "ON" : "OFF");
+    f.close();
+}
 
 void initSDCard() {
     if (!SD.begin(TF_CS_PIN)) {
@@ -740,10 +823,11 @@ void publishDiagnostics() {
     doc["uptime"] = millis() / 1000;
     doc["free_heap"] = ESP.getFreeHeap();
     doc["wifi_rssi"] = WiFi.RSSI();
-    
+    doc["motor_runtime_s"] = motorRuntimeSeconds;
+
     String json;
     serializeJson(doc, json);
-    
+
     events.send(json.c_str(), "diagnostics", millis());
 }
 

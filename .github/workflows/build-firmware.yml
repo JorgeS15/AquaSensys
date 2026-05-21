@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for changelog
 
       - name: Install arduino-cli
         run: |
@@ -48,8 +50,8 @@ jobs:
 
       - name: Install Arduino registry libraries
         run: |
-          arduino-cli lib install "ArduinoJson"
-          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "ArduinoJson@6.21.5"
+          arduino-cli lib install "PubSubClient@2.8.0"
 
       - name: Install AsyncTCP (GitHub)
         run: |
@@ -82,17 +84,59 @@ jobs:
       - name: Rename firmware binary
         run: |
           TAG="${{ steps.version.outputs.tag }}"
-          mv build/code.ino.bin           "build/aquasensys-firmware-${TAG}.bin"
+          mv build/code.ino.bin            "build/aquasensys-firmware-${TAG}.bin"
           mv build/code.ino.bootloader.bin "build/bootloader-${TAG}.bin"
           mv build/code.ino.partitions.bin "build/partitions-${TAG}.bin"
-          echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin"   >> "$GITHUB_ENV"
-          echo "BIN_NAME=aquasensys-firmware-${TAG}.bin"          >> "$GITHUB_ENV"
-          echo "BOOT_PATH=build/bootloader-${TAG}.bin"            >> "$GITHUB_ENV"
-          echo "PART_PATH=build/partitions-${TAG}.bin"            >> "$GITHUB_ENV"
+          echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin"  >> "$GITHUB_ENV"
+          echo "BIN_NAME=aquasensys-firmware-${TAG}.bin"         >> "$GITHUB_ENV"
+          echo "BOOT_PATH=build/bootloader-${TAG}.bin"           >> "$GITHUB_ENV"
+          echo "PART_PATH=build/partitions-${TAG}.bin"           >> "$GITHUB_ENV"
 
       - name: Package SD assets
         run: |
           cd code/sd && zip -0 -r ../../build/sd-assets.zip . --exclude='config.json'
+
+      - name: Generate release notes
+        run: |
+          git fetch --tags
+          THIS_TAG="${{ steps.version.outputs.tag }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${THIS_TAG}$" | head -1)
+          {
+            echo "## AquaSensys ${{ steps.version.outputs.version }}"
+            echo ""
+            echo "Built from commit \`${{ github.sha }}\` on \`main\`."
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "### Changes since ${PREV_TAG}"
+              git log --oneline "${PREV_TAG}..HEAD"
+            else
+              echo "### Recent changes"
+              git log --oneline -10
+            fi
+            echo ""
+            echo "### Assets"
+            echo "| File | Description |"
+            echo "|---|---|"
+            echo "| \`aquasensys-firmware-*.bin\` | Firmware — upload via OTA page |"
+            echo "| \`bootloader-*.bin\` | Bootloader (USB initial flash only) |"
+            echo "| \`partitions-*.bin\` | Partition table (USB initial flash only) |"
+            echo "| \`sd-assets.zip\` | Web UI files for SD card |"
+            echo ""
+            echo "### OTA Update"
+            echo "Use the firmware update page on the device and upload \`aquasensys-firmware-*.bin\`."
+            echo ""
+            echo "### Initial / Recovery Flash via USB"
+            echo '```bash'
+            echo "esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \\"
+            echo "  0x1000  bootloader-${{ steps.version.outputs.tag }}.bin \\"
+            echo "  0x8000  partitions-${{ steps.version.outputs.tag }}.bin \\"
+            echo "  0x10000 aquasensys-firmware-${{ steps.version.outputs.tag }}.bin"
+            echo '```'
+            echo ""
+            echo "### Board"
+            echo "- FQBN: \`esp32:esp32:esp32\`"
+            echo "- Partition scheme: \`default\` (OTA, 1.25 MB per app slot)"
+          } > build/release_notes.md
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
@@ -106,34 +150,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "AquaSensys ${{ steps.version.outputs.tag }}"
-          body: |
-            ## AquaSensys Firmware ${{ steps.version.outputs.version }}
-
-            Built automatically from commit ${{ github.sha }} on `main`.
-
-            ### Assets
-            | File | Description |
-            |---|---|
-            | `aquasensys-firmware-*.bin` | Firmware — upload via OTA page |
-            | `bootloader-*.bin` | Bootloader (initial USB flash only) |
-            | `partitions-*.bin` | Partition table (initial USB flash only) |
-            | `sd-assets.zip` | Web UI files for SD card |
-
-            ### OTA Update (device already running AquaSensys)
-            Use the firmware update page served by the device and upload `aquasensys-firmware-*.bin`.
-
-            ### Initial / Recovery Flash via USB
-            Use this when flashing for the first time or if OTA returns "Flash Erase Failed":
-            ```bash
-            esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \
-              0x1000  bootloader-${{ steps.version.outputs.tag }}.bin \
-              0x8000  partitions-${{ steps.version.outputs.tag }}.bin \
-              0x10000 aquasensys-firmware-${{ steps.version.outputs.tag }}.bin
-            ```
-
-            ### Board
-            - FQBN: `esp32:esp32:esp32`
-            - Partition scheme: `default` (OTA, 1.25 MB per app slot)
+          body_path: build/release_notes.md
           files: |
             ${{ env.BIN_PATH }}
             ${{ env.BOOT_PATH }}

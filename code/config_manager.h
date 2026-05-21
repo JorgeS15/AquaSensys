@@ -33,7 +33,17 @@ struct Config {
     float current_offset_l2;
     float current_offset_l3;
     bool current_calibrated;
-    
+
+    // Protection thresholds
+    float max_current;          // overcurrent trip point (A)
+    float max_phase_imbalance;  // max A difference across phases
+
+    // Data logging
+    int log_interval_minutes;   // 0 = disabled
+
+    // Schema version
+    int config_version;
+
     // Constructor with default values
     Config() {
         wifi_ssid = "";
@@ -53,6 +63,10 @@ struct Config {
         current_offset_l2 = 0.0;
         current_offset_l3 = 0.0;
         current_calibrated = false;
+        max_current = 15.0f;
+        max_phase_imbalance = 3.0f;
+        log_interval_minutes = 5;
+        config_version = 1;
     }
 };
 

@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.23"; //Fix WiFi reconnection
+const char* DEVICE_VERSION = "3.0.24"; //AP mode for first-run WiFi setup
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -98,6 +98,7 @@ AsyncEventSource events("/events");
 
 // Track Wi-Fi status
 bool wifiConnected = false;
+bool apModeActive = false;
 unsigned long wifiReconnectInterval = 15000;
 unsigned long lastWifiReconnectAttempt = 0;
 
@@ -388,29 +389,31 @@ void loop() {
         ESP.restart();
     }
 
-    // Sync flag with actual hardware state so reconnect fires on mid-operation drops
-    if (wifiConnected && WiFi.status() != WL_CONNECTED) {
-        wifiConnected = false;
-        Serial.println("[WiFi] Connection lost");
-    }
-
-    // WiFi reconnection
-    if (!wifiConnected && millis() - lastWifiReconnectAttempt > wifiReconnectInterval) {
-        Serial.println("Attempting to reconnect to Wi-Fi...");
-        lastWifiReconnectAttempt = millis();
-        setupWiFi();
-    }
-
-    // MQTT reconnection
-    if (wifiConnected && !mqttClient.connected() && 
-        millis() - lastMqttReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
-        lastMqttReconnectAttempt = millis();
-        mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
-        if (reconnectMQTT()) {
-            lastMqttReconnectAttempt = 0;
+    if (!apModeActive) {
+        // Sync flag with actual hardware state so reconnect fires on mid-operation drops
+        if (wifiConnected && WiFi.status() != WL_CONNECTED) {
+            wifiConnected = false;
+            Serial.println("[WiFi] Connection lost");
         }
+
+        // WiFi reconnection
+        if (!wifiConnected && millis() - lastWifiReconnectAttempt > wifiReconnectInterval) {
+            Serial.println("Attempting to reconnect to Wi-Fi...");
+            lastWifiReconnectAttempt = millis();
+            setupWiFi();
+        }
+
+        // MQTT reconnection
+        if (wifiConnected && !mqttClient.connected() &&
+            millis() - lastMqttReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
+            lastMqttReconnectAttempt = millis();
+            mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
+            if (reconnectMQTT()) {
+                lastMqttReconnectAttempt = 0;
+            }
+        }
+        mqttClient.loop();
     }
-    mqttClient.loop();
     
     // Main measurement and control loop (every 1 second)
     unsigned long currentTime = millis();
@@ -600,7 +603,22 @@ void initSDCard() {
 // WiFi Functions
 // ============================================================
 
+void setupAPMode() {
+    String ssid = String("AquaSensys") + DEVICE_VERSION;
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(ssid.c_str());
+    apModeActive = true;
+    Serial.println("[AP] No WiFi credentials found. Access Point started.");
+    Serial.printf("[AP] SSID: %s\n", ssid.c_str());
+    Serial.printf("[AP] IP:   %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.println("[AP] Connect and open http://192.168.4.1 to configure WiFi.");
+}
+
 void setupWiFi() {
+    if (config.wifi_ssid.isEmpty()) {
+        setupAPMode();
+        return;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.disconnect(false);
@@ -782,11 +800,55 @@ void publishDebugData() {
 }
 
 void webRoutes() {
-    // Setup file manager routes
-    setupFileManagerRoutes(server);
-    
-    // Route for root / web page
+    // Route for root / web page — AP mode serves first-run WiFi setup page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (apModeActive) {
+            request->send(200, "text/html", R"rawliteral(
+<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AquaSensys Setup</title>
+<style>
+  body{font-family:sans-serif;background:#1a1a2e;color:#eee;display:flex;
+       align-items:center;justify-content:center;min-height:100vh;margin:0}
+  .card{background:#16213e;border-radius:12px;padding:2rem;max-width:360px;
+        width:90%;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+  h2{margin:0 0 1.5rem;color:#4fc3f7;text-align:center}
+  label{display:block;font-size:.85rem;margin-bottom:.25rem;color:#aaa}
+  input{width:100%;box-sizing:border-box;padding:.6rem .8rem;border-radius:6px;
+        border:1px solid #333;background:#0f3460;color:#eee;font-size:1rem;margin-bottom:1rem}
+  button{width:100%;padding:.75rem;border-radius:6px;border:none;
+         background:#4fc3f7;color:#0f3460;font-size:1rem;font-weight:bold;cursor:pointer}
+  #msg{margin-top:1rem;text-align:center;font-size:.9rem}
+</style></head><body>
+<div class="card">
+  <h2>&#128268; AquaSensys Setup</h2>
+  <label>WiFi Network (SSID)</label>
+  <input id="ssid" type="text" placeholder="Your WiFi name" autocomplete="off">
+  <label>Password</label>
+  <input id="pw" type="password" placeholder="Your WiFi password">
+  <button onclick="save()">Save &amp; Connect</button>
+  <div id="msg"></div>
+</div>
+<script>
+function save(){
+  var s=document.getElementById('ssid').value.trim();
+  var p=document.getElementById('pw').value;
+  if(!s){document.getElementById('msg').textContent='Please enter a network name.';return;}
+  document.getElementById('msg').textContent='Saving…';
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({wifi_ssid:s,wifi_password:p})})
+  .then(function(r){return r.json();}).then(function(d){
+    if(d.status==='success')
+      document.getElementById('msg').innerHTML='<strong>Done! Rebooting…</strong><br>Reconnect to your WiFi and open <b>http://aquasensys.local</b>';
+    else
+      document.getElementById('msg').textContent='Error: '+(d.error||'unknown');
+  }).catch(function(){document.getElementById('msg').textContent='Request failed';});
+}
+</script></body></html>
+)rawliteral");
+            return;
+        }
         if (SD.exists("/index.html")) {
             request->send(SD, "/index.html", "text/html");
         } else {

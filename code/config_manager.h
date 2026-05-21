@@ -36,8 +36,8 @@ struct Config {
     
     // Constructor with default values
     Config() {
-        wifi_ssid = "JazeNoteFi";
-        wifi_password = "ninja636";
+        wifi_ssid = "";
+        wifi_password = "";
         mqtt_server = "YOUR_MQTT_IP";
         mqtt_port = 1883;
         mqtt_user = "YOUR_MQTT_USER";

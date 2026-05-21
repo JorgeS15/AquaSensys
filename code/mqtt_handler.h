@@ -16,12 +16,15 @@ extern const char* DEVICE_VERSION;
 extern float pressure;
 extern float temperature;
 extern float flow;
-extern bool motor;
-extern bool manualOverride;
-extern bool manualMotorState;
-extern bool mainSwitch;
-extern bool error;
-extern bool rebootRequested;
+extern volatile bool motor;
+extern volatile bool manualOverride;
+extern volatile bool manualMotorState;
+extern volatile bool mainSwitch;
+extern volatile bool error;
+extern volatile bool rebootRequested;
+
+// Set true by loop() when sensor state changes; MQTT task reads and publishes
+extern volatile bool publishStatePending;
 
 // Function declarations
 void setupMQTT();
@@ -29,6 +32,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length);
 bool reconnectMQTT();
 void publishState();
 void sendAutoDiscoveryConfigs();
+
+// Only attempt MQTT when server is configured
+bool isMqttConfigured();
+
+// FreeRTOS task — created in setup(), runs on Core 0
+void mqttTask(void* pvParameters);
 void publishDiscovery(const String& topic, JsonDocument& config);
 void createSensorConfig(const char* sensorId, const char* name, const char* unit, 
                       const char* deviceClass, const char* icon,

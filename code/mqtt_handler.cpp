@@ -8,7 +8,6 @@
 extern PubSubClient mqttClient;
 extern bool wifiConnected;
 extern unsigned long lastMqttReconnectAttempt;
-extern const unsigned long MQTT_RECONNECT_INTERVAL;
 
 volatile bool publishStatePending = false;
 
@@ -116,7 +115,7 @@ void mqttTask(void* pvParameters) {
     for (;;) {
         if (wifiConnected && isMqttConfigured()) {
             if (!mqttClient.connected()) {
-                if (millis() - lastMqttReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
+                if (millis() - lastMqttReconnectAttempt > 5000UL) {
                     lastMqttReconnectAttempt = millis();
                     reconnectMQTT();
                 }

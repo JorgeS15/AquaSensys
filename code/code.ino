@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.32"; //Reliability: watchdog, overcurrent, logging, atomic config
+const char* DEVICE_VERSION = "3.0.33"; //Reduce SSE frequency to fix async_tcp watchdog
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -88,9 +88,11 @@ bool rebootRequested = false;
 bool shouldRead = false;
 bool debug = false;  // Debug mode disabled by default
 
-// NEW: Timing for sensor updates
+// Timing for sensor updates
 unsigned long lastDiagnosticsUpdate = 0;
-const unsigned long DIAGNOSTICS_UPDATE_INTERVAL = 1000; // 1Hz update for diagnostics
+const unsigned long DIAGNOSTICS_UPDATE_INTERVAL = 5000;  // 5s — reduced to ease async_tcp load
+unsigned long lastDebugDataUpdate = 0;
+const unsigned long DEBUG_DATA_INTERVAL = 30000;         // 30s — heavy JSON, rarely needed
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -479,12 +481,14 @@ void loop() {
         updateSerial();
     }
     
-    // NEW: Update diagnostics at 1Hz (separate from main update)
-    // Pause diagnostics during OTA to free memory (~3-4KB saved)
+    // Diagnostics at 5s, debug data at 30s — decoupled to avoid flooding async_tcp
     if (!OTA.isUpdating() && millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
         lastDiagnosticsUpdate = millis();
         publishDiagnostics();
-        publishDebugData(); // Also publish debug data for debug page
+    }
+    if (!OTA.isUpdating() && millis() - lastDebugDataUpdate >= DEBUG_DATA_INTERVAL) {
+        lastDebugDataUpdate = millis();
+        publishDebugData();
     }
     // Check for error conditions
     checkForErrors();

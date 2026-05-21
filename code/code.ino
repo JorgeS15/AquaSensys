@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.22"; //Fix red led
+const char* DEVICE_VERSION = "3.0.23"; //Fix WiFi reconnection
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -388,6 +388,12 @@ void loop() {
         ESP.restart();
     }
 
+    // Sync flag with actual hardware state so reconnect fires on mid-operation drops
+    if (wifiConnected && WiFi.status() != WL_CONNECTED) {
+        wifiConnected = false;
+        Serial.println("[WiFi] Connection lost");
+    }
+
     // WiFi reconnection
     if (!wifiConnected && millis() - lastWifiReconnectAttempt > wifiReconnectInterval) {
         Serial.println("Attempting to reconnect to Wi-Fi...");
@@ -596,6 +602,9 @@ void initSDCard() {
 
 void setupWiFi() {
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.disconnect(false);
+    delay(100);
     Serial.print("Connecting to ");
     Serial.println(config.wifi_ssid);
     WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str());

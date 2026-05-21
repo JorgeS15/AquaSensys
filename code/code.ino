@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.29"; //Live dashboard in AP mode
+const char* DEVICE_VERSION = "3.0.30"; //BSSID pin for dual-band WiFi
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -626,7 +626,32 @@ void setupWiFi() {
     WiFi.mode(WIFI_STA);
     Serial.print("Connecting to ");
     Serial.println(config.wifi_ssid);
-    WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str());
+
+    // Scan to find the BSSID of the target SSID so we can pin to it.
+    // This bypasses band-steering on dual-band routers that share an SSID.
+    Serial.println("[WiFi] Scanning...");
+    int scanCount = WiFi.scanNetworks(false, false);
+    uint8_t targetBSSID[6] = {0};
+    bool bssidFound = false;
+    int bestRSSI = -100;
+    for (int i = 0; i < scanCount; i++) {
+        if (WiFi.SSID(i) == config.wifi_ssid && WiFi.RSSI(i) > bestRSSI) {
+            memcpy(targetBSSID, WiFi.BSSID(i), 6);
+            bestRSSI = WiFi.RSSI(i);
+            bssidFound = true;
+        }
+    }
+    WiFi.scanDelete();
+
+    if (bssidFound) {
+        Serial.printf("[WiFi] Pinning to BSSID %02X:%02X:%02X:%02X:%02X:%02X (RSSI %d)\n",
+            targetBSSID[0], targetBSSID[1], targetBSSID[2],
+            targetBSSID[3], targetBSSID[4], targetBSSID[5], bestRSSI);
+        WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str(), 0, targetBSSID);
+    } else {
+        Serial.println("[WiFi] SSID not found in scan, connecting without BSSID pin");
+        WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str());
+    }
     
     unsigned long startAttemptTime = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {

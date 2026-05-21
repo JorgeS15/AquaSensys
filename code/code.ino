@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.28"; //Remove AP setup page; serve SD pages in AP mode
+const char* DEVICE_VERSION = "3.0.29"; //Live dashboard in AP mode
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -664,7 +664,10 @@ void castDNS() {
 // ============================================================
 
 void notifyClients() {
-    if (!wifiConnected || !events.count()) return;
+    // Skip if no clients, or if STA WiFi is down (avoids zombie-client watchdog)
+    // In AP mode the network is up, so SSE sends are safe
+    if (!events.count()) return;
+    if (!apModeActive && !wifiConnected) return;
     DynamicJsonDocument doc(256);
     doc["pressure"] = pressure;
     doc["temperature"] = temperature;

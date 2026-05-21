@@ -20,7 +20,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.34"; //Fix WDT during calibration + config recovery
+const char* DEVICE_VERSION = "3.0.35"; //Fix WDT on SSE connect: no SPI in onConnect callback
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -1216,8 +1216,10 @@ void webRoutes() {
 
     events.onConnect([](AsyncEventSourceClient *client) {
         Serial.println("Client connected to /events");
-        notifyClients();
-        publishDiagnostics(); // Send initial diagnostics data
-        publishDebugData(); // Send initial debug data
+        // Do NOT call publishDebugData/publishDiagnostics/notifyClients here.
+        // This callback runs in the async_tcp task, which shares the SPI bus
+        // with loop(). Calling SPI-heavy functions (SD directory scan, ADC reads)
+        // blocks the async_tcp task on the SPI mutex and trips the task watchdog.
+        // Scheduled sends from loop() deliver the first update within 1-5 seconds.
     });
 }

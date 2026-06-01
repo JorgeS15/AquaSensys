@@ -1,4 +1,5 @@
 #include "file_manager.h"
+#include "freertos_glue.h"
 
 // External device constants
 extern const char* DEVICE_NAME;
@@ -23,15 +24,16 @@ void setupFileManagerRoutes(AsyncWebServer& server) {
 }
 
 void handleUploadPage(AsyncWebServerRequest *request) {
-    // Try to serve the upload.html file from SD card
+    SPILock lock;
+    if (!lock.ok()) { request->send(503, "text/plain", "SD busy"); return; }
+
     if (SD.exists("/upload.html")) {
-        // Read the file from SD card
         File file = SD.open("/upload.html", FILE_READ);
         if (!file) {
             request->send(500, "text/plain", "Failed to open upload.html");
             return;
         }
-        
+
         String html = file.readString();
         file.close();
         
@@ -111,35 +113,27 @@ void handleFileUploadComplete(AsyncWebServerRequest *request) {
 
 void handleFileUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     static File uploadFile;
-    
+
     if (!index) {
-        // First chunk - open file for writing
-        Serial.printf("Starting upload: %s\n", filename.c_str());
         String filepath = "/" + filename;
-        
-        // Remove file if it exists
-        if (SD.exists(filepath)) {
-            SD.remove(filepath);
-        }
-        
+        Serial.printf("Starting upload: %s\n", filename.c_str());
+        SPILock lock;
+        if (!lock.ok()) return;
+        if (SD.exists(filepath)) SD.remove(filepath);
         uploadFile = SD.open(filepath, FILE_WRITE);
-        if (!uploadFile) {
-            Serial.println("Failed to open file for writing");
-            return;
-        }
+        if (!uploadFile) { Serial.println("Failed to open file for writing"); return; }
     }
-    
-    // Write chunk to file
+
     if (uploadFile && len) {
-        size_t written = uploadFile.write(data, len);
-        if (written != len) {
-            Serial.println("Write failed");
+        SPILock lock;
+        if (lock.ok()) {
+            if (uploadFile.write(data, len) != len) Serial.println("Write failed");
         }
     }
-    
-    if (final) {
-        // Last chunk - close file
-        if (uploadFile) {
+
+    if (final && uploadFile) {
+        SPILock lock;
+        if (lock.ok()) {
             uploadFile.close();
             Serial.printf("Upload complete: %s\n", filename.c_str());
         }
@@ -149,19 +143,24 @@ void handleFileUpload(AsyncWebServerRequest *request, String filename, size_t in
 void handleListFiles(AsyncWebServerRequest *request) {
     DynamicJsonDocument doc(2048);
     JsonArray files = doc.to<JsonArray>();
-    
-    File root = SD.open("/");
-    if (root) {
-        File file = root.openNextFile();
-        while (file) {
-            JsonObject fileObj = files.createNestedObject();
-            fileObj["name"] = String(file.name());
-            fileObj["size"] = file.size();
-            file = root.openNextFile();
+
+    {
+        SPILock lock;
+        if (lock.ok()) {
+            File root = SD.open("/");
+            if (root) {
+                File file = root.openNextFile();
+                while (file) {
+                    JsonObject fileObj = files.createNestedObject();
+                    fileObj["name"] = String(file.name());
+                    fileObj["size"] = file.size();
+                    file = root.openNextFile();
+                }
+                root.close();
+            }
         }
-        root.close();
     }
-    
+
     String response;
     serializeJson(doc, response);
     request->send(200, "application/json", response);
@@ -174,6 +173,9 @@ void handleDeleteFile(AsyncWebServerRequest *request, uint8_t *data, size_t len,
     if (!error && doc.containsKey("filename")) {
         String filename = doc["filename"];
         String filepath = "/" + filename;
+
+        SPILock lock;
+        if (!lock.ok()) { request->send(503, "application/json", "{\"error\":\"SD busy\"}"); return; }
 
         if (SD.exists(filepath)) {
             if (SD.remove(filepath)) {
@@ -302,6 +304,8 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
 
             if (!zipState.skipFile) {
                 String path = "/" + String(zipState.filename);
+                SPILock sdLock;
+                if (!sdLock.ok()) { zipState.hasError = true; zipState.errorMsg = "SD mutex timeout"; return take; }
                 if (SD.exists(path)) SD.remove(path);
                 zipState.outFile = SD.open(path, FILE_WRITE);
                 if (!zipState.outFile) {
@@ -331,15 +335,17 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
     case ZIP_READ_DATA: {
         size_t take = (avail < zipState.dataRemaining) ? avail : zipState.dataRemaining;
 
-        if (!zipState.skipFile) {
-            if (zipState.outFile) zipState.outFile.write(buf, take);
+        if (!zipState.skipFile && zipState.outFile) {
+            SPILock wLock;
+            if (wLock.ok()) zipState.outFile.write(buf, take);
         }
 
         zipState.dataRemaining -= (uint32_t)take;
 
         if (zipState.dataRemaining == 0) {
-            if (!zipState.skipFile) {
-                if (zipState.outFile) zipState.outFile.close();
+            if (!zipState.skipFile && zipState.outFile) {
+                SPILock cLock;
+                if (cLock.ok()) zipState.outFile.close();
                 if (zipState.extractedCount < 32) {
                     zipState.extractedFiles[zipState.extractedCount++] = String(zipState.filename);
                 }

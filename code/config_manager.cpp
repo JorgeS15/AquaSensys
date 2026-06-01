@@ -1,51 +1,47 @@
 #include "config_manager.h"
+#include "freertos_glue.h"
 
-// Global config instance
 Config config;
 
-const char* CONFIG_FILE = "/config.json";
+static const char* CONFIG_FILE = "/config.json";
 static const char* CONFIG_TMP  = "/config.tmp";
 
 bool loadConfig() {
-    // Recover an interrupted atomic save: if the main file is missing but the
-    // temp file exists, the device was reset between SD.remove() and SD.rename().
-    // Complete the rename now so the saved data is not lost.
-    if (!SD.exists(CONFIG_FILE) && SD.exists(CONFIG_TMP)) {
-        Serial.println("[Config] Recovering interrupted save from config.tmp");
-        SD.rename(CONFIG_TMP, CONFIG_FILE);
-    }
+    // Phase 1: check existence and recover interrupted save
+    bool needsDefault = false;
+    {
+        SPILock lock;
+        if (!lock.ok()) return false;
+        if (!SD.exists(CONFIG_FILE) && SD.exists(CONFIG_TMP)) {
+            Serial.println("[Config] Recovering from config.tmp");
+            SD.rename(CONFIG_TMP, CONFIG_FILE);
+        }
+        needsDefault = !SD.exists(CONFIG_FILE);
+    } // lock released here — saveConfig() can now take it without deadlock
 
-    if (!SD.exists(CONFIG_FILE)) {
+    if (needsDefault) {
         Serial.println("Config file not found, creating with defaults");
         return saveConfig();
     }
 
+    // Phase 2: read file under a fresh lock
+    SPILock lock;
+    if (!lock.ok()) return false;
+
     File configFile = SD.open(CONFIG_FILE);
-    if (!configFile) {
-        Serial.println("Failed to open config file");
-        return false;
-    }
+    if (!configFile) { Serial.println("Failed to open config file"); return false; }
 
     size_t size = configFile.size();
-    if (size > 2048) {
-        Serial.println("Config file too large");
-        configFile.close();
-        return false;
-    }
+    if (size > 2048) { Serial.println("Config file too large"); configFile.close(); return false; }
 
     DynamicJsonDocument doc(2048);
-    DeserializationError error = deserializeJson(doc, configFile);
+    DeserializationError err = deserializeJson(doc, configFile);
     configFile.close();
 
-    if (error) {
-        Serial.print("Failed to parse config file: ");
-        Serial.println(error.c_str());
-        return false;
-    }
+    if (err) { Serial.printf("Failed to parse config: %s\n", err.c_str()); return false; }
 
     config.wifi_ssid     = doc["wifi_ssid"]     | config.wifi_ssid;
     config.wifi_password = doc["wifi_password"] | config.wifi_password;
-
     config.mqtt_server   = doc["mqtt_server"]   | config.mqtt_server;
     config.mqtt_port     = doc["mqtt_port"]     | config.mqtt_port;
     config.mqtt_user     = doc["mqtt_user"]     | config.mqtt_user;
@@ -60,9 +56,9 @@ bool loadConfig() {
     config.pressure_out_offset = doc["pressure_out_offset"] | config.pressure_out_offset;
     config.pressure_calibrated = doc["pressure_calibrated"] | config.pressure_calibrated;
 
-    config.current_offset_l1 = doc["current_offset_l1"] | config.current_offset_l1;
-    config.current_offset_l2 = doc["current_offset_l2"] | config.current_offset_l2;
-    config.current_offset_l3 = doc["current_offset_l3"] | config.current_offset_l3;
+    config.current_offset_l1  = doc["current_offset_l1"]  | config.current_offset_l1;
+    config.current_offset_l2  = doc["current_offset_l2"]  | config.current_offset_l2;
+    config.current_offset_l3  = doc["current_offset_l3"]  | config.current_offset_l3;
     config.current_calibrated = doc["current_calibrated"] | config.current_calibrated;
 
     config.max_current          = doc["max_current"]          | config.max_current;
@@ -83,41 +79,35 @@ bool saveConfig() {
 
     doc["wifi_ssid"]     = config.wifi_ssid;
     doc["wifi_password"] = config.wifi_password;
-
     doc["mqtt_server"]   = config.mqtt_server;
     doc["mqtt_port"]     = config.mqtt_port;
     doc["mqtt_user"]     = config.mqtt_user;
     doc["mqtt_password"] = config.mqtt_password;
-
     doc["min_pressure"]    = config.min_pressure;
     doc["max_pressure"]    = config.max_pressure;
     doc["pressure_offset"] = config.pressure_offset;
     doc["temp_offset"]     = config.temp_offset;
-
     doc["pressure_in_offset"]  = config.pressure_in_offset;
     doc["pressure_out_offset"] = config.pressure_out_offset;
     doc["pressure_calibrated"] = config.pressure_calibrated;
-
-    doc["current_offset_l1"] = config.current_offset_l1;
-    doc["current_offset_l2"] = config.current_offset_l2;
-    doc["current_offset_l3"] = config.current_offset_l3;
+    doc["current_offset_l1"]  = config.current_offset_l1;
+    doc["current_offset_l2"]  = config.current_offset_l2;
+    doc["current_offset_l3"]  = config.current_offset_l3;
     doc["current_calibrated"] = config.current_calibrated;
-
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["config_version"]       = config.config_version;
 
-    // Write to temp file first; rename on success (atomic swap)
+    SPILock lock;
+    if (!lock.ok()) return false;
+
     if (SD.exists(CONFIG_TMP)) SD.remove(CONFIG_TMP);
     File tmpFile = SD.open(CONFIG_TMP, FILE_WRITE);
-    if (!tmpFile) {
-        Serial.println("Failed to create temp config file");
-        return false;
-    }
+    if (!tmpFile) { Serial.println("Failed to create temp config file"); return false; }
 
     if (serializeJsonPretty(doc, tmpFile) == 0) {
-        Serial.println("Failed to write config file");
+        Serial.println("Failed to write config");
         tmpFile.close();
         SD.remove(CONFIG_TMP);
         return false;
@@ -134,48 +124,31 @@ bool saveConfig() {
 void printConfig() {
     Serial.println("=== Current Configuration ===");
     Serial.println("WiFi SSID: " + config.wifi_ssid);
-    Serial.println("WiFi Password: " + String(config.wifi_password.length()) + " chars");
-    Serial.println("MQTT Server: " + config.mqtt_server);
-    Serial.println("MQTT Port: " + String(config.mqtt_port));
-    Serial.println("MQTT User: " + config.mqtt_user);
-    Serial.println("MQTT Password: " + String(config.mqtt_password.length()) + " chars");
-    Serial.println("Min Pressure: " + String(config.min_pressure));
-    Serial.println("Max Pressure: " + String(config.max_pressure));
-    Serial.println("Pressure Offset: " + String(config.pressure_offset));
-    Serial.println("Temp Offset: " + String(config.temp_offset));
-    Serial.println("Current Offset L1: " + String(config.current_offset_l1));
-    Serial.println("Current Offset L2: " + String(config.current_offset_l2));
-    Serial.println("Current Offset L3: " + String(config.current_offset_l3));
-    Serial.println("Current Calibrated: " + String(config.current_calibrated ? "Yes" : "No"));
-    Serial.println("Max Current: " + String(config.max_current) + " A");
-    Serial.println("Max Phase Imbalance: " + String(config.max_phase_imbalance) + " A");
-    Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
+    Serial.println("MQTT Server: " + config.mqtt_server + ":" + String(config.mqtt_port));
+    Serial.printf("Pressure: %.2f – %.2f bar\n", config.min_pressure, config.max_pressure);
+    Serial.printf("Max Current: %.1f A  Phase Imbalance: %.1f A\n",
+                  config.max_current, config.max_phase_imbalance);
+    Serial.printf("Log interval: %d min\n", config.log_interval_minutes);
     Serial.println("===========================");
 }
 
 String getConfigJson() {
     DynamicJsonDocument doc(2048);
-
     doc["wifi_ssid"]   = config.wifi_ssid;
-    // passwords not sent
     doc["mqtt_server"] = config.mqtt_server;
     doc["mqtt_port"]   = config.mqtt_port;
     doc["mqtt_user"]   = config.mqtt_user;
-
     doc["min_pressure"]    = config.min_pressure;
     doc["max_pressure"]    = config.max_pressure;
     doc["pressure_offset"] = config.pressure_offset;
     doc["temp_offset"]     = config.temp_offset;
-
     doc["pressure_in_offset"]  = config.pressure_in_offset;
     doc["pressure_out_offset"] = config.pressure_out_offset;
     doc["pressure_calibrated"] = config.pressure_calibrated;
-
-    doc["current_offset_l1"] = config.current_offset_l1;
-    doc["current_offset_l2"] = config.current_offset_l2;
-    doc["current_offset_l3"] = config.current_offset_l3;
+    doc["current_offset_l1"]  = config.current_offset_l1;
+    doc["current_offset_l2"]  = config.current_offset_l2;
+    doc["current_offset_l3"]  = config.current_offset_l3;
     doc["current_calibrated"] = config.current_calibrated;
-
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
@@ -187,25 +160,16 @@ String getConfigJson() {
 
 bool updateConfigFromJson(const String& jsonStr) {
     DynamicJsonDocument doc(2048);
-    DeserializationError error = deserializeJson(doc, jsonStr);
+    if (deserializeJson(doc, jsonStr)) return false;
 
-    if (error) {
-        Serial.print("Failed to parse config update: ");
-        Serial.println(error.c_str());
-        return false;
-    }
-
-    if (doc.containsKey("wifi_ssid"))
-        config.wifi_ssid = doc["wifi_ssid"].as<String>();
+    // Update config struct fields — CfgLock not needed here because this is always
+    // called from async_tcp (single writer), and saveConfig() below re-serializes atomically.
+    if (doc.containsKey("wifi_ssid"))     config.wifi_ssid     = doc["wifi_ssid"].as<String>();
     if (doc.containsKey("wifi_password") && doc["wifi_password"].as<String>().length() > 0)
         config.wifi_password = doc["wifi_password"].as<String>();
-
-    if (doc.containsKey("mqtt_server"))
-        config.mqtt_server = doc["mqtt_server"].as<String>();
-    if (doc.containsKey("mqtt_port"))
-        config.mqtt_port = doc["mqtt_port"];
-    if (doc.containsKey("mqtt_user"))
-        config.mqtt_user = doc["mqtt_user"].as<String>();
+    if (doc.containsKey("mqtt_server"))   config.mqtt_server   = doc["mqtt_server"].as<String>();
+    if (doc.containsKey("mqtt_port"))     config.mqtt_port     = doc["mqtt_port"];
+    if (doc.containsKey("mqtt_user"))     config.mqtt_user     = doc["mqtt_user"].as<String>();
     if (doc.containsKey("mqtt_password") && doc["mqtt_password"].as<String>().length() > 0)
         config.mqtt_password = doc["mqtt_password"].as<String>();
 
@@ -213,16 +177,13 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("max_pressure"))    config.max_pressure    = doc["max_pressure"];
     if (doc.containsKey("pressure_offset")) config.pressure_offset = doc["pressure_offset"];
     if (doc.containsKey("temp_offset"))     config.temp_offset     = doc["temp_offset"];
-
     if (doc.containsKey("pressure_in_offset"))  config.pressure_in_offset  = doc["pressure_in_offset"];
     if (doc.containsKey("pressure_out_offset")) config.pressure_out_offset = doc["pressure_out_offset"];
     if (doc.containsKey("pressure_calibrated")) config.pressure_calibrated = doc["pressure_calibrated"];
-
-    if (doc.containsKey("current_offset_l1")) config.current_offset_l1 = doc["current_offset_l1"];
-    if (doc.containsKey("current_offset_l2")) config.current_offset_l2 = doc["current_offset_l2"];
-    if (doc.containsKey("current_offset_l3")) config.current_offset_l3 = doc["current_offset_l3"];
-    if (doc.containsKey("current_calibrated")) config.current_calibrated = doc["current_calibrated"];
-
+    if (doc.containsKey("current_offset_l1"))   config.current_offset_l1   = doc["current_offset_l1"];
+    if (doc.containsKey("current_offset_l2"))   config.current_offset_l2   = doc["current_offset_l2"];
+    if (doc.containsKey("current_offset_l3"))   config.current_offset_l3   = doc["current_offset_l3"];
+    if (doc.containsKey("current_calibrated"))  config.current_calibrated  = doc["current_calibrated"];
     if (doc.containsKey("max_current"))          config.max_current          = doc["max_current"];
     if (doc.containsKey("max_phase_imbalance"))  config.max_phase_imbalance  = doc["max_phase_imbalance"];
     if (doc.containsKey("log_interval_minutes")) config.log_interval_minutes = doc["log_interval_minutes"];

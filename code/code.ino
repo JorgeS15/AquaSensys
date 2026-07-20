@@ -21,7 +21,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.37"; //Extract web routes into web_routes.cpp/h
+const char* DEVICE_VERSION = "3.0.38"; //Fix Water Temo Formula
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -189,10 +189,9 @@ float readOutPressure() {
 float readWaterTemp() {
     float voltage = readMCP3208Average(MCP_CH_WATER_TEMP, NUM_SAMPLES);
     
-    // Convert voltage to temperature
-    // This is a placeholder - adjust based on your actual sensor
-    // Example for NTC thermistor with voltage divider
-    float tempC = (voltage - 0.5) * 100.0 + config.temp_offset;
+    // Convert voltage to resistance and then to temperature
+    float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
+    float tempC = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
     
     return tempC;
 }
@@ -207,7 +206,7 @@ float readAverageTemperature(int read) {
     
     if (read) {
         float temp_voltage = totalTemp / countTemp * (5.0 / 4096.0) + config.temp_offset;
-        float temp_resistance = 97 * (1 / ((5.0 / temp_voltage) - 1));
+        float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
         float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
         totalTemp = 0;
         countTemp = 0;

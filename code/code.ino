@@ -187,7 +187,7 @@ float readOutPressure() {
  * Using thermistor or temperature sensor connected to CH3
  */
 float readWaterTemp() {
-    float voltage = readMCP3208Average(MCP_CH_WATER_TEMP, NUM_SAMPLES);
+    float temp_voltage = readMCP3208Average(MCP_CH_WATER_TEMP, NUM_SAMPLES);
     
     // Convert voltage to resistance and then to temperature
     float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));

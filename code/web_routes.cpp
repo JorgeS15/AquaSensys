@@ -45,15 +45,23 @@ void notifyClients() {
     // In AP mode the network is up, so SSE sends are safe
     if (!events.count()) return;
     if (!apModeActive && !wifiConnected) return;
-    StaticJsonDocument<256> doc;
+    // 320 B: 8 members plus the device_type / connection_size string values
+    StaticJsonDocument<320> doc;
     doc["pressure"] = pressure;
     doc["temperature"] = temperature;
     doc["ambientTemp"] = ambientTemp;
     doc["flow"] = flow;
-    doc["motor"] = motor;
-    doc["manualOverride"] = manualOverride;
-    doc["mainSwitch"] = mainSwitch;
+    doc["deviceType"] = config.device_type;
+    doc["connectionSize"] = config.connection_size;
     doc["error"] = error;
+
+    // Monitor units expose no motor state at all — the dashboard hides the
+    // whole control card when deviceType is "M".
+    if (isControllerDevice()) {
+        doc["motor"] = motor;
+        doc["manualOverride"] = manualOverride;
+        doc["mainSwitch"] = mainSwitch;
+    }
 
     String json;
     serializeJson(doc, json);
@@ -80,7 +88,7 @@ void publishDiagnostics() {
     doc["uptime"] = millis() / 1000;
     doc["free_heap"] = ESP.getFreeHeap();
     doc["wifi_rssi"] = WiFi.RSSI();
-    doc["motor_runtime_s"] = motorRuntimeSeconds;
+    if (isControllerDevice()) doc["motor_runtime_s"] = motorRuntimeSeconds;
 
     String json;
     serializeJson(doc, json);
@@ -91,7 +99,7 @@ void publishDiagnostics() {
 void publishDebugData() {
     if (!events.count()) return;
 
-    DynamicJsonDocument doc(1536);
+    DynamicJsonDocument doc(1792);
 
     // SD Card Status
     doc["sd_detected"] = (SD.cardType() != CARD_NONE);
@@ -160,11 +168,17 @@ void publishDebugData() {
     doc["mqtt_port"] = config.mqtt_port;
     doc["mqtt_last"] = (millis() - lastMqttReconnectAttempt) / 1000;
 
+    // Device profile
+    doc["device_type"] = config.device_type;
+    doc["connection_size"] = config.connection_size;
+
     // Motor & Control State
-    doc["motor"] = motor;
-    doc["main_switch"] = mainSwitch;
-    doc["manual_override"] = manualOverride;
     doc["error"] = error;
+    if (isControllerDevice()) {
+        doc["motor"] = motor;
+        doc["main_switch"] = mainSwitch;
+        doc["manual_override"] = manualOverride;
+    }
 
     String json;
     serializeJson(doc, json);
@@ -252,14 +266,21 @@ void webRoutes() {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         String jsonStr = String((char*)data).substring(0, len);
 
+        // Switching between Monitor and Controller changes the MQTT entities and
+        // the control loop, so it only takes effect after a restart.
+        String previousDeviceType = config.device_type;
+
         if (updateConfigFromJson(jsonStr)) {
             DynamicJsonDocument doc(256);
             deserializeJson(doc, jsonStr);
             bool wifiChanged = doc.containsKey("wifi_ssid") || doc.containsKey("wifi_password");
+            bool deviceTypeChanged = config.device_type != previousDeviceType;
 
-            request->send(200, "application/json", "{\"status\":\"success\",\"wifi_changed\":" + String(wifiChanged ? "true" : "false") + "}");
+            request->send(200, "application/json",
+                "{\"status\":\"success\",\"wifi_changed\":" + String(wifiChanged ? "true" : "false") +
+                ",\"device_type_changed\":" + String(deviceTypeChanged ? "true" : "false") + "}");
 
-            if (wifiChanged) {
+            if (wifiChanged || deviceTypeChanged) {
                 rebootRequested = true;
             }
         } else {
@@ -357,6 +378,8 @@ void webRoutes() {
         doc["sdCardStatus"] = SD.cardType() != CARD_NONE ? "Connected" : "Not Found";
         doc["sdCardSize"] = SD.cardSize() / (1024 * 1024);
         doc["adcType"] = "MCP3208 (Rodolfo Prieto)";
+        doc["deviceType"] = config.device_type;
+        doc["connectionSize"] = config.connection_size;
 
         doc["current_l1"] = currentL1;
         doc["current_l2"] = currentL2;
@@ -387,6 +410,15 @@ void webRoutes() {
         if (!jsonError) {
             if (doc.containsKey("command")) {
                 String command = doc["command"];
+
+                // Every command below drives the motor, so a Monitor unit has
+                // none of them.
+                if (!isControllerDevice()) {
+                    request->send(409, "application/json",
+                        "{\"error\":\"Motor control is unavailable on a Monitor (type M) device\"}");
+                    return;
+                }
+
                 if (command == "toggle") {
                     manualOverride = true;
                     manualMotorState = !manualMotorState;
@@ -433,6 +465,8 @@ void webRoutes() {
             html += "Device ID: " + String(DEVICE_ID) + "\n";
             html += "Device Version: " + String(DEVICE_VERSION) + "\n";
             html += "Device Model: " + String(DEVICE_MODEL) + "\n";
+            html += "Device Type: " + config.device_type + (isControllerDevice() ? " (Controller)" : " (Monitor)") + "\n";
+            html += "Connection Size: " + config.connection_size + "\" (K=" + String(flowKFactor(), 1) + ")\n";
             html += "ADC Type: MCP3208 (Rodolfo Prieto)\n";
             html += "Current Sensors: ACS712-05B (3-Phase)\n";
             html += "</pre>";

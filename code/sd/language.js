@@ -90,6 +90,12 @@ function applyTranslations() {
     }
   }
   
+  // Re-apply the device profile: it drives labels that data-i18n alone cannot
+  // resolve (the system card title differs between Monitor and Controller).
+  if (typeof applyDeviceType === 'function') {
+    applyDeviceType(typeof deviceType !== 'undefined' ? deviceType : 'C');
+  }
+
   // Update labels inside small tags
   const smallElements = document.querySelectorAll('small[data-i18n]');
   smallElements.forEach(element => {

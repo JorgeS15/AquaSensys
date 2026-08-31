@@ -39,6 +39,11 @@ bool isMqttConfigured();
 // FreeRTOS task — created in setup(), runs on Core 0
 void mqttTask(void* pvParameters);
 void publishDiscovery(const String& topic, JsonDocument& config);
+void removeDiscoveryConfig(const char* component, const char* objectId);
+void createBinarySensorConfig(const char* sensorId, const char* name,
+                      const char* deviceClass, const char* icon,
+                      JsonDocument& deviceDoc, const String& stateTopic,
+                      const char* valueKey);
 void createSensorConfig(const char* sensorId, const char* name, const char* unit, 
                       const char* deviceClass, const char* icon,
                       JsonDocument& deviceDoc, const String& stateTopic,

@@ -21,7 +21,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.0.38"; //Fix Water Temo Formula
+const char* DEVICE_VERSION = "3.1.0"; //Connection size flow K-factor + Monitor/Controller device types
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -118,6 +118,21 @@ unsigned long lastLogTime = 0;
 
 void IRAM_ATTR pulseCounter() {
     pulseCount++;
+}
+
+/**
+ * Convert a pulse count over an elapsed window into flow in L/min.
+ *
+ * Both supported sensors follow the datasheet form  F = K * Q  where F is the
+ * pulse frequency in Hz and Q the flow in L/min, so Q = (pulses/s) / K.
+ *   3/4" connection: K = 6.6  -> 396 pulses per litre  (default)
+ *   1"   connection: K = 8.0  -> 480 pulses per litre
+ * The K-factor comes from config.connection_size (see flowKFactor()).
+ */
+float computeFlowLpm(int pulses, unsigned long elapsedMs) {
+    if (elapsedMs == 0) return 0.0f;
+    float pulsesPerSecond = (pulses * 1000.0f) / (float)elapsedMs;
+    return pulsesPerSecond / flowKFactor();
 }
 
 // ============================================================
@@ -272,6 +287,13 @@ void setup() {
     initSDCard();
     loadConfig();
     loadRuntime();
+
+    Serial.printf("Device type: %s — %s\n",
+                  config.device_type.c_str(),
+                  isControllerDevice() ? "Controller (motor control active)"
+                                       : "Monitor (motor control disabled)");
+    Serial.printf("Connection size: %s\" — flow K-factor %.1f pulses/s per L/min\n",
+                  config.connection_size.c_str(), flowKFactor());
 
     // NEW: Load saved calibration or perform auto-calibration
     if (config.current_offset_l1 != 0.0 || config.current_offset_l2 != 0.0 || config.current_offset_l3 != 0.0) {
@@ -431,32 +453,39 @@ void loop() {
     // Main measurement and control loop (every 1 second)
     unsigned long currentTime = millis();
     if (currentTime - lastTime >= 1000) {
-        // Read flow sensor
+        // Read flow sensor — snapshot the ISR counter, then do the maths with
+        // interrupts back on so pulses are not lost during the conversion.
         noInterrupts();
-        flow = pulseCount / (currentTime - lastTime) / 1000.0 / 8.0;
+        int pulses = pulseCount;
         pulseCount = 0;
         interrupts();
+
+        unsigned long elapsedMs = currentTime - lastTime;
+        flow = computeFlowLpm(pulses, elapsedMs);
         lastTime = millis();
         
         // Read all sensors (temperatures, pressures, currents)
         readAllSensors();
 
-        // Dry-run watchdog: motor on with no flow for > 10 s → error
-        if (motor && flow == 0.0f) {
-            if (motorNoFlowStart == 0) motorNoFlowStart = millis();
-            else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
-                error = true;
-                Serial.println("[Error] Motor running with no flow — possible dry run");
+        // Motor-related bookkeeping only exists on Controller units
+        if (isControllerDevice()) {
+            // Dry-run watchdog: motor on with no flow for > 10 s → error
+            if (motor && flow == 0.0f) {
+                if (motorNoFlowStart == 0) motorNoFlowStart = millis();
+                else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
+                    error = true;
+                    Serial.println("[Error] Motor running with no flow — possible dry run");
+                }
+            } else {
+                motorNoFlowStart = 0;
             }
-        } else {
-            motorNoFlowStart = 0;
-        }
 
-        // Motor runtime accumulator
-        if (motor) motorRuntimeSeconds++;
-        if (millis() - lastRuntimeSave > 300000UL) {
-            lastRuntimeSave = millis();
-            saveRuntime();
+            // Motor runtime accumulator
+            if (motor) motorRuntimeSeconds++;
+            if (millis() - lastRuntimeSave > 300000UL) {
+                lastRuntimeSave = millis();
+                saveRuntime();
+            }
         }
 
         // Periodic data logging to SD
@@ -496,6 +525,14 @@ void loop() {
 // ============================================================
 
 void controlMotor() {
+    // Monitor units (device_type "M") have no pump to drive: the motor output
+    // stays de-energised and no control decision is ever made.
+    if (!isControllerDevice()) {
+        motor = false;
+        digitalWrite(MOTOR_PIN, LOW);
+        return;
+    }
+
     if (mainSwitch) {
         if (manualOverride) {
             motor = manualMotorState;
@@ -529,7 +566,9 @@ void testLEDs(){
 void setupPins() {
     pinMode(FLOW_PIN, INPUT_PULLDOWN);
     attachInterrupt(digitalPinToInterrupt(FLOW_PIN), pulseCounter, RISING);
+    // Driven low on Monitor units too, so the output is never left floating
     pinMode(MOTOR_PIN, OUTPUT);
+    digitalWrite(MOTOR_PIN, LOW);
 
     // RGB LED - PWM via LEDC
     ledcAttachChannel(LED_RED,   5000, 8, 0);  // pin, freq, resolution, channel
@@ -539,8 +578,10 @@ void setupPins() {
 
 void updateSerial() {
     if (!debug) return;
-    Serial.print("Override: ");
-    Serial.println(manualOverride ? "ON" : "OFF");
+    if (isControllerDevice()) {
+        Serial.print("Override: ");
+        Serial.println(manualOverride ? "ON" : "OFF");
+    }
     Serial.print("Pressure In: ");
     Serial.print(pressureIn);
     Serial.println(" bar");
@@ -553,13 +594,29 @@ void updateSerial() {
     Serial.print("Ambient Temp: ");
     Serial.print(ambientTemp);
     Serial.println(" °C");
-    Serial.print("Motor status: ");
-    Serial.println(motor ? "ON" : "OFF");
+    if (isControllerDevice()) {
+        Serial.print("Motor status: ");
+        Serial.println(motor ? "ON" : "OFF");
+    }
     Serial.printf("Current: L1=%.2fA, L2=%.2fA, L3=%.2fA\n", currentL1, currentL2, currentL3);
 }
 
 void updateLights() {
     if (lights) {
+        // Monitor units have no motor or main switch to signal — only a
+        // healthy/error indication.
+        if (!isControllerDevice()) {
+            if (error) {
+                ledcWrite(LED_RED, ((millis() % 1000) < 500) ? 255 : 0);
+                ledcWrite(LED_GREEN, 0);
+            } else {
+                ledcWrite(LED_RED, 0);
+                ledcWrite(LED_GREEN, ((millis() % 1000) < 50) ? 255 : 0);
+            }
+            ledcWrite(LED_BLUE, 0);
+            return;
+        }
+
         if (error) {
             // Error state - Red blinking
             ledcWrite(LED_RED, ((millis() % 1000) < 500) ? 255 : 0 );
@@ -594,6 +651,13 @@ void updateLights() {
 }
 
 void checkForErrors() {
+    // Monitor units only report; nothing is tripped and nothing is switched off,
+    // so the flag tracks the live reading instead of latching.
+    if (!isControllerDevice()) {
+        error = (pressure < 1.0 || pressure > 5.0);
+        return;
+    }
+
     if (!manualOverride) {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;

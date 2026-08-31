@@ -43,16 +43,20 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
     Serial.printf("MQTT [%s]: %s\n", topic, message);
 
-    if (strcmp(topic, mqttTopicMotor) == 0) {
+    // A Monitor unit never subscribes to the motor topics, but guard anyway so a
+    // retained command left on the broker cannot resurrect motor control.
+    bool controller = isControllerDevice();
+
+    if (controller && strcmp(topic, mqttTopicMotor) == 0) {
         manualMotorState = (strcmp(message, "ON") == 0);
         Serial.printf("Manual motor: %s\n", manualMotorState ? "ON" : "OFF");
-    } else if (strcmp(topic, mqttTopicOverride) == 0) {
+    } else if (controller && strcmp(topic, mqttTopicOverride) == 0) {
         manualOverride = (strcmp(message, "ON") == 0);
         Serial.printf("Manual override: %s\n", manualOverride ? "ON" : "OFF");
-    } else if (strcmp(topic, mqttTopicMain) == 0) {
+    } else if (controller && strcmp(topic, mqttTopicMain) == 0) {
         mainSwitch = (strcmp(message, "ON") == 0);
         Serial.printf("Main switch: %s\n", mainSwitch ? "ON" : "OFF");
-    } else if (strcmp(topic, mqttTopicError) == 0) {
+    } else if (controller && strcmp(topic, mqttTopicError) == 0) {
         error = (strcmp(message, "ON") == 0);
         Serial.printf("Error state: %s\n", error ? "ON" : "OFF");
     } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
@@ -67,10 +71,12 @@ bool reconnectMQTT() {
     if (mqttClient.connect(DEVICE_ID, config.mqtt_user.c_str(), config.mqtt_password.c_str())) {
         Serial.println("MQTT connected");
 
-        mqttClient.subscribe(mqttTopicMotor);
-        mqttClient.subscribe(mqttTopicOverride);
-        mqttClient.subscribe(mqttTopicMain);
-        mqttClient.subscribe(mqttTopicError);
+        if (isControllerDevice()) {
+            mqttClient.subscribe(mqttTopicMotor);
+            mqttClient.subscribe(mqttTopicOverride);
+            mqttClient.subscribe(mqttTopicMain);
+            mqttClient.subscribe(mqttTopicError);
+        }
         mqttClient.subscribe(mqttTopicReboot);
 
         Serial.println("Subscribed to command topics");
@@ -95,9 +101,11 @@ void publishState() {
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
-    doc["motor"]            = motor ? "ON" : "OFF";
-    doc["override"]         = manualOverride ? "ON" : "OFF";
-    doc["main"]             = mainSwitch ? "ON" : "OFF";
+    if (isControllerDevice()) {
+        doc["motor"]        = motor ? "ON" : "OFF";
+        doc["override"]     = manualOverride ? "ON" : "OFF";
+        doc["main"]         = mainSwitch ? "ON" : "OFF";
+    }
     doc["error"]            = error ? "ON" : "OFF";
     doc["reboot_requested"] = rebootRequested;
     doc["uptime"]           = millis() / 1000;
@@ -152,10 +160,27 @@ void sendAutoDiscoveryConfigs() {
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");
 
-    createSwitchConfig("motor",    "Pump Motor",      "mdi:pump",          deviceDoc, stateTopic, "motor",    mqttTopicMotor);
-    createSwitchConfig("main",     "Main Power",      "mdi:power",         deviceDoc, stateTopic, "main",     mqttTopicMain);
-    createSwitchConfig("override", "Manual Override", "mdi:account-wrench",deviceDoc, stateTopic, "override", mqttTopicOverride);
-    createSwitchConfig("error",    "System Error",    "mdi:alert",         deviceDoc, stateTopic, "error",    mqttTopicError);
+    // Monitor units (device_type "M") expose sensors only — no motor entities.
+    if (isControllerDevice()) {
+        createSwitchConfig("motor",    "Pump Motor",      "mdi:pump",          deviceDoc, stateTopic, "motor",    mqttTopicMotor);
+        createSwitchConfig("main",     "Main Power",      "mdi:power",         deviceDoc, stateTopic, "main",     mqttTopicMain);
+        createSwitchConfig("override", "Manual Override", "mdi:account-wrench",deviceDoc, stateTopic, "override", mqttTopicOverride);
+        createSwitchConfig("error",    "System Error",    "mdi:alert",         deviceDoc, stateTopic, "error",    mqttTopicError);
+        removeDiscoveryConfig("binary_sensor", "error");
+    } else {
+        // A Monitor still reports faults, it just cannot be commanded — so the
+        // error switch becomes a read-only binary sensor.
+        createBinarySensorConfig("error", "System Error", "problem", "mdi:alert",
+                                 deviceDoc, stateTopic, "error");
+
+        // Clear any switch entities left over from a previous Controller
+        // configuration so Home Assistant drops them instead of showing them
+        // permanently unavailable.
+        removeDiscoveryConfig("switch", "motor");
+        removeDiscoveryConfig("switch", "main");
+        removeDiscoveryConfig("switch", "override");
+        removeDiscoveryConfig("switch", "error");
+    }
 
     createButtonConfig("reboot", "Reboot Device", "mdi:restart", deviceDoc, mqttTopicReboot);
 }
@@ -214,6 +239,36 @@ void createButtonConfig(const char* buttonId, const char* name, const char* icon
     doc["device"]         = deviceDoc;
 
     publishDiscovery(configTopic, doc);
+}
+
+void createBinarySensorConfig(const char* sensorId, const char* name,
+                              const char* deviceClass, const char* icon,
+                              JsonDocument& deviceDoc, const String& stateTopic,
+                              const char* valueKey) {
+    char configTopic[96];
+    snprintf(configTopic, sizeof(configTopic), "homeassistant/binary_sensor/%s_%s/config", DEVICE_ID, sensorId);
+
+    DynamicJsonDocument doc(512);
+    doc["name"]           = name;
+    doc["unique_id"]      = String(DEVICE_ID) + "_" + sensorId;
+    doc["state_topic"]    = stateTopic;
+    doc["value_template"] = String("{{ value_json.") + valueKey + " }}";
+    doc["payload_on"]     = "ON";
+    doc["payload_off"]    = "OFF";
+    if (deviceClass) doc["device_class"] = deviceClass;
+    if (icon)        doc["icon"]         = icon;
+    doc["device"]         = deviceDoc;
+
+    publishDiscovery(configTopic, doc);
+}
+
+void removeDiscoveryConfig(const char* component, const char* objectId) {
+    char configTopic[96];
+    snprintf(configTopic, sizeof(configTopic), "homeassistant/%s/%s_%s/config",
+             component, DEVICE_ID, objectId);
+    // An empty retained payload deletes the discovery entry
+    mqttClient.publish(configTopic, "", true);
+    Serial.printf("Removed discovery: %s\n", configTopic);
 }
 
 void publishDiscovery(const String& topic, JsonDocument& config) {

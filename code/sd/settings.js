@@ -2,6 +2,7 @@
 const formElements = {
   wifiForm: document.getElementById('wifiForm'),
   mqttForm: document.getElementById('mqttForm'),
+  deviceForm: document.getElementById('deviceForm'),
   paramsForm: document.getElementById('paramsForm'),
   
   // Status elements
@@ -81,6 +82,10 @@ function populateFormFields(config) {
   document.getElementById('mqtt_user').value = config.mqtt_user || '';
   // Password is not filled for security reasons
   
+  // Device profile — defaults match the firmware: 3/4" connection, Controller unit
+  document.getElementById('device_type').value = config.device_type === 'M' ? 'M' : 'C';
+  document.getElementById('connection_size').value = config.connection_size === '1' ? '1' : '3/4';
+
   // System parameters
   document.getElementById('min_pressure').value = config.min_pressure || 2.5;
   document.getElementById('max_pressure').value = config.max_pressure || 3.5;
@@ -131,6 +136,10 @@ function saveConfiguration(formId, event) {
     
     if (result.mqtt_changed) {
       showNotification('mqttUpdated', 'info');
+    }
+
+    if (result.device_type_changed) {
+      showNotification('deviceTypeUpdated', 'info');
     }
     
     // Reload configuration to reflect any changes
@@ -293,6 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
     formElements.mqttForm.addEventListener('submit', (e) => saveConfiguration('mqttForm', e));
   }
   
+  if (formElements.deviceForm) {
+    formElements.deviceForm.addEventListener('submit', (e) => saveConfiguration('deviceForm', e));
+  }
+
   if (formElements.paramsForm) {
     formElements.paramsForm.addEventListener('submit', (e) => saveConfiguration('paramsForm', e));
   }

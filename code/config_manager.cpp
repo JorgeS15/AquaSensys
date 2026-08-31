@@ -6,6 +6,39 @@ Config config;
 const char* CONFIG_FILE = "/config.json";
 static const char* CONFIG_TMP  = "/config.tmp";
 
+String normalizeConnectionSize(const String& raw) {
+    String s = raw;
+    s.trim();
+    s.replace("\"", "");
+    s.replace("'", "");
+    s.replace(" ", "");
+    s.toLowerCase();
+    s.replace("inch", "");
+    s.replace("in", "");
+    // Anything that is not explicitly the 1" variant falls back to the 3/4" default
+    if (s == "1" || s == "1.0" || s == "1.00") return "1";
+    return "3/4";
+}
+
+String normalizeDeviceType(const String& raw) {
+    String s = raw;
+    s.trim();
+    s.toUpperCase();
+    // Only an explicit Monitor marker disables motor control; everything else
+    // stays a Controller so an unreadable value never silently drops the pump.
+    if (s.startsWith("M")) return "M";
+    return "C";
+}
+
+float flowKFactor() {
+    return config.connection_size == "1" ? FLOW_K_FACTOR_ONE_INCH
+                                         : FLOW_K_FACTOR_THREE_QUARTER;
+}
+
+bool isControllerDevice() {
+    return config.device_type != "M";
+}
+
 bool loadConfig() {
     // Recover an interrupted atomic save: if the main file is missing but the
     // temp file exists, the device was reset between SD.remove() and SD.rename().
@@ -68,9 +101,14 @@ bool loadConfig() {
     config.max_current          = doc["max_current"]          | config.max_current;
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
     config.log_interval_minutes = doc["log_interval_minutes"] | config.log_interval_minutes;
+
+    // Missing keys keep the constructor defaults: 3/4" connection, Controller unit
+    config.connection_size = normalizeConnectionSize(doc["connection_size"] | config.connection_size);
+    config.device_type     = normalizeDeviceType(doc["device_type"]         | config.device_type);
+
     config.config_version       = doc["config_version"]       | 1;
 
-    if (config.config_version != 1)
+    if (config.config_version > 2)
         Serial.printf("[Config] Warning: unexpected config version %d\n", config.config_version);
 
     Serial.println("Config loaded successfully");
@@ -106,6 +144,10 @@ bool saveConfig() {
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
+
+    doc["connection_size"] = config.connection_size;
+    doc["device_type"]     = config.device_type;
+
     doc["config_version"]       = config.config_version;
 
     // Write to temp file first; rename on success (atomic swap)
@@ -150,6 +192,8 @@ void printConfig() {
     Serial.println("Max Current: " + String(config.max_current) + " A");
     Serial.println("Max Phase Imbalance: " + String(config.max_phase_imbalance) + " A");
     Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
+    Serial.println("Connection Size: " + config.connection_size + "\" (K=" + String(flowKFactor(), 1) + ")");
+    Serial.println("Device Type: " + config.device_type + (isControllerDevice() ? " (Controller)" : " (Monitor)"));
     Serial.println("===========================");
 }
 
@@ -179,6 +223,9 @@ String getConfigJson() {
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
+
+    doc["connection_size"] = config.connection_size;
+    doc["device_type"]     = config.device_type;
 
     String output;
     serializeJson(doc, output);
@@ -226,6 +273,11 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("max_current"))          config.max_current          = doc["max_current"];
     if (doc.containsKey("max_phase_imbalance"))  config.max_phase_imbalance  = doc["max_phase_imbalance"];
     if (doc.containsKey("log_interval_minutes")) config.log_interval_minutes = doc["log_interval_minutes"];
+
+    if (doc.containsKey("connection_size"))
+        config.connection_size = normalizeConnectionSize(doc["connection_size"].as<String>());
+    if (doc.containsKey("device_type"))
+        config.device_type = normalizeDeviceType(doc["device_type"].as<String>());
 
     return saveConfig();
 }

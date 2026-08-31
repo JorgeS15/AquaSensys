@@ -41,6 +41,10 @@ struct Config {
     // Data logging
     int log_interval_minutes;   // 0 = disabled
 
+    // Hardware / device profile
+    String connection_size;     // "3/4" or "1" (inches) — selects the flow K-factor
+    String device_type;         // "M" = Monitor (no motor control), "C" = Controller
+
     // Schema version
     int config_version;
 
@@ -66,12 +70,20 @@ struct Config {
         max_current = 15.0f;
         max_phase_imbalance = 3.0f;
         log_interval_minutes = 5;
-        config_version = 1;
+        connection_size = "3/4";
+        device_type = "C";
+        config_version = 2;
     }
 };
 
 // Global config object
 extern Config config;
+
+// Flow sensor K-factors: pulse frequency (Hz) = K * flow (L/min)
+//   3/4" sensor: F = 6.6 * Q  -> 396 pulses per litre
+//   1"   sensor: F = 8.0 * Q  -> 480 pulses per litre
+static const float FLOW_K_FACTOR_THREE_QUARTER = 6.6f;
+static const float FLOW_K_FACTOR_ONE_INCH      = 8.0f;
 
 // Function declarations
 bool loadConfig();
@@ -79,5 +91,15 @@ bool saveConfig();
 void printConfig();
 String getConfigJson();
 bool updateConfigFromJson(const String& jsonStr);
+
+// Normalisers — accept loose user input, return a canonical value
+String normalizeConnectionSize(const String& raw);
+String normalizeDeviceType(const String& raw);
+
+// K-factor for the configured connection size (pulses/s per L/min)
+float flowKFactor();
+
+// True when this unit drives a motor (device_type "C"); false for Monitor units
+bool isControllerDevice();
 
 #endif

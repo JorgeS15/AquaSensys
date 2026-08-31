@@ -56,17 +56,17 @@
       </div>
       
       <div class="card system-card">
-        <h2><i class="fas fa-cog"></i> <span data-i18n="systemControls">System Controls</span></h2>
+        <h2><i class="fas fa-cog"></i> <span id="systemCardTitle" data-i18n="systemControls">System Controls</span></h2>
         <div class="system-status">
-          <div class="status-item">
+          <div class="status-item motor-only" id="motorStatusItem">
             <span data-i18n="motor">Motor:</span>
             <span class="status-indicator" id="motor" data-i18n="off">OFF</span>
           </div>
-          <div class="status-item">
+          <div class="status-item motor-only" id="modeStatusItem">
             <span data-i18n="mode">Mode:</span>
             <span class="status-indicator" id="mode" data-i18n="auto">AUTO</span>
           </div>
-          <div class="status-item">
+          <div class="status-item motor-only" id="mainSwitchStatusItem">
             <span data-i18n="mainSwitch">Main Switch:</span>
             <span class="status-indicator" id="mainSwitch" data-i18n="on">ON</span>
           </div>
@@ -74,9 +74,17 @@
             <span data-i18n="systemStatus">System Status:</span>
             <span class="status-indicator" id="systemStatus" data-i18n="statusOk">OK</span>
           </div>
+          <div class="status-item">
+            <span data-i18n="deviceType">Device Type:</span>
+            <span class="status-indicator" id="deviceType">--</span>
+          </div>
+          <div class="status-item">
+            <span data-i18n="connectionSize">Connection Size:</span>
+            <span class="status-indicator" id="connectionSize">--</span>
+          </div>
         </div>
 
-        <div class="control-buttons">
+        <div class="control-buttons motor-only" id="controlButtons">
           <button id="toggleBtn" class="button">
             <i class="fas fa-power-off"></i> <span data-i18n="toggleMotor">Toggle Motor</span>
           </button>

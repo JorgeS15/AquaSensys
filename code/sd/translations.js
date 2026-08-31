@@ -27,6 +27,9 @@ const translations = {
     "mode": "Mode",
     "mainSwitch": "Main Switch",
     "systemStatus": "System Status",
+    "systemStatusTitle": "System Status",
+    "deviceType": "Device Type",
+    "connectionSize": "Connection Size",
     "system": "System",
     "error": "Error",
     "on": "ON",
@@ -66,6 +69,19 @@ const translations = {
     "mqttUsername": "MQTT Username:",
     "mqttPassword": "MQTT Password:",
     
+    // Settings page - Device
+    "deviceSettings": "Device Settings",
+    "deviceTypeLabel": "Device Type:",
+    "controllerType": "Controller (C)",
+    "monitorType": "Monitor (M)",
+    "deviceTypeHelp": "Monitor units only measure — all motor control is disabled. Changing this reboots the device.",
+    "connectionSizeLabel": "Water Connection Size:",
+    "sizeThreeQuarter": "3/4\" (396 pulses/L)",
+    "sizeOneInch": "1\" (480 pulses/L)",
+    "connectionSizeHelp": "Selects the flow sensor K-factor. Defaults to 3/4\".",
+    "saveDeviceSettings": "Save Device Settings",
+    "deviceTypeUpdated": "Device type changed. The device is rebooting to apply it...",
+
     // Settings page - System Parameters
     "systemParameters": "System Parameters",
     "minPressureBar": "Minimum Pressure (bar):",
@@ -278,6 +294,9 @@ const translations = {
     "mode": "Modo",
     "mainSwitch": "Interruptor Principal",
     "systemStatus": "Estado do Sistema",
+    "systemStatusTitle": "Estado do Sistema",
+    "deviceType": "Tipo de Dispositivo",
+    "connectionSize": "Tamanho da Ligação",
     "system": "Sistema",
     "error": "Erro",
     "on": "ATIVO",
@@ -317,6 +336,19 @@ const translations = {
     "mqttUsername": "Nome de Utilizador MQTT:",
     "mqttPassword": "Palavra-passe MQTT:",
     
+    // Settings page - Device
+    "deviceSettings": "Configurações do Dispositivo",
+    "deviceTypeLabel": "Tipo de Dispositivo:",
+    "controllerType": "Controlador (C)",
+    "monitorType": "Monitor (M)",
+    "deviceTypeHelp": "Os dispositivos Monitor apenas medem — todo o controlo do motor é desativado. Alterar esta opção reinicia o dispositivo.",
+    "connectionSizeLabel": "Tamanho da Ligação de Água:",
+    "sizeThreeQuarter": "3/4\" (396 impulsos/L)",
+    "sizeOneInch": "1\" (480 impulsos/L)",
+    "connectionSizeHelp": "Seleciona o fator K do sensor de caudal. Predefinição: 3/4\".",
+    "saveDeviceSettings": "Guardar Configurações do Dispositivo",
+    "deviceTypeUpdated": "Tipo de dispositivo alterado. O dispositivo está a reiniciar para aplicar...",
+
     // Settings page - System Parameters
     "systemParameters": "Parâmetros do Sistema",
     "minPressureBar": "Pressão Mínima (bar):",

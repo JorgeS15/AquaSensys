@@ -88,6 +88,26 @@
           </select>
           <small data-i18n="connectionSizeHelp">Selects the flow sensor K-factor. Defaults to 3/4&quot;.</small>
         </div>
+        <div class="form-group">
+          <label for="flow_k_factor" data-i18n="flowKFactor">Flow K-factor (0 = use size default):</label>
+          <input type="number" id="flow_k_factor" name="flow_k_factor" step="0.01" min="0">
+          <small data-i18n="flowKFactorHelp">From F = K &times; Q + offset, printed on the sensor body. 3/4&quot; = 6.6, 1&quot; = 8.</small>
+        </div>
+        <div class="form-group">
+          <label for="flow_k_offset" data-i18n="flowKOffset">Flow K-offset (Hz):</label>
+          <input type="number" id="flow_k_offset" name="flow_k_offset" step="0.01">
+          <small data-i18n="flowKOffsetHelp">The constant term in F = K &times; Q + offset. Only used when a K-factor is set.</small>
+        </div>
+        <div class="form-group">
+          <label for="flow_debounce_us" data-i18n="flowDebounce">Flow debounce (&micro;s):</label>
+          <input type="number" id="flow_debounce_us" name="flow_debounce_us" step="10" min="0" max="100000">
+          <small data-i18n="flowDebounceHelp">Rejects edges closer together than a real pulse can be. 500 &micro;s allows up to ~133 L/min.</small>
+        </div>
+        <div class="form-group">
+          <label for="max_flow_lpm" data-i18n="maxFlow">Maximum plausible flow (L/min):</label>
+          <input type="number" id="max_flow_lpm" name="max_flow_lpm" step="1" min="1">
+          <small data-i18n="maxFlowHelp">Readings above this are discarded as electrical noise.</small>
+        </div>
         <button type="submit" class="button save-btn" data-i18n="saveDeviceSettings">Save Device Settings</button>
       </form>
     </div>

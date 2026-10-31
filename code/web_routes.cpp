@@ -37,6 +37,11 @@ extern float currentL1, currentL2, currentL3, currentTotal;
 extern volatile bool motor, manualOverride, manualMotorState;
 extern volatile bool mainSwitch, error, rebootRequested;
 
+// Flow input health from code.ino — how many edges the debounce threw away and
+// how many whole samples were discarded as physically impossible
+extern volatile uint32_t flowGlitchCount;
+extern uint32_t flowRejectedSamples;
+
 // Helper function defined in code.ino
 float readMCP3208Average(int channel, int samples);
 
@@ -88,6 +93,8 @@ void publishDiagnostics() {
     doc["uptime"] = millis() / 1000;
     doc["free_heap"] = ESP.getFreeHeap();
     doc["wifi_rssi"] = WiFi.RSSI();
+    doc["flow_glitches"] = flowGlitchCount;
+    doc["flow_rejected"] = flowRejectedSamples;
     if (isControllerDevice()) doc["motor_runtime_s"] = motorRuntimeSeconds;
 
     String json;
@@ -171,6 +178,10 @@ void publishDebugData() {
     // Device profile
     doc["device_type"] = config.device_type;
     doc["connection_size"] = config.connection_size;
+    doc["flow_k_factor"] = flowKFactor();
+    doc["flow_k_offset"] = flowKOffset();
+    doc["flow_glitches"] = flowGlitchCount;
+    doc["flow_rejected"] = flowRejectedSamples;
 
     // Motor & Control State
     doc["error"] = error;
@@ -380,6 +391,8 @@ void webRoutes() {
         doc["adcType"] = "MCP3208 (Rodolfo Prieto)";
         doc["deviceType"] = config.device_type;
         doc["connectionSize"] = config.connection_size;
+        doc["flowGlitches"] = flowGlitchCount;
+        doc["flowRejected"] = flowRejectedSamples;
 
         doc["current_l1"] = currentL1;
         doc["current_l2"] = currentL2;
@@ -466,7 +479,12 @@ void webRoutes() {
             html += "Device Version: " + String(DEVICE_VERSION) + "\n";
             html += "Device Model: " + String(DEVICE_MODEL) + "\n";
             html += "Device Type: " + config.device_type + (isControllerDevice() ? " (Controller)" : " (Monitor)") + "\n";
-            html += "Connection Size: " + config.connection_size + "\" (K=" + String(flowKFactor(), 1) + ")\n";
+            html += "Connection Size: " + config.connection_size + "\"\n";
+            html += "Flow Curve: F = " + String(flowKFactor(), 2) + " * Q " +
+                    (flowKOffset() < 0 ? "- " : "+ ") + String(fabsf(flowKOffset()), 2) + " Hz\n";
+            html += "Flow Debounce: " + String(config.flow_debounce_us) + " us\n";
+            html += "Flow Glitches Rejected: " + String(flowGlitchCount) + "\n";
+            html += "Flow Samples Discarded: " + String(flowRejectedSamples) + "\n";
             html += "ADC Type: MCP3208 (Rodolfo Prieto)\n";
             html += "Current Sensors: ACS712-05B (3-Phase)\n";
             html += "</pre>";

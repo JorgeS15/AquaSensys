@@ -45,6 +45,15 @@ struct Config {
     String connection_size;     // "3/4" or "1" (inches) — selects the flow K-factor
     String device_type;         // "M" = Monitor (no motor control), "C" = Controller
 
+    // Flow sensor calibration:  F(Hz) = flow_k_factor * Q(L/min) + flow_k_offset
+    // flow_k_factor <= 0 means "use the default pair for connection_size".
+    float flow_k_factor;
+    float flow_k_offset;
+
+    // Flow input conditioning
+    unsigned int flow_debounce_us;  // ignore edges closer together than this
+    float max_flow_lpm;             // readings above this are discarded as noise
+
     // Schema version
     int config_version;
 
@@ -72,18 +81,33 @@ struct Config {
         log_interval_minutes = 5;
         connection_size = "3/4";
         device_type = "C";
-        config_version = 2;
+        flow_k_factor = 0.0f;       // 0 = derive from connection_size
+        flow_k_offset = 0.0f;
+        flow_debounce_us = 500;
+        max_flow_lpm = 150.0f;
+        config_version = 3;
     }
 };
 
 // Global config object
 extern Config config;
 
-// Flow sensor K-factors: pulse frequency (Hz) = K * flow (L/min)
-//   3/4" sensor: F = 6.6 * Q  -> 396 pulses per litre
-//   1"   sensor: F = 8.0 * Q  -> 480 pulses per litre
-static const float FLOW_K_FACTOR_THREE_QUARTER = 6.6f;
-static const float FLOW_K_FACTOR_ONE_INCH      = 8.0f;
+// Flow sensor calibration, in the datasheet form  F(Hz) = K * Q(L/min) + offset,
+// so  Q = (F - offset) / K.
+//
+// Per the YF-B size table:
+//   1/2" — F = 11  * Q        (660 pulses per litre)
+//   3/4" — F = 6.6 * Q        (396 pulses per litre)
+//   1"   — F = 8   * Q - 4    (~476 pulses per litre)
+//
+// The exact constant is printed on the sensor body and varies between YF
+// variants (the generic YF-B manual quotes F = 15 * Q - 3 for another size),
+// so both numbers can be overridden per device from config.json
+// (flow_k_factor / flow_k_offset) without reflashing.
+static const float FLOW_K_THREE_QUARTER        = 6.6f;
+static const float FLOW_K_OFFSET_THREE_QUARTER = 0.0f;
+static const float FLOW_K_ONE_INCH             = 8.0f;
+static const float FLOW_K_OFFSET_ONE_INCH      = -4.0f;
 
 // Function declarations
 bool loadConfig();
@@ -96,8 +120,10 @@ bool updateConfigFromJson(const String& jsonStr);
 String normalizeConnectionSize(const String& raw);
 String normalizeDeviceType(const String& raw);
 
-// K-factor for the configured connection size (pulses/s per L/min)
+// Effective flow calibration: the config override when flow_k_factor > 0,
+// otherwise the default pair for the configured connection size.
 float flowKFactor();
+float flowKOffset();
 
 // True when this unit drives a motor (device_type "C"); false for Monitor units
 bool isControllerDevice();

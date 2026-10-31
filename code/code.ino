@@ -21,7 +21,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.1.0"; //Connection size flow K-factor + Monitor/Controller device types
+const char* DEVICE_VERSION = "3.2.0"; //Flow input de-glitching + configurable sensor calibration
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -57,8 +57,20 @@ const float MCP3208_VREF = 5.0;  // 5V reference
 MCP3208 adc;
 
 // Variables
-volatile int pulseCount = 0;
+volatile uint32_t pulseCount = 0;
 unsigned long lastTime = 0;
+
+// Flow input conditioning.
+// A slow or noisy edge makes the GPIO input oscillate around its threshold, and
+// every oscillation would otherwise be counted as water: bursts of ~730 kHz have
+// been observed, against ~130 Hz for a real 20 L/min. lastPulseMicros/
+// flowDebounceUs reject anything faster than a real pulse can be; flowGlitchCount
+// and flowRejectedSamples expose how much is being thrown away.
+volatile uint32_t lastPulseMicros = 0;
+volatile uint32_t flowGlitchCount = 0;
+uint32_t flowRejectedSamples = 0;
+// Cached from config each cycle so the ISR never touches anything but plain RAM
+volatile uint32_t flowDebounceUs = 500;
 
 int countTemp = 0;
 
@@ -117,22 +129,33 @@ unsigned long lastRuntimeSave = 0;
 unsigned long lastLogTime = 0;
 
 void IRAM_ATTR pulseCounter() {
+    uint32_t now = micros();
+    // Unsigned subtraction, so this stays correct across the micros() rollover
+    if ((uint32_t)(now - lastPulseMicros) < flowDebounceUs) {
+        flowGlitchCount++;
+        return;
+    }
+    lastPulseMicros = now;
     pulseCount++;
 }
 
 /**
  * Convert a pulse count over an elapsed window into flow in L/min.
  *
- * Both supported sensors follow the datasheet form  F = K * Q  where F is the
- * pulse frequency in Hz and Q the flow in L/min, so Q = (pulses/s) / K.
- *   3/4" connection: K = 6.6  -> 396 pulses per litre  (default)
- *   1"   connection: K = 8.0  -> 480 pulses per litre
- * The K-factor comes from config.connection_size (see flowKFactor()).
+ * The sensors follow the datasheet form  F = K * Q + offset,  where F is the
+ * pulse frequency in Hz and Q the flow in L/min, so Q = (F - offset) / K.
+ *   3/4" connection: F = 6.6 * Q      -> 396 pulses per litre  (default)
+ *   1"   connection: F = 8 * Q - 4    -> ~476 pulses per litre
+ * Both constants come from flowKFactor()/flowKOffset(), which prefer the
+ * config.json override over the default for config.connection_size.
  */
-float computeFlowLpm(int pulses, unsigned long elapsedMs) {
-    if (elapsedMs == 0) return 0.0f;
+float computeFlowLpm(uint32_t pulses, unsigned long elapsedMs) {
+    if (elapsedMs == 0 || pulses == 0) return 0.0f;
     float pulsesPerSecond = (pulses * 1000.0f) / (float)elapsedMs;
-    return pulsesPerSecond / flowKFactor();
+    float lpm = (pulsesPerSecond - flowKOffset()) / flowKFactor();
+    // The offset makes the line cross zero at a small positive frequency, so a
+    // single stray pulse must not come out as negative flow.
+    return lpm > 0.0f ? lpm : 0.0f;
 }
 
 // ============================================================
@@ -292,8 +315,14 @@ void setup() {
                   config.device_type.c_str(),
                   isControllerDevice() ? "Controller (motor control active)"
                                        : "Monitor (motor control disabled)");
-    Serial.printf("Connection size: %s\" — flow K-factor %.1f pulses/s per L/min\n",
-                  config.connection_size.c_str(), flowKFactor());
+    Serial.printf("Connection size: %s\" — flow curve F = %.2f * Q %c %.2f Hz\n",
+                  config.connection_size.c_str(), flowKFactor(),
+                  flowKOffset() < 0 ? '-' : '+', fabsf(flowKOffset()));
+    flowDebounceUs = config.flow_debounce_us;
+    Serial.printf("Flow debounce: %lu us (ceiling %.0f L/min), max plausible %.0f L/min\n",
+                  (unsigned long)flowDebounceUs,
+                  (1000000.0f / (float)flowDebounceUs - flowKOffset()) / flowKFactor(),
+                  config.max_flow_lpm);
 
     // NEW: Load saved calibration or perform auto-calibration
     if (config.current_offset_l1 != 0.0 || config.current_offset_l2 != 0.0 || config.current_offset_l3 != 0.0) {
@@ -456,13 +485,26 @@ void loop() {
         // Read flow sensor — snapshot the ISR counter, then do the maths with
         // interrupts back on so pulses are not lost during the conversion.
         noInterrupts();
-        int pulses = pulseCount;
+        uint32_t pulses = pulseCount;
         pulseCount = 0;
         interrupts();
 
         unsigned long elapsedMs = currentTime - lastTime;
-        flow = computeFlowLpm(pulses, elapsedMs);
+        float measuredFlow = computeFlowLpm(pulses, elapsedMs);
+
+        // Electrical noise can still outrun the debounce. A reading beyond what
+        // the plumbing can physically deliver is not water, so keep the last
+        // good value rather than publishing a spike.
+        if (measuredFlow > config.max_flow_lpm) {
+            flowRejectedSamples++;
+            Serial.printf("[Flow] Discarded implausible reading: %.0f L/min (%lu pulses in %lu ms)\n",
+                          measuredFlow, (unsigned long)pulses, elapsedMs);
+        } else {
+            flow = measuredFlow;
+        }
+
         lastTime = millis();
+        flowDebounceUs = config.flow_debounce_us;  // pick up live config changes
         
         // Read all sensors (temperatures, pressures, currents)
         readAllSensors();
@@ -564,7 +606,13 @@ void testLEDs(){
 }
 
 void setupPins() {
-    pinMode(FLOW_PIN, INPUT_PULLDOWN);
+    // Plain INPUT, never INPUT_PULLDOWN. The sensor output is push-pull and
+    // reaches the ESP32 through a 5V->3.3V level converter that already pulls
+    // the line up through ~10k. An internal pull-down (~45k) divides that down
+    // to ~2.7 V against the ESP32's 2.475 V input threshold, leaving ~0.2 V of
+    // margin — close enough to the threshold for the input to oscillate and
+    // flood the ISR with phantom pulses.
+    pinMode(FLOW_PIN, INPUT);
     attachInterrupt(digitalPinToInterrupt(FLOW_PIN), pulseCounter, RISING);
     // Driven low on Monitor units too, so the output is never left floating
     pinMode(MOTOR_PIN, OUTPUT);

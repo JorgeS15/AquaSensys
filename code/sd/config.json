@@ -10,5 +10,9 @@
   "pressure_offset": 0.0,
   "temp_offset": 0.0,
   "connection_size": "3/4",
-  "device_type": "C"
+  "device_type": "C",
+  "flow_k_factor": 0.0,
+  "flow_k_offset": 0.0,
+  "flow_debounce_us": 500,
+  "max_flow_lpm": 150.0
 }

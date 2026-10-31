@@ -85,6 +85,10 @@ function populateFormFields(config) {
   // Device profile — defaults match the firmware: 3/4" connection, Controller unit
   document.getElementById('device_type').value = config.device_type === 'M' ? 'M' : 'C';
   document.getElementById('connection_size').value = config.connection_size === '1' ? '1' : '3/4';
+  document.getElementById('flow_k_factor').value = config.flow_k_factor ?? 0;
+  document.getElementById('flow_k_offset').value = config.flow_k_offset ?? 0;
+  document.getElementById('flow_debounce_us').value = config.flow_debounce_us ?? 500;
+  document.getElementById('max_flow_lpm').value = config.max_flow_lpm ?? 150;
 
   // System parameters
   document.getElementById('min_pressure').value = config.min_pressure || 2.5;
@@ -100,10 +104,22 @@ function saveConfiguration(formId, event) {
   const formData = new FormData(form);
   const data = {};
   
+  // Fields the firmware parses as numbers; FormData would hand over strings
+  const numericKeys = [
+    'mqtt_port', 'min_pressure', 'max_pressure', 'pressure_offset', 'temp_offset',
+    'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm'
+  ];
+
   // Convert FormData to a plain object
   for (const [key, value] of formData.entries()) {
     // Skip empty password fields
     if ((key === 'wifi_password' || key === 'mqtt_password') && value === '') {
+      continue;
+    }
+    if (numericKeys.includes(key)) {
+      const n = Number(value);
+      if (value === '' || Number.isNaN(n)) continue;  // leave the stored value alone
+      data[key] = n;
       continue;
     }
     data[key] = value;

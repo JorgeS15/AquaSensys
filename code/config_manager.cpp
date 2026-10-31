@@ -31,8 +31,19 @@ String normalizeDeviceType(const String& raw) {
 }
 
 float flowKFactor() {
-    return config.connection_size == "1" ? FLOW_K_FACTOR_ONE_INCH
-                                         : FLOW_K_FACTOR_THREE_QUARTER;
+    // An explicit override always wins, so a sensor whose body is printed with
+    // a different constant can be calibrated without new firmware.
+    if (config.flow_k_factor > 0.0f) return config.flow_k_factor;
+    return config.connection_size == "1" ? FLOW_K_ONE_INCH
+                                         : FLOW_K_THREE_QUARTER;
+}
+
+float flowKOffset() {
+    // The offset is only meaningful alongside the factor it was measured with,
+    // so it follows whichever of the two sources flowKFactor() picked.
+    if (config.flow_k_factor > 0.0f) return config.flow_k_offset;
+    return config.connection_size == "1" ? FLOW_K_OFFSET_ONE_INCH
+                                         : FLOW_K_OFFSET_THREE_QUARTER;
 }
 
 bool isControllerDevice() {
@@ -106,6 +117,11 @@ bool loadConfig() {
     config.connection_size = normalizeConnectionSize(doc["connection_size"] | config.connection_size);
     config.device_type     = normalizeDeviceType(doc["device_type"]         | config.device_type);
 
+    config.flow_k_factor    = doc["flow_k_factor"]    | config.flow_k_factor;
+    config.flow_k_offset    = doc["flow_k_offset"]    | config.flow_k_offset;
+    config.flow_debounce_us = doc["flow_debounce_us"] | config.flow_debounce_us;
+    config.max_flow_lpm     = doc["max_flow_lpm"]     | config.max_flow_lpm;
+
     config.config_version       = doc["config_version"]       | 1;
 
     if (config.config_version > 2)
@@ -147,6 +163,11 @@ bool saveConfig() {
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
+
+    doc["flow_k_factor"]    = config.flow_k_factor;
+    doc["flow_k_offset"]    = config.flow_k_offset;
+    doc["flow_debounce_us"] = config.flow_debounce_us;
+    doc["max_flow_lpm"]     = config.max_flow_lpm;
 
     doc["config_version"]       = config.config_version;
 
@@ -192,7 +213,13 @@ void printConfig() {
     Serial.println("Max Current: " + String(config.max_current) + " A");
     Serial.println("Max Phase Imbalance: " + String(config.max_phase_imbalance) + " A");
     Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
-    Serial.println("Connection Size: " + config.connection_size + "\" (K=" + String(flowKFactor(), 1) + ")");
+    Serial.println("Connection Size: " + config.connection_size + "\"");
+    Serial.println("Flow calibration: F = " + String(flowKFactor(), 2) + " * Q "
+                   + (flowKOffset() < 0 ? "- " : "+ ") + String(fabsf(flowKOffset()), 2)
+                   + (config.flow_k_factor > 0.0f ? "  (config override)" : "  (default for size)"));
+    Serial.println("Flow debounce: " + String(config.flow_debounce_us) + " us"
+                   + "  (ceiling " + String((1000000.0f / config.flow_debounce_us - flowKOffset()) / flowKFactor(), 0) + " L/min)");
+    Serial.println("Max plausible flow: " + String(config.max_flow_lpm, 1) + " L/min");
     Serial.println("Device Type: " + config.device_type + (isControllerDevice() ? " (Controller)" : " (Monitor)"));
     Serial.println("===========================");
 }
@@ -226,6 +253,14 @@ String getConfigJson() {
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
+
+    doc["flow_k_factor"]    = config.flow_k_factor;
+    doc["flow_k_offset"]    = config.flow_k_offset;
+    doc["flow_debounce_us"] = config.flow_debounce_us;
+    doc["max_flow_lpm"]     = config.max_flow_lpm;
+    // What the firmware will actually use, after defaults are resolved
+    doc["flow_k_factor_effective"] = flowKFactor();
+    doc["flow_k_offset_effective"] = flowKOffset();
 
     String output;
     serializeJson(doc, output);
@@ -278,6 +313,25 @@ bool updateConfigFromJson(const String& jsonStr) {
         config.connection_size = normalizeConnectionSize(doc["connection_size"].as<String>());
     if (doc.containsKey("device_type"))
         config.device_type = normalizeDeviceType(doc["device_type"].as<String>());
+
+    if (doc.containsKey("flow_k_factor")) {
+        float k = doc["flow_k_factor"];
+        // Negative is meaningless and would invert the reading; clamp to the
+        // "use the default" sentinel instead.
+        config.flow_k_factor = k > 0.0f ? k : 0.0f;
+    }
+    if (doc.containsKey("flow_k_offset"))
+        config.flow_k_offset = doc["flow_k_offset"];
+    if (doc.containsKey("flow_debounce_us")) {
+        long d = doc["flow_debounce_us"] | 500L;
+        if (d < 0) d = 0;
+        if (d > 100000L) d = 100000L;   // 10 Hz ceiling; beyond this nothing counts
+        config.flow_debounce_us = (unsigned int)d;
+    }
+    if (doc.containsKey("max_flow_lpm")) {
+        float m = doc["max_flow_lpm"];
+        config.max_flow_lpm = m > 0.0f ? m : 150.0f;
+    }
 
     return saveConfig();
 }

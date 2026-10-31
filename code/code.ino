@@ -21,7 +21,7 @@ const char* DEVICE_NAME = "AquaSensys C3";
 const char* DEVICE_ID = "aquasensys";
 const char* DEVICE_MANUFACTURER = "JorgeS15";
 const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.2.0"; //Flow input de-glitching + configurable sensor calibration
+const char* DEVICE_VERSION = "3.3.0"; //Show device name and model on the dashboard
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

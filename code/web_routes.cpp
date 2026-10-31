@@ -267,6 +267,23 @@ void webRoutes() {
         }
     });
 
+    // Device identity — the name and model live in the firmware, so the web UI
+    // has no other way to know which unit it is talking to. Static, so the UI
+    // fetches it once on load rather than carrying it on every SSE update.
+    server.on("/api/device", HTTP_GET, [](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(384);
+        doc["name"]            = DEVICE_NAME;
+        doc["model"]           = DEVICE_MODEL;
+        doc["id"]              = DEVICE_ID;
+        doc["version"]         = DEVICE_VERSION;
+        doc["device_type"]     = config.device_type;
+        doc["connection_size"] = config.connection_size;
+
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
     // API endpoint to get current configuration
     server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", getConfigJson());

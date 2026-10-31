@@ -35,8 +35,14 @@ const elements = {
   overrideBtn: document.getElementById('overrideBtn'),
   deviceType: document.getElementById('deviceType'),
   connectionSize: document.getElementById('connectionSize'),
-  systemCardTitle: document.getElementById('systemCardTitle')
+  systemCardTitle: document.getElementById('systemCardTitle'),
+  deviceName: document.getElementById('deviceName'),
+  deviceModel: document.getElementById('deviceModel'),
+  deviceVersion: document.getElementById('deviceVersion')
 };
+
+// Identity of the unit this page is talking to, from /api/device
+let deviceInfo = null;
 
 let eventSource;
 let isConnected = false;
@@ -75,6 +81,38 @@ function connectSSE() {
     }
   });
 }
+function loadDeviceInfo() {
+  fetch('/api/device')
+    .then(response => {
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      deviceInfo = data;
+      applyDeviceIdentity();
+    })
+    .catch(error => console.error('Error loading device info:', error));
+}
+
+// Show which unit this is. The name lives in the firmware, so until it arrives
+// the page keeps the generic "AquaSensys" placeholder.
+function applyDeviceIdentity() {
+  if (!deviceInfo) return;
+
+  if (elements.deviceName && deviceInfo.name) {
+    elements.deviceName.textContent = deviceInfo.name;
+    // Stop applyTranslations() putting the generic title back on a language change
+    elements.deviceName.removeAttribute('data-i18n');
+    document.title = deviceInfo.name;
+  }
+  if (elements.deviceModel) {
+    elements.deviceModel.textContent = deviceInfo.model || '--';
+  }
+  if (elements.deviceVersion) {
+    elements.deviceVersion.textContent = deviceInfo.version ? 'v' + deviceInfo.version : '--';
+  }
+}
+
 // Monitor units have no motor: hide every control and motor-state element.
 function applyDeviceType(type) {
   deviceType = type === 'M' ? 'M' : 'C';
@@ -234,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeLanguage();
   }
   
+  loadDeviceInfo();
   connectSSE();
   
   // Set initial styles

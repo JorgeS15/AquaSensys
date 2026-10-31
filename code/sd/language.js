@@ -95,6 +95,9 @@ function applyTranslations() {
   if (typeof applyDeviceType === 'function') {
     applyDeviceType(typeof deviceType !== 'undefined' ? deviceType : 'C');
   }
+  if (typeof applyDeviceIdentity === 'function') {
+    applyDeviceIdentity();
+  }
 
   // Update labels inside small tags
   const smallElements = document.querySelectorAll('small[data-i18n]');

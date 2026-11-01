@@ -115,36 +115,44 @@ float ACS712Handler::readRawRMSVoltage(uint8_t channel) {
     if (!adc) {
         return 0.0;
     }
-    
-    // Calculate number of samples needed
-    uint16_t periodMicros = (1000000 / acFrequency);
-    uint16_t totalSamples = numCycles * (periodMicros / 1000);
-    
-    if (totalSamples < 50) totalSamples = 50;
-    if (totalSamples > 200) totalSamples = 200;
-    
-    float sumSquares = 0.0;
-    uint16_t validSamples = 0;
-    
-    for (uint16_t i = 0; i < totalSamples; i++) {
-        uint16_t adcValue = adc->analogRead(channel);
-        float voltageMv = adcToMillivolts(adcValue);
-        
-        // Center around 2500mV (half of 5V)
-        float centeredMv = voltageMv - 2500.0;
-        
-        sumSquares += (centeredMv * centeredMv);
-        validSamples++;
-        
-        delayMicroseconds(100);
+
+    // Sample a whole number of mains cycles, timed with micros(). The RMS of a
+    // sine over part of a cycle depends on where in the cycle the window starts:
+    // the old loop paced 100 samples with a fixed 100 us delay, covered ~12 ms —
+    // 0.6 of a 50 Hz cycle instead of the intended cycles — and swung +/-8%
+    // from one reading to the next.
+    const uint32_t windowUs   = (uint32_t)numCycles * 1000000UL / acFrequency;
+    const uint32_t intervalUs = 200;   // 100 samples per 50 Hz cycle
+
+    double sum = 0.0;
+    double sumSquares = 0.0;
+    uint32_t samples = 0;
+    uint32_t start = micros();
+    uint32_t next = start;
+
+    while ((uint32_t)(micros() - start) < windowUs) {
+        double voltageMv = adcToMillivolts(adc->analogRead(channel));
+        sum += voltageMv;
+        sumSquares += voltageMv * voltageMv;
+        samples++;
+
+        next += intervalUs;
+        while ((int32_t)(micros() - next) < 0) { }   // hold the sample rate steady
     }
-    
-    if (validSamples == 0) {
+
+    if (samples == 0) {
         return 0.0;
     }
-    
-    // Calculate RMS voltage in mV
-    return sqrt(sumSquares / validSamples);
+
+    // AC RMS around the measured mean, not around a fixed 2500 mV. The sensor's
+    // zero point shifts with its supply and from part to part, and subtracting
+    // the idle RMS afterwards does not remove a DC offset from an RMS —
+    // sqrt(dc^2 + ac^2) - dc is not ac — so small loads used to read low
+    // (-13% at 1 A with a 25 mV offset). Double, because E[x^2] - mean^2
+    // subtracts two numbers near 6.25e6 to find one that can be under 1.
+    double mean = sum / samples;
+    double variance = sumSquares / samples - mean * mean;
+    return variance > 0.0 ? (float)sqrt(variance) : 0.0f;
 }
 
 float ACS712Handler::readACCurrent(uint8_t channel, float channelOffset) {

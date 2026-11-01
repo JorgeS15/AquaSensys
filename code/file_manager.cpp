@@ -105,44 +105,73 @@ void handleUploadPage(AsyncWebServerRequest *request) {
     }
 }
 
+// ─── Staged writes ────────────────────────────────────────────────────────────
+// Uploads are written to "<name>.part" and renamed over the real file only once
+// all of it has arrived intact. The old code deleted the live file first and
+// wrote straight into it, so a failed or interrupted upload left a truncated
+// file in its place — and still answered "Upload complete".
+
+static String partPath(const String& path) {
+    return path + ".part";
+}
+
+static bool commitPart(const String& path) {
+    if (SD.exists(path) && !SD.remove(path)) return false;
+    return SD.rename(partPath(path), path);
+}
+
+// Outcome of the upload in progress, reported by handleFileUploadComplete().
+// The upload page sends one file per request, one request at a time.
+static File   uploadFile;
+static String uploadPath;
+static bool   uploadOk = false;
+static String uploadError = "No file received";
+
 void handleFileUploadComplete(AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Upload complete");
+    if (uploadOk) {
+        request->send(200, "text/plain", "Upload complete");
+    } else {
+        request->send(500, "text/plain", uploadError);
+    }
+    // Consume the outcome, so a later request carrying no file can't inherit it
+    uploadOk = false;
+    uploadError = "No file received";
 }
 
 void handleFileUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-    static File uploadFile;
-    
     if (!index) {
-        // First chunk - open file for writing
         Serial.printf("Starting upload: %s\n", filename.c_str());
-        String filepath = "/" + filename;
-        
-        // Remove file if it exists
-        if (SD.exists(filepath)) {
-            SD.remove(filepath);
-        }
-        
-        uploadFile = SD.open(filepath, FILE_WRITE);
+        if (uploadFile) uploadFile.close();   // an earlier upload that never finished
+        uploadPath  = "/" + filename;
+        uploadOk    = true;
+        uploadError = "";
+
+        if (SD.exists(partPath(uploadPath))) SD.remove(partPath(uploadPath));
+        uploadFile = SD.open(partPath(uploadPath), FILE_WRITE);
         if (!uploadFile) {
-            Serial.println("Failed to open file for writing");
+            uploadOk = false;
+            uploadError = "Cannot create " + uploadPath + " on the SD card";
+            Serial.println(uploadError);
             return;
         }
     }
-    
-    // Write chunk to file
-    if (uploadFile && len) {
-        size_t written = uploadFile.write(data, len);
-        if (written != len) {
-            Serial.println("Write failed");
+
+    if (uploadOk && uploadFile && len) {
+        if (uploadFile.write(data, len) != len) {
+            uploadOk = false;
+            uploadError = "Write failed for " + uploadPath + " (SD card full?)";
+            Serial.println(uploadError);
         }
     }
-    
+
     if (final) {
-        // Last chunk - close file
-        if (uploadFile) {
-            uploadFile.close();
-            Serial.printf("Upload complete: %s\n", filename.c_str());
+        if (uploadFile) uploadFile.close();
+        if (uploadOk && !commitPart(uploadPath)) {
+            uploadOk = false;
+            uploadError = "Could not replace " + uploadPath;
         }
+        if (!uploadOk) SD.remove(partPath(uploadPath));   // the live file stays as it was
+        Serial.printf("Upload %s: %s\n", uploadOk ? "complete" : "failed", uploadPath.c_str());
     }
 }
 
@@ -192,6 +221,24 @@ void handleDeleteFile(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 // ─── ZIP archive upload ───────────────────────────────────────────────────────
 
 static ZipUploadState zipState;
+
+// Standard CRC-32 (zlib / ZIP), bitwise: no table, so no RAM or flash for one.
+// Chain calls starting from crc = 0.
+static uint32_t crc32Update(uint32_t crc, const uint8_t *data, size_t len) {
+    crc = ~crc;
+    while (len--) {
+        crc ^= *data++;
+        for (int k = 0; k < 8; k++) crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+    }
+    return ~crc;
+}
+
+static void zipFail(const String& msg) {
+    if (!zipState.hasError) {
+        zipState.hasError = true;
+        zipState.errorMsg = msg;
+    }
+}
 
 // Feed up to `avail` bytes from `buf` through the ZIP state machine.
 // Returns the number of bytes consumed.
@@ -301,15 +348,19 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
             zipState.skipFile = isDir || isConfig;
 
             if (!zipState.skipFile) {
+                if (zipState.extractedCount >= ZIP_MAX_FILES) {
+                    zipFail("Too many files in the archive (max " + String(ZIP_MAX_FILES) + ")");
+                    return take;
+                }
                 String path = "/" + String(zipState.filename);
-                if (SD.exists(path)) SD.remove(path);
-                zipState.outFile = SD.open(path, FILE_WRITE);
+                if (SD.exists(partPath(path))) SD.remove(partPath(path));
+                zipState.outFile = SD.open(partPath(path), FILE_WRITE);
                 if (!zipState.outFile) {
-                    zipState.hasError = true;
-                    zipState.errorMsg = "Cannot open: " + path;
+                    zipFail("Cannot create " + path + " on the SD card");
                     return take;
                 }
             }
+            zipState.crc32Actual = 0;
 
             zipState.extraRemaining = zipState.extraLen;
             zipState.state          = ZIP_READ_EXTRA;
@@ -332,18 +383,25 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
         size_t take = (avail < zipState.dataRemaining) ? avail : zipState.dataRemaining;
 
         if (!zipState.skipFile) {
-            if (zipState.outFile) zipState.outFile.write(buf, take);
+            zipState.crc32Actual = crc32Update(zipState.crc32Actual, buf, take);
+            if (zipState.outFile.write(buf, take) != take) {
+                zipFail("Write failed for /" + String(zipState.filename) + " (SD card full?)");
+                return take;
+            }
         }
 
         zipState.dataRemaining -= (uint32_t)take;
 
         if (zipState.dataRemaining == 0) {
             if (!zipState.skipFile) {
-                if (zipState.outFile) zipState.outFile.close();
-                if (zipState.extractedCount < 32) {
-                    zipState.extractedFiles[zipState.extractedCount++] = String(zipState.filename);
+                zipState.outFile.close();
+                if (zipState.crc32Actual != zipState.crc32Expected) {
+                    zipFail("Checksum mismatch in " + String(zipState.filename) + " — the archive is corrupted");
+                    return take;
                 }
-                Serial.printf("[ZIP] Extracted: %s\n", zipState.filename);
+                // Staged only: the live files are replaced once the whole archive checks out
+                zipState.extractedFiles[zipState.extractedCount++] = String(zipState.filename);
+                Serial.printf("[ZIP] Verified: %s\n", zipState.filename);
             } else if (strcmp(zipState.filename, "config.json") == 0) {
                 Serial.println("[ZIP] Skipped config.json");
             }
@@ -377,13 +435,48 @@ void handleZipUpload(AsyncWebServerRequest *request, String filename,
 
     if (final) {
         if (zipState.outFile) zipState.outFile.close();
-        Serial.printf("[ZIP] Upload complete, %d file(s) extracted\n", zipState.extractedCount);
+
+        // An archive must end between entries; anything else means the upload was cut short
+        if (zipState.state != ZIP_DONE && zipState.state != ZIP_FIND_SIG) {
+            zipFail("The archive ended mid-file — upload interrupted?");
+        }
+
+        // Only now, with every entry verified, replace the live files
+        uint8_t committed = 0;
+        if (!zipState.hasError) {
+            for (; committed < zipState.extractedCount; committed++) {
+                String path = "/" + zipState.extractedFiles[committed];
+                if (!commitPart(path)) {
+                    zipFail("Could not replace " + path);
+                    break;
+                }
+            }
+        }
+
+        if (zipState.hasError) {
+            // Throw away whatever was staged; the live files stay as they were
+            for (uint8_t i = committed; i < zipState.extractedCount; i++) {
+                SD.remove(partPath("/" + zipState.extractedFiles[i]));
+            }
+            if (!zipState.skipFile && zipState.filename[0]) {
+                SD.remove(partPath("/" + String(zipState.filename)));
+            }
+            Serial.printf("[ZIP] Failed: %s\n", zipState.errorMsg.c_str());
+        } else {
+            Serial.printf("[ZIP] Upload complete, %d file(s) replaced\n", zipState.extractedCount);
+        }
     }
 }
 
 void handleZipUploadComplete(AsyncWebServerRequest *request) {
     if (zipState.hasError) {
-        String body = "{\"success\":false,\"error\":\"" + zipState.errorMsg + "\"}";
+        // Built with ArduinoJson: the message can carry a file name, and a quote
+        // in it would have broken the hand-assembled JSON
+        DynamicJsonDocument err(384);
+        err["success"] = false;
+        err["error"] = zipState.errorMsg;
+        String body;
+        serializeJson(err, body);
         request->send(400, "application/json", body);
         return;
     }

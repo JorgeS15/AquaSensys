@@ -5,6 +5,10 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 
+// Version of the config.json layout. Bumped when loadConfig() has to migrate
+// a value written by older firmware; the migration then stamps the new number.
+static const int CONFIG_SCHEMA_VERSION = 4;
+
 // Configuration structure
 struct Config {
     // WiFi settings
@@ -21,7 +25,7 @@ struct Config {
     float min_pressure;
     float max_pressure;
     float pressure_offset;
-    float temp_offset;
+    float temp_offset;          // °C, added to the water temperature (like the pressure offsets)
 
     // Pressure sensor calibration
     float pressure_in_offset;
@@ -33,6 +37,9 @@ struct Config {
     float current_offset_l2;
     float current_offset_l3;
     bool current_calibrated;
+    // How the offsets above were measured. 1 = before v3.4.6, around a fixed
+    // 2500 mV; 2 = mean-corrected RMS. Method 1 offsets are discarded on load.
+    int current_cal_method;
 
     // Protection thresholds
     float max_current;          // overcurrent trip point (A)
@@ -74,7 +81,7 @@ struct Config {
         min_pressure = 2.5;
         max_pressure = 3.5;
         pressure_offset = 0.0;
-        temp_offset = 0.16;
+        temp_offset = 0.0f;
         pressure_in_offset = 0.0;
         pressure_out_offset = 0.0;
         pressure_calibrated = false;
@@ -82,6 +89,7 @@ struct Config {
         current_offset_l2 = 0.0;
         current_offset_l3 = 0.0;
         current_calibrated = false;
+        current_cal_method = 2;
         max_current = 15.0f;
         max_phase_imbalance = 3.0f;
         log_interval_minutes = 5;
@@ -93,7 +101,7 @@ struct Config {
         flow_k_offset = 0.0f;
         flow_debounce_us = 500;
         max_flow_lpm = 150.0f;
-        config_version = 3;
+        config_version = CONFIG_SCHEMA_VERSION;
     }
 };
 

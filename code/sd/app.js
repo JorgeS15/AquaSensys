@@ -135,6 +135,17 @@ function applyDeviceType(type) {
   }
 }
 
+// A sensor that can't be read — a disconnected temperature probe, say — arrives
+// as null. Calling toFixed() on it threw, which aborted the whole update, so one
+// dead probe froze flow, motor and status too. Show a dash for it instead.
+function isReading(v) {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function formatReading(v, decimals) {
+  return isReading(v) ? v.toFixed(decimals) : '--';
+}
+
 function updateDashboard(data) {
   if (data.deviceType !== undefined) {
     applyDeviceType(data.deviceType);
@@ -145,17 +156,17 @@ function updateDashboard(data) {
   }
 
   if (data.pressure !== undefined) {
-    elements.pressure.textContent = data.pressure.toFixed(2);
-    updatePressureBar(data.pressure);
+    elements.pressure.textContent = formatReading(data.pressure, 2);
+    if (isReading(data.pressure)) updatePressureBar(data.pressure);
   }
   
   if (data.temperature !== undefined) {
-    elements.temperature.textContent = data.temperature.toFixed(2);
-    updateTemperatureColor(data.temperature);
+    elements.temperature.textContent = formatReading(data.temperature, 2);
+    if (isReading(data.temperature)) updateTemperatureColor(data.temperature);
   }
   
   if (data.flow !== undefined) {
-    elements.flow.textContent = data.flow.toFixed(2);
+    elements.flow.textContent = formatReading(data.flow, 2);
   }
   
   if (data.motor !== undefined) {

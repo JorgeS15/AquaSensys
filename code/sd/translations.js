@@ -101,7 +101,7 @@ const translations = {
     "minPressureBar": "Minimum Pressure (bar):",
     "maxPressureBar": "Maximum Pressure (bar):",
     "pressureOffset": "Pressure Offset:",
-    "tempOffset": "Temperature Offset:",
+    "tempOffset": "Water Temperature Offset (°C):",
     "saveParameters": "Save Parameters",
     
     // Settings page - System Actions
@@ -382,7 +382,7 @@ const translations = {
     "minPressureBar": "Pressão Mínima (bar):",
     "maxPressureBar": "Pressão Máxima (bar):",
     "pressureOffset": "Offset de Pressão:",
-    "tempOffset": "Offset de Temperatura:",
+    "tempOffset": "Offset da Temperatura da Água (°C):",
     "saveParameters": "Guardar Parâmetros",
     
     // Settings page - System Actions

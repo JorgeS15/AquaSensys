@@ -125,6 +125,8 @@ bool loadConfig() {
     config.current_offset_l2 = doc["current_offset_l2"] | config.current_offset_l2;
     config.current_offset_l3 = doc["current_offset_l3"] | config.current_offset_l3;
     config.current_calibrated = doc["current_calibrated"] | config.current_calibrated;
+    // A file without the key predates v3.4.6, so its offsets are method 1
+    config.current_cal_method = doc["current_cal_method"] | 1;
 
     config.max_current          = doc["max_current"]          | config.max_current;
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
@@ -144,8 +146,42 @@ bool loadConfig() {
 
     config.config_version       = doc["config_version"]       | 1;
 
-    if (config.config_version > 2)
-        Serial.printf("[Config] Warning: unexpected config version %d\n", config.config_version);
+    if (config.config_version > CONFIG_SCHEMA_VERSION)
+        Serial.printf("[Config] Warning: config version %d is newer than this firmware's %d\n",
+                      config.config_version, CONFIG_SCHEMA_VERSION);
+
+    // Schema 4 (v3.4.10): temp_offset is applied to the water temperature for the
+    // first time. Earlier firmware wrote 0.16 as its default although the value
+    // was never used; carried over, it would now shift every reading by 0.16 °C
+    // that nobody asked for. That exact default becomes 0 — any other value is
+    // somebody's deliberate setting and is kept.
+    bool migrated = false;
+    if (config.config_version < 4) {
+        if (fabsf(config.temp_offset - 0.16f) < 0.0005f) {
+            Serial.println("[Config] temp_offset 0.16 was the unused old default; resetting to 0");
+            config.temp_offset = 0.0f;
+        }
+        config.config_version = 4;
+        migrated = true;
+    }
+    if (migrated) saveConfig();
+
+    // Current-sensor offsets saved before v3.4.6 measured the sensor's DC
+    // offset, which the mean-corrected RMS now removes by itself. Applied on top,
+    // they would subtract 0.1-0.4 A from every reading, so they are discarded
+    // once; the next calibration stores method-2 offsets.
+    if (config.current_cal_method < 2) {
+        if (config.current_offset_l1 != 0.0f || config.current_offset_l2 != 0.0f ||
+            config.current_offset_l3 != 0.0f) {
+            Serial.printf("[Config] Discarding pre-3.4.6 current offsets (%.1f, %.1f, %.1f mA)\n",
+                          config.current_offset_l1, config.current_offset_l2, config.current_offset_l3);
+        }
+        config.current_offset_l1 = 0.0f;
+        config.current_offset_l2 = 0.0f;
+        config.current_offset_l3 = 0.0f;
+        config.current_cal_method = 2;
+        saveConfig();
+    }
 
     Serial.println("Config loaded successfully");
     printConfig();
@@ -176,6 +212,7 @@ bool saveConfig() {
     doc["current_offset_l2"] = config.current_offset_l2;
     doc["current_offset_l3"] = config.current_offset_l3;
     doc["current_calibrated"] = config.current_calibrated;
+    doc["current_cal_method"] = config.current_cal_method;
 
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
@@ -227,7 +264,7 @@ void printConfig() {
     Serial.println("Min Pressure: " + String(config.min_pressure));
     Serial.println("Max Pressure: " + String(config.max_pressure));
     Serial.println("Pressure Offset: " + String(config.pressure_offset));
-    Serial.println("Temp Offset: " + String(config.temp_offset));
+    Serial.println("Water Temp Offset: " + String(config.temp_offset) + " C");
     Serial.println("Current Offset L1: " + String(config.current_offset_l1));
     Serial.println("Current Offset L2: " + String(config.current_offset_l2));
     Serial.println("Current Offset L3: " + String(config.current_offset_l3));

@@ -8,6 +8,11 @@ describing the change.
 Small changes increment **only the last digit**: 3.4.0 → 3.4.1 → 3.4.2 → …
 Every change to the firmware or the web UI gets its own bump.
 
+Every bump gets an entry in `CHANGELOG.md`, newest first, dated when it reaches
+`main`. Mark changes that live in `code/sd/` with **[web UI]**. Update
+`README.md` when a change adds or alters a `config.json` key or a behaviour
+it describes.
+
 ## Things that are easy to get wrong
 
 - **The web UI lives on the SD card, not in the firmware.** An OTA firmware update

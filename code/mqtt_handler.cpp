@@ -19,6 +19,12 @@ static char mqttTopicError[64];
 static char mqttTopicReboot[64];
 static char mqttTopicState[64];
 
+// "online" / "offline", retained. The broker publishes "offline" itself (the
+// last will) when the board stops answering, and every discovered entity points
+// at this topic — so Home Assistant marks a dead unit unavailable instead of
+// showing its last retained state, a running pump included, indefinitely.
+static char mqttTopicAvailability[64];
+
 // Broker session id. Built from DEVICE_ID plus the last three MAC bytes so it is
 // unique per physical board: the broker drops an existing session whenever a new
 // one connects with the same client id, so two boards sharing an id knock each
@@ -32,6 +38,7 @@ void setupMQTT() {
     snprintf(mqttTopicError,    sizeof(mqttTopicError),     "homeassistant/%s/error/set",    DEVICE_ID);
     snprintf(mqttTopicReboot,   sizeof(mqttTopicReboot),    "homeassistant/%s/reboot/set",   DEVICE_ID);
     snprintf(mqttTopicState,    sizeof(mqttTopicState),     "homeassistant/%s/state",        DEVICE_ID);
+    snprintf(mqttTopicAvailability, sizeof(mqttTopicAvailability), "homeassistant/%s/availability", DEVICE_ID);
 
     uint8_t mac[6];
     WiFi.macAddress(mac);
@@ -69,6 +76,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         Serial.printf("Main switch: %s\n", mainSwitch ? "ON" : "OFF");
     } else if (controller && strcmp(topic, mqttTopicError) == 0) {
         error = (strcmp(message, "ON") == 0);
+        if (!error) motorFault = false;   // clearing the error clears a latched electrical fault
         Serial.printf("Error state: %s\n", error ? "ON" : "OFF");
     } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
         Serial.println("Reboot requested via MQTT");
@@ -79,8 +87,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 bool reconnectMQTT() {
-    if (mqttClient.connect(mqttClientId, config.mqtt_user.c_str(), config.mqtt_password.c_str())) {
+    // Last will: retained "offline" on the availability topic, sent by the broker
+    // once the keepalive lapses (~1.5 x 15 s) without a clean disconnect
+    if (mqttClient.connect(mqttClientId, config.mqtt_user.c_str(), config.mqtt_password.c_str(),
+                           mqttTopicAvailability, 0, true, "offline")) {
         Serial.println("MQTT connected");
+        mqttClient.publish(mqttTopicAvailability, "online", true);
 
         if (isControllerDevice()) {
             mqttClient.subscribe(mqttTopicMotor);
@@ -203,7 +215,7 @@ void createSensorConfig(const char* sensorId, const char* name, const char* unit
     char configTopic[96];
     snprintf(configTopic, sizeof(configTopic), "homeassistant/sensor/%s_%s/config", DEVICE_ID, sensorId);
 
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(640);
     doc["name"]        = name;
     doc["unique_id"]   = String(DEVICE_ID) + "_" + sensorId;
     doc["state_topic"] = stateTopic;
@@ -211,6 +223,7 @@ void createSensorConfig(const char* sensorId, const char* name, const char* unit
     if (unit)        doc["unit_of_measurement"] = unit;
     if (deviceClass) doc["device_class"]        = deviceClass;
     if (icon)        doc["icon"]                = icon;
+    doc["availability_topic"] = mqttTopicAvailability;
     doc["device"]    = deviceDoc;
 
     publishDiscovery(configTopic, doc);
@@ -222,7 +235,7 @@ void createSwitchConfig(const char* switchId, const char* name, const char* icon
     char configTopic[96];
     snprintf(configTopic, sizeof(configTopic), "homeassistant/switch/%s_%s/config", DEVICE_ID, switchId);
 
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(640);
     doc["name"]           = name;
     doc["unique_id"]      = String(DEVICE_ID) + "_" + switchId;
     doc["state_topic"]    = stateTopic;
@@ -231,6 +244,7 @@ void createSwitchConfig(const char* switchId, const char* name, const char* icon
     doc["payload_on"]     = "ON";
     doc["payload_off"]    = "OFF";
     if (icon) doc["icon"] = icon;
+    doc["availability_topic"] = mqttTopicAvailability;
     doc["device"]         = deviceDoc;
 
     publishDiscovery(configTopic, doc);
@@ -241,12 +255,13 @@ void createButtonConfig(const char* buttonId, const char* name, const char* icon
     char configTopic[96];
     snprintf(configTopic, sizeof(configTopic), "homeassistant/button/%s_%s/config", DEVICE_ID, buttonId);
 
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(640);
     doc["name"]           = name;
     doc["unique_id"]      = String(DEVICE_ID) + "_" + buttonId;
     doc["command_topic"]  = commandTopic;
     doc["payload_press"]  = "PRESS";
     if (icon) doc["icon"] = icon;
+    doc["availability_topic"] = mqttTopicAvailability;
     doc["device"]         = deviceDoc;
 
     publishDiscovery(configTopic, doc);
@@ -259,7 +274,7 @@ void createBinarySensorConfig(const char* sensorId, const char* name,
     char configTopic[96];
     snprintf(configTopic, sizeof(configTopic), "homeassistant/binary_sensor/%s_%s/config", DEVICE_ID, sensorId);
 
-    DynamicJsonDocument doc(512);
+    DynamicJsonDocument doc(640);
     doc["name"]           = name;
     doc["unique_id"]      = String(DEVICE_ID) + "_" + sensorId;
     doc["state_topic"]    = stateTopic;
@@ -268,6 +283,7 @@ void createBinarySensorConfig(const char* sensorId, const char* name,
     doc["payload_off"]    = "OFF";
     if (deviceClass) doc["device_class"] = deviceClass;
     if (icon)        doc["icon"]         = icon;
+    doc["availability_topic"] = mqttTopicAvailability;
     doc["device"]         = deviceDoc;
 
     publishDiscovery(configTopic, doc);

@@ -21,6 +21,7 @@ extern volatile bool manualOverride;
 extern volatile bool manualMotorState;
 extern volatile bool mainSwitch;
 extern volatile bool error;
+extern volatile bool motorFault;
 extern volatile bool rebootRequested;
 
 // Set true by loop() when sensor state changes; MQTT task reads and publishes

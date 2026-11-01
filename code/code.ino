@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.2"; //Pump safety: no boot ERROR latch, non-blocking WiFi reconnect, motor pin low from reset
+const char* DEVICE_VERSION = "3.4.10"; //Temperature Offset (°C) applied to the water temperature; default 0
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -45,7 +45,6 @@ const unsigned long MQTT_RECONNECT_INTERVAL = 5000;
 #define MOTOR_PIN 26
 #define LED_BLUE 22
 #define FLOW_PIN 33
-#define TEMP_PIN 35      
 
 // MCP3208 Channels - UPDATED MAPPING
 #define MCP_CH_AMBIENT_TEMP  0   // Channel 0 for ambient temperature sensor (LM35)
@@ -81,14 +80,11 @@ uint32_t flowRejectedSamples = 0;
 // Cached from config each cycle so the ISR never touches anything but plain RAM
 volatile uint32_t flowDebounceUs = 500;
 
-int countTemp = 0;
-
 // Measured values - UPDATED
 float pressure = 0;          // Primary pressure (inlet)
 float temperature = 0;       // Water temperature
 float ambientTemp = 0;       // Ambient temperature
 float flow = 0;              // Flow rate
-float totalTemp = 0;         // Accumulator for temperature averaging
 
 // False until readAllSensors() has run once. Before that every reading above is
 // its initial 0, and 0 bar is below the 1 bar fault threshold: evaluating the
@@ -112,8 +108,12 @@ volatile bool manualMotorState = false;
 volatile bool mainSwitch = true;
 bool lights = true;
 volatile bool error = false;
+// Latched electrical fault: overcurrent or phase imbalance. Unlike the pressure
+// and dry-run faults, manual mode cannot override it — it protects the motor
+// itself, whoever is commanding it. Cleared with the error, by turning the main
+// switch back on or switching the error off from Home Assistant.
+volatile bool motorFault = false;
 volatile bool rebootRequested = false;
-bool shouldRead = false;
 bool debug = false;  // Debug mode disabled by default
 
 // Timing for sensor updates
@@ -272,31 +272,22 @@ float readOutPressure() {
  */
 float readWaterTemp() {
     float temp_voltage = readMCP3208Average(MCP_CH_WATER_TEMP, NUM_SAMPLES);
-    
+
+    // A probe that is disconnected or shorted pins the divider to a rail, and the
+    // conversion below then divides by zero or takes log(0). Report "no reading"
+    // (NAN, serialised as null) rather than a meaningless number. Real readings
+    // sit well inside these bounds (~0.15 V at 100 °C to ~3.3 V near 0 °C).
+    if (temp_voltage < 0.05f || temp_voltage > 4.95f) return NAN;
+
     // Convert voltage to resistance and then to temperature
     float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
     float tempC = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
-    
-    return tempC;
-}
 
-/**
- * DEPRECATED: Old water temperature reading from ESP32 ADC
- * Keeping for backward compatibility but not used in normal operation
- */
-float readAverageTemperature(int read) {
-    totalTemp += readMCP3208Average(TEMP_PIN, 1);
-    countTemp++;
-    
-    if (read) {
-        float temp_voltage = totalTemp / countTemp * (5.0 / 4096.0) + config.temp_offset;
-        float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
-        float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
-        totalTemp = 0;
-        countTemp = 0;
-        return temp;
-    }
-    return 0;
+    if (isnan(tempC) || isinf(tempC)) return NAN;
+
+    // User calibration from config.json, in °C — the counterpart of the
+    // pressure offsets. Applied only to a real reading: NAN stays NAN.
+    return tempC + config.temp_offset;
 }
 
 /**
@@ -359,7 +350,9 @@ void setup() {
     Serial.println("MCP3208 initialized (Rodolfo Prieto library)");
     
     // NEW: Initialize ACS712 current sensor handler
-    currentSensor.begin(&adc, 50, 5); // 50Hz AC frequency, 5 cycles per reading
+    // 2 full 50 Hz cycles (40 ms) per phase: a whole number of cycles is what makes
+    // the RMS exact, and 2 keeps the three phases to ~120 ms of each 1 s loop.
+    currentSensor.begin(&adc, 50, 2);
     currentSensor.setCalibration(0.0, 1000.0); // offset in mV, scale factor
     Serial.println("ACS712 current sensors initialized (L1, L2, L3)");
     
@@ -391,14 +384,23 @@ void setup() {
             config.current_offset_l3
         );
         Serial.println("✓ Loaded saved current sensor calibration from config");
+    } else if (!isControllerDevice()) {
+        // A Monitor doesn't drive the pump, so it can't know the pump is stopped,
+        // and calibrating while it runs would record the running current as zero.
+        // Readings are mean-corrected, so they are accurate uncalibrated; the
+        // residual noise (~40 mA) is below the 0.1 A display floor.
+        Serial.println("⚠ No saved current calibration — skipped on a Monitor, which can't be sure the pump is off.");
+        Serial.println("  Calibrate from the Diagnostics page with the pump stopped if needed.");
     } else {
-        // No saved calibration - perform auto-calibration
+        // No saved calibration - perform auto-calibration. Safe on a Controller:
+        // the motor output has been held low since reset.
         Serial.println("\n⚠ No saved calibration found");
         Serial.println("⚠ IMPORTANT: Make sure motor is OFF!");
         Serial.println("Starting auto-calibration in 3 seconds...");
         delay(3000);
 
-        if (currentSensor.performAutoCalibration(100)) {
+        // 10 full-cycle windows per phase: each one already averages 2 cycles
+        if (currentSensor.performAutoCalibration(10)) {
             CalibrationData cal = currentSensor.getCalibrationData();
             config.current_offset_l1 = cal.offsetL1;
             config.current_offset_l2 = cal.offsetL2;
@@ -413,10 +415,6 @@ void setup() {
     // Setup WiFi
     setupWiFi();
 
-    // MQTT runs on its own FreeRTOS task (Core 0) so blocking TCP connect()
-    // calls never stall the Arduino loop() task
-    xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 1, NULL, 0);
-
     // Setup OTA updates
     OTA.begin(&server, "/update");
     OTA.enableBackup(true, "/backup");
@@ -426,6 +424,12 @@ void setup() {
     mqttClient.setBufferSize(1024);
     mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
     setupMQTT();
+
+    // MQTT runs on its own FreeRTOS task (Core 0) so blocking TCP connect()
+    // calls never stall the Arduino loop() task. It is started only now: it
+    // begins connecting at once, and before setupMQTT() its client id, topics
+    // and server were still empty.
+    xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 1, NULL, 0);
     
     // Setup web routes
     webRoutes();
@@ -642,7 +646,9 @@ void controlMotor() {
 
     if (mainSwitch) {
         if (manualOverride) {
-            motor = manualMotorState;
+            // checkForErrors() runs just before this; without the motorFault
+            // check, manual mode would switch the motor straight back on.
+            motor = manualMotorState && !motorFault;
         } else {
             if (!error){
                 if (pressure <= config.min_pressure) {
@@ -774,24 +780,32 @@ void checkForErrors() {
         return;
     }
 
+    // Electrical faults apply in every mode: manual mode overrides the pressure
+    // logic, not the motor's own protection.
+    if (motor && currentTotal > config.max_current) {
+        if (!motorFault) Serial.printf("[Error] Overcurrent: %.2f A > %.2f A\n", currentTotal, config.max_current);
+        motorFault = true;
+    }
+    if (motor) {
+        float maxI = max(currentL1, max(currentL2, currentL3));
+        float minI = min(currentL1, min(currentL2, currentL3));
+        if (maxI - minI > config.max_phase_imbalance) {
+            if (!motorFault) Serial.printf("[Error] Phase imbalance: %.2f A > %.2f A\n", maxI - minI, config.max_phase_imbalance);
+            motorFault = true;
+        }
+    }
+
     if (!manualOverride) {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;
         }
-        if (motor && currentTotal > config.max_current) {
-            error = true;
-            Serial.println("[Error] Overcurrent detected");
-        }
-        if (motor) {
-            float maxI = max(currentL1, max(currentL2, currentL3));
-            float minI = min(currentL1, min(currentL2, currentL3));
-            if (maxI - minI > config.max_phase_imbalance) {
-                error = true;
-                Serial.println("[Error] Phase imbalance detected");
-            }
-        }
     } else {
+        // Manual mode is how an operator primes or refills an empty system, where
+        // low pressure and no flow are expected — so those faults stay cleared.
         error = false;
+    }
+    if (motorFault) {
+        error = true;
     }
     if (error) {
         motor = false;

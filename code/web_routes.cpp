@@ -35,7 +35,7 @@ extern float currentL1, currentL2, currentL3, currentTotal;
 
 // Control flags from code.ino
 extern volatile bool motor, manualOverride, manualMotorState;
-extern volatile bool mainSwitch, error, rebootRequested;
+extern volatile bool mainSwitch, error, rebootRequested, motorFault;
 
 // Flow input health from code.ino — how many edges the debounce threw away and
 // how many whole samples were discarded as physically impossible
@@ -44,6 +44,39 @@ extern uint32_t flowRejectedSamples;
 
 // Helper function defined in code.ino
 float readMCP3208Average(int channel, int samples);
+
+/**
+ * Gather a request body that may arrive in several chunks.
+ *
+ * Returns the whole body, NUL-terminated, once its last chunk is in, and
+ * nullptr until then — or if the body was refused, in which case a response
+ * has already been sent. The buffer lives in request->_tempObject, which the
+ * request frees when it is destroyed.
+ *
+ * The handler this replaces built a String from `data` directly: the chunk is
+ * not NUL-terminated, so that read past the end of the buffer, and a body
+ * split across chunks was parsed one fragment at a time.
+ */
+static const char* collectBody(AsyncWebServerRequest* request, uint8_t* data, size_t len,
+                               size_t index, size_t total, size_t maxTotal) {
+    if (total > maxTotal) {
+        if (index == 0) request->send(413, "application/json", "{\"error\":\"Request body too large\"}");
+        return nullptr;
+    }
+    if (index == 0) {
+        request->_tempObject = malloc(total + 1);
+        if (!request->_tempObject) {
+            request->send(500, "application/json", "{\"error\":\"Out of memory\"}");
+            return nullptr;
+        }
+    }
+    char* body = (char*)request->_tempObject;
+    if (!body || index + len > total) return nullptr;
+    memcpy(body + index, data, len);
+    if (index + len < total) return nullptr;   // more chunks to come
+    body[total] = '\0';
+    return body;
+}
 
 void notifyClients() {
     // Skip if no clients, or if STA WiFi is down (avoids zombie-client watchdog)
@@ -299,7 +332,11 @@ void webRoutes() {
     // API endpoint to update configuration
     server.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        String jsonStr = String((char*)data).substring(0, len);
+        // updateConfigFromJson() parses into a 2048-byte document, so a larger
+        // body could not be applied anyway
+        const char* body = collectBody(request, data, len, index, total, 2048);
+        if (!body) return;
+        String jsonStr(body);
 
         // Switching between Monitor and Controller changes the MQTT entities and
         // the control loop, so it only takes effect after a restart.
@@ -308,7 +345,10 @@ void webRoutes() {
         String previousDeviceName = config.device_name;
 
         if (updateConfigFromJson(jsonStr)) {
-            DynamicJsonDocument doc(256);
+            // Only read to see whether WiFi keys were sent. At 256 bytes the device
+            // settings form (nine fields) overflowed this, and only gave the right
+            // answer because its WiFi keys happen to be absent.
+            DynamicJsonDocument doc(1024);
             deserializeJson(doc, jsonStr);
             bool wifiChanged = doc.containsKey("wifi_ssid") || doc.containsKey("wifi_password");
             // The identity is resolved once at boot (MQTT topics, discovery,
@@ -351,7 +391,9 @@ void webRoutes() {
         }
 
         Serial.println("\n=== Manual Calibration Requested via API ===");
-        if (currentSensor.performAutoCalibration(100)) {
+        // 10 full-cycle windows per phase (~1.2 s). Each window is now 2 whole
+        // cycles, so 100 of them would hold the async_tcp task for ~13 s.
+        if (currentSensor.performAutoCalibration(10)) {
             CalibrationData cal = currentSensor.getCalibrationData();
             config.current_offset_l1 = cal.offsetL1;
             config.current_offset_l2 = cal.offsetL2;
@@ -471,6 +513,7 @@ void webRoutes() {
                     mainSwitch = !mainSwitch;
                     if (mainSwitch) {
                         error = false;
+                        motorFault = false;   // the reset also clears a latched electrical fault
                     }
                 }
 

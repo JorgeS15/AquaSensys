@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.5"; //Overcurrent and phase-imbalance protection also apply in manual mode
+const char* DEVICE_VERSION = "3.4.6"; //Current sensor: whole-cycle, mean-corrected RMS
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -370,7 +370,9 @@ void setup() {
     Serial.println("MCP3208 initialized (Rodolfo Prieto library)");
     
     // NEW: Initialize ACS712 current sensor handler
-    currentSensor.begin(&adc, 50, 5); // 50Hz AC frequency, 5 cycles per reading
+    // 2 full 50 Hz cycles (40 ms) per phase: a whole number of cycles is what makes
+    // the RMS exact, and 2 keeps the three phases to ~120 ms of each 1 s loop.
+    currentSensor.begin(&adc, 50, 2);
     currentSensor.setCalibration(0.0, 1000.0); // offset in mV, scale factor
     Serial.println("ACS712 current sensors initialized (L1, L2, L3)");
     
@@ -402,14 +404,23 @@ void setup() {
             config.current_offset_l3
         );
         Serial.println("✓ Loaded saved current sensor calibration from config");
+    } else if (!isControllerDevice()) {
+        // A Monitor doesn't drive the pump, so it can't know the pump is stopped,
+        // and calibrating while it runs would record the running current as zero.
+        // Readings are mean-corrected, so they are accurate uncalibrated; the
+        // residual noise (~40 mA) is below the 0.1 A display floor.
+        Serial.println("⚠ No saved current calibration — skipped on a Monitor, which can't be sure the pump is off.");
+        Serial.println("  Calibrate from the Diagnostics page with the pump stopped if needed.");
     } else {
-        // No saved calibration - perform auto-calibration
+        // No saved calibration - perform auto-calibration. Safe on a Controller:
+        // the motor output has been held low since reset.
         Serial.println("\n⚠ No saved calibration found");
         Serial.println("⚠ IMPORTANT: Make sure motor is OFF!");
         Serial.println("Starting auto-calibration in 3 seconds...");
         delay(3000);
 
-        if (currentSensor.performAutoCalibration(100)) {
+        // 10 full-cycle windows per phase: each one already averages 2 cycles
+        if (currentSensor.performAutoCalibration(10)) {
             CalibrationData cal = currentSensor.getCalibrationData();
             config.current_offset_l1 = cal.offsetL1;
             config.current_offset_l2 = cal.offsetL2;

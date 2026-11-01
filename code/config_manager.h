@@ -33,6 +33,9 @@ struct Config {
     float current_offset_l2;
     float current_offset_l3;
     bool current_calibrated;
+    // How the offsets above were measured. 1 = before v3.4.6, around a fixed
+    // 2500 mV; 2 = mean-corrected RMS. Method 1 offsets are discarded on load.
+    int current_cal_method;
 
     // Protection thresholds
     float max_current;          // overcurrent trip point (A)
@@ -82,6 +85,7 @@ struct Config {
         current_offset_l2 = 0.0;
         current_offset_l3 = 0.0;
         current_calibrated = false;
+        current_cal_method = 2;
         max_current = 15.0f;
         max_phase_imbalance = 3.0f;
         log_interval_minutes = 5;

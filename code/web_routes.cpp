@@ -351,7 +351,9 @@ void webRoutes() {
         }
 
         Serial.println("\n=== Manual Calibration Requested via API ===");
-        if (currentSensor.performAutoCalibration(100)) {
+        // 10 full-cycle windows per phase (~1.2 s). Each window is now 2 whole
+        // cycles, so 100 of them would hold the async_tcp task for ~13 s.
+        if (currentSensor.performAutoCalibration(10)) {
             CalibrationData cal = currentSensor.getCalibrationData();
             config.current_offset_l1 = cal.offsetL1;
             config.current_offset_l2 = cal.offsetL2;

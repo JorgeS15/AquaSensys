@@ -125,6 +125,8 @@ bool loadConfig() {
     config.current_offset_l2 = doc["current_offset_l2"] | config.current_offset_l2;
     config.current_offset_l3 = doc["current_offset_l3"] | config.current_offset_l3;
     config.current_calibrated = doc["current_calibrated"] | config.current_calibrated;
+    // A file without the key predates v3.4.6, so its offsets are method 1
+    config.current_cal_method = doc["current_cal_method"] | 1;
 
     config.max_current          = doc["max_current"]          | config.max_current;
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
@@ -146,6 +148,23 @@ bool loadConfig() {
 
     if (config.config_version > 2)
         Serial.printf("[Config] Warning: unexpected config version %d\n", config.config_version);
+
+    // Current-sensor offsets saved before v3.4.6 measured the sensor's DC
+    // offset, which the mean-corrected RMS now removes by itself. Applied on top,
+    // they would subtract 0.1-0.4 A from every reading, so they are discarded
+    // once; the next calibration stores method-2 offsets.
+    if (config.current_cal_method < 2) {
+        if (config.current_offset_l1 != 0.0f || config.current_offset_l2 != 0.0f ||
+            config.current_offset_l3 != 0.0f) {
+            Serial.printf("[Config] Discarding pre-3.4.6 current offsets (%.1f, %.1f, %.1f mA)\n",
+                          config.current_offset_l1, config.current_offset_l2, config.current_offset_l3);
+        }
+        config.current_offset_l1 = 0.0f;
+        config.current_offset_l2 = 0.0f;
+        config.current_offset_l3 = 0.0f;
+        config.current_cal_method = 2;
+        saveConfig();
+    }
 
     Serial.println("Config loaded successfully");
     printConfig();
@@ -176,6 +195,7 @@ bool saveConfig() {
     doc["current_offset_l2"] = config.current_offset_l2;
     doc["current_offset_l3"] = config.current_offset_l3;
     doc["current_calibrated"] = config.current_calibrated;
+    doc["current_cal_method"] = config.current_cal_method;
 
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;

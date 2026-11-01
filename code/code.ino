@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.2"; //Pump safety: no boot ERROR latch, non-blocking WiFi reconnect, motor pin low from reset
+const char* DEVICE_VERSION = "3.4.3"; //MQTT availability: entities go unavailable when a unit drops off
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

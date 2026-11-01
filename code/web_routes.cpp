@@ -271,7 +271,14 @@ void webRoutes() {
     // has no other way to know which unit it is talking to. Static, so the UI
     // fetches it once on load rather than carrying it on every SSE update.
     server.on("/api/device", HTTP_GET, [](AsyncWebServerRequest *request) {
-        DynamicJsonDocument doc(384);
+        DynamicJsonDocument doc(448);
+        // What the dashboard header shows: "AquaSensys - C3" / "AquaSensys - M",
+        // unless the user gave the unit its own name. Kept separate from
+        // DEVICE_NAME so the Home Assistant device names don't change with it.
+        String displayName = config.device_name.length()
+            ? config.device_name
+            : String("AquaSensys - ") + (isControllerDevice() ? "C3" : "M");
+        doc["display_name"]    = displayName;
         doc["name"]            = DEVICE_NAME;
         doc["model"]           = DEVICE_MODEL;
         doc["id"]              = DEVICE_ID;

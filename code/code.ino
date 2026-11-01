@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.0"; //Per-unit identity from config.json
+const char* DEVICE_VERSION = "3.4.1"; //Dashboard header shows "AquaSensys - C3" / "AquaSensys - M"
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.4"; //A sensor with no reading shows "--" instead of freezing the web UI
+const char* DEVICE_VERSION = "3.4.5"; //Overcurrent and phase-imbalance protection also apply in manual mode
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -112,6 +112,11 @@ volatile bool manualMotorState = false;
 volatile bool mainSwitch = true;
 bool lights = true;
 volatile bool error = false;
+// Latched electrical fault: overcurrent or phase imbalance. Unlike the pressure
+// and dry-run faults, manual mode cannot override it — it protects the motor
+// itself, whoever is commanding it. Cleared with the error, by turning the main
+// switch back on or switching the error off from Home Assistant.
+volatile bool motorFault = false;
 volatile bool rebootRequested = false;
 bool shouldRead = false;
 bool debug = false;  // Debug mode disabled by default
@@ -648,7 +653,9 @@ void controlMotor() {
 
     if (mainSwitch) {
         if (manualOverride) {
-            motor = manualMotorState;
+            // checkForErrors() runs just before this; without the motorFault
+            // check, manual mode would switch the motor straight back on.
+            motor = manualMotorState && !motorFault;
         } else {
             if (!error){
                 if (pressure <= config.min_pressure) {
@@ -780,24 +787,32 @@ void checkForErrors() {
         return;
     }
 
+    // Electrical faults apply in every mode: manual mode overrides the pressure
+    // logic, not the motor's own protection.
+    if (motor && currentTotal > config.max_current) {
+        if (!motorFault) Serial.printf("[Error] Overcurrent: %.2f A > %.2f A\n", currentTotal, config.max_current);
+        motorFault = true;
+    }
+    if (motor) {
+        float maxI = max(currentL1, max(currentL2, currentL3));
+        float minI = min(currentL1, min(currentL2, currentL3));
+        if (maxI - minI > config.max_phase_imbalance) {
+            if (!motorFault) Serial.printf("[Error] Phase imbalance: %.2f A > %.2f A\n", maxI - minI, config.max_phase_imbalance);
+            motorFault = true;
+        }
+    }
+
     if (!manualOverride) {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;
         }
-        if (motor && currentTotal > config.max_current) {
-            error = true;
-            Serial.println("[Error] Overcurrent detected");
-        }
-        if (motor) {
-            float maxI = max(currentL1, max(currentL2, currentL3));
-            float minI = min(currentL1, min(currentL2, currentL3));
-            if (maxI - minI > config.max_phase_imbalance) {
-                error = true;
-                Serial.println("[Error] Phase imbalance detected");
-            }
-        }
     } else {
+        // Manual mode is how an operator primes or refills an empty system, where
+        // low pressure and no flow are expected — so those faults stay cleared.
         error = false;
+    }
+    if (motorFault) {
+        error = true;
     }
     if (error) {
         motor = false;

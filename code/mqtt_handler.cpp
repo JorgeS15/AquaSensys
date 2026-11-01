@@ -76,6 +76,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         Serial.printf("Main switch: %s\n", mainSwitch ? "ON" : "OFF");
     } else if (controller && strcmp(topic, mqttTopicError) == 0) {
         error = (strcmp(message, "ON") == 0);
+        if (!error) motorFault = false;   // clearing the error clears a latched electrical fault
         Serial.printf("Error state: %s\n", error ? "ON" : "OFF");
     } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
         Serial.println("Reboot requested via MQTT");

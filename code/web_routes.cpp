@@ -35,7 +35,7 @@ extern float currentL1, currentL2, currentL3, currentTotal;
 
 // Control flags from code.ino
 extern volatile bool motor, manualOverride, manualMotorState;
-extern volatile bool mainSwitch, error, rebootRequested;
+extern volatile bool mainSwitch, error, rebootRequested, motorFault;
 
 // Flow input health from code.ino — how many edges the debounce threw away and
 // how many whole samples were discarded as physically impossible
@@ -471,6 +471,7 @@ void webRoutes() {
                     mainSwitch = !mainSwitch;
                     if (mainSwitch) {
                         error = false;
+                        motorFault = false;   // the reset also clears a latched electrical fault
                     }
                 }
 

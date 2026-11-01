@@ -32,11 +32,22 @@ const elements = {
   ipAddress: document.getElementById('ipAddress'),
   toggleBtn: document.getElementById('toggleBtn'),
   mainSwitchBtn: document.getElementById('mainSwitchBtn'),
-  overrideBtn: document.getElementById('overrideBtn')
+  overrideBtn: document.getElementById('overrideBtn'),
+  deviceType: document.getElementById('deviceType'),
+  connectionSize: document.getElementById('connectionSize'),
+  systemCardTitle: document.getElementById('systemCardTitle'),
+  deviceName: document.getElementById('deviceName'),
+  deviceModel: document.getElementById('deviceModel'),
+  deviceVersion: document.getElementById('deviceVersion')
 };
+
+// Identity of the unit this page is talking to, from /api/device
+let deviceInfo = null;
 
 let eventSource;
 let isConnected = false;
+// "C" = Controller (motor control available), "M" = Monitor (readings only)
+let deviceType = 'C';
 
 function connectSSE() {
   if (eventSource) {
@@ -70,7 +81,66 @@ function connectSSE() {
     }
   });
 }
+function loadDeviceInfo() {
+  fetch('/api/device')
+    .then(response => {
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      deviceInfo = data;
+      applyDeviceIdentity();
+    })
+    .catch(error => console.error('Error loading device info:', error));
+}
+
+// Show which unit this is. The name lives in the firmware, so until it arrives
+// the page keeps the generic "AquaSensys" placeholder.
+function applyDeviceIdentity() {
+  if (!deviceInfo) return;
+
+  if (elements.deviceName && deviceInfo.name) {
+    elements.deviceName.textContent = deviceInfo.name;
+    // Stop applyTranslations() putting the generic title back on a language change
+    elements.deviceName.removeAttribute('data-i18n');
+    document.title = deviceInfo.name;
+  }
+  if (elements.deviceModel) {
+    elements.deviceModel.textContent = deviceInfo.model || '--';
+  }
+  if (elements.deviceVersion) {
+    elements.deviceVersion.textContent = deviceInfo.version ? 'v' + deviceInfo.version : '--';
+  }
+}
+
+// Monitor units have no motor: hide every control and motor-state element.
+function applyDeviceType(type) {
+  deviceType = type === 'M' ? 'M' : 'C';
+  const isController = deviceType === 'C';
+
+  document.querySelectorAll('.motor-only').forEach(el => {
+    el.style.display = isController ? '' : 'none';
+  });
+
+  if (elements.deviceType) {
+    elements.deviceType.textContent = i18n(isController ? 'controllerType' : 'monitorType');
+  }
+
+  if (elements.systemCardTitle) {
+    elements.systemCardTitle.textContent =
+      i18n(isController ? 'systemControls' : 'systemStatusTitle');
+  }
+}
+
 function updateDashboard(data) {
+  if (data.deviceType !== undefined) {
+    applyDeviceType(data.deviceType);
+  }
+
+  if (data.connectionSize !== undefined && elements.connectionSize) {
+    elements.connectionSize.textContent = data.connectionSize + '"';
+  }
+
   if (data.pressure !== undefined) {
     elements.pressure.textContent = data.pressure.toFixed(2);
     updatePressureBar(data.pressure);
@@ -141,9 +211,10 @@ function updateConnectionStatus(connected) {
   wifiIcon.style.color = connected ? '#4bb543' : '#ec0b43';
   elements.ipAddress.textContent = statusText;
   
-  elements.toggleBtn.disabled = !connected;
-  elements.mainSwitchBtn.disabled = !connected;
-  elements.overrideBtn.disabled = !connected;
+  const controlsUsable = connected && deviceType === 'C';
+  elements.toggleBtn.disabled = !controlsUsable;
+  elements.mainSwitchBtn.disabled = !controlsUsable;
+  elements.overrideBtn.disabled = !controlsUsable;
 }
 
 function sendCommand(command) {
@@ -155,6 +226,11 @@ function sendCommand(command) {
   
   if (!isConnected) {
     console.error('Cannot send command: not connected to server');
+    return;
+  }
+
+  if (deviceType === 'M') {
+    console.error('Cannot send command: this is a Monitor (type M) device');
     return;
   }
   
@@ -196,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeLanguage();
   }
   
+  loadDeviceInfo();
   connectSSE();
   
   // Set initial styles

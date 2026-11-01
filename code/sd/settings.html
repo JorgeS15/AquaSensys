@@ -70,6 +70,49 @@
     </div>
     
     <div class="card settings-card">
+      <h2><i class="fas fa-microchip"></i> <span data-i18n="deviceSettings">Device Settings</span></h2>
+      <form id="deviceForm">
+        <div class="form-group">
+          <label for="device_type" data-i18n="deviceTypeLabel">Device Type:</label>
+          <select id="device_type" name="device_type">
+            <option value="C" data-i18n="controllerType">Controller (C)</option>
+            <option value="M" data-i18n="monitorType">Monitor (M)</option>
+          </select>
+          <small data-i18n="deviceTypeHelp">Monitor units only measure — all motor control is disabled. Changing this reboots the device.</small>
+        </div>
+        <div class="form-group">
+          <label for="connection_size" data-i18n="connectionSizeLabel">Water Connection Size:</label>
+          <select id="connection_size" name="connection_size">
+            <option value="3/4" data-i18n="sizeThreeQuarter">3/4&quot; (396 pulses/L)</option>
+            <option value="1" data-i18n="sizeOneInch">1&quot; (480 pulses/L)</option>
+          </select>
+          <small data-i18n="connectionSizeHelp">Selects the flow sensor K-factor. Defaults to 3/4&quot;.</small>
+        </div>
+        <div class="form-group">
+          <label for="flow_k_factor" data-i18n="flowKFactor">Flow K-factor (0 = use size default):</label>
+          <input type="number" id="flow_k_factor" name="flow_k_factor" step="0.01" min="0">
+          <small data-i18n="flowKFactorHelp">From F = K &times; Q + offset, printed on the sensor body. 3/4&quot; = 6.6, 1&quot; = 8.</small>
+        </div>
+        <div class="form-group">
+          <label for="flow_k_offset" data-i18n="flowKOffset">Flow K-offset (Hz):</label>
+          <input type="number" id="flow_k_offset" name="flow_k_offset" step="0.01">
+          <small data-i18n="flowKOffsetHelp">The constant term in F = K &times; Q + offset. Only used when a K-factor is set.</small>
+        </div>
+        <div class="form-group">
+          <label for="flow_debounce_us" data-i18n="flowDebounce">Flow debounce (&micro;s):</label>
+          <input type="number" id="flow_debounce_us" name="flow_debounce_us" step="10" min="0" max="100000">
+          <small data-i18n="flowDebounceHelp">Rejects edges closer together than a real pulse can be. 500 &micro;s allows up to ~133 L/min.</small>
+        </div>
+        <div class="form-group">
+          <label for="max_flow_lpm" data-i18n="maxFlow">Maximum plausible flow (L/min):</label>
+          <input type="number" id="max_flow_lpm" name="max_flow_lpm" step="1" min="1">
+          <small data-i18n="maxFlowHelp">Readings above this are discarded as electrical noise.</small>
+        </div>
+        <button type="submit" class="button save-btn" data-i18n="saveDeviceSettings">Save Device Settings</button>
+      </form>
+    </div>
+
+    <div class="card settings-card">
       <h2><i class="fas fa-sliders-h"></i> <span data-i18n="systemParameters">System Parameters</span></h2>
       <form id="paramsForm">
         <div class="form-group">

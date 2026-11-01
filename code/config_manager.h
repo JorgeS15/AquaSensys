@@ -5,6 +5,10 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 
+// Version of the config.json layout. Bumped when loadConfig() has to migrate
+// a value written by older firmware; the migration then stamps the new number.
+static const int CONFIG_SCHEMA_VERSION = 4;
+
 // Configuration structure
 struct Config {
     // WiFi settings
@@ -21,7 +25,7 @@ struct Config {
     float min_pressure;
     float max_pressure;
     float pressure_offset;
-    float temp_offset;
+    float temp_offset;          // °C, added to the water temperature (like the pressure offsets)
 
     // Pressure sensor calibration
     float pressure_in_offset;
@@ -77,7 +81,7 @@ struct Config {
         min_pressure = 2.5;
         max_pressure = 3.5;
         pressure_offset = 0.0;
-        temp_offset = 0.16;
+        temp_offset = 0.0f;
         pressure_in_offset = 0.0;
         pressure_out_offset = 0.0;
         pressure_calibrated = false;
@@ -97,7 +101,7 @@ struct Config {
         flow_k_offset = 0.0f;
         flow_debounce_us = 500;
         max_flow_lpm = 150.0f;
-        config_version = 3;
+        config_version = CONFIG_SCHEMA_VERSION;
     }
 };
 

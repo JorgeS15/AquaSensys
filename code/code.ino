@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.9"; //MQTT task starts after its setup; dead temperature code removed
+const char* DEVICE_VERSION = "3.4.10"; //Temperature Offset (°C) applied to the water temperature; default 0
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -283,7 +283,11 @@ float readWaterTemp() {
     float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
     float tempC = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
 
-    return (isnan(tempC) || isinf(tempC)) ? NAN : tempC;
+    if (isnan(tempC) || isinf(tempC)) return NAN;
+
+    // User calibration from config.json, in °C — the counterpart of the
+    // pressure offsets. Applied only to a real reading: NAN stays NAN.
+    return tempC + config.temp_offset;
 }
 
 /**

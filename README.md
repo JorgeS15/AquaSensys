@@ -1,19 +1,22 @@
 # AquaSensys
 Intelligent Water Supply Monitor and Controller Module
 
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each firmware version.
+
 ## Configuration (`config.json` on the SD card)
 
-Two keys describe the unit itself. Both are optional — if a key is missing or
-unreadable, the default below is used.
+Every setting lives in `config.json` on the SD card, and every key is optional:
+a missing or unreadable key falls back to the default listed here. Most can also
+be changed from the web UI, under **Settings**.
+
+### The unit itself
 
 | Key | Values | Default | Meaning |
 |---|---|---|---|
-| `connection_size` | `"3/4"`, `"1"` | `"3/4"` | Water connection size, in inches. Selects the flow sensor K-factor. |
 | `device_type` | `"M"`, `"C"` | `"C"` | `M` = Monitor, `C` = Controller. |
+| `connection_size` | `"3/4"`, `"1"` | `"3/4"` | Water connection size, in inches. Selects the flow sensor K-factor. |
 | `device_id` | `[a-z0-9-]`, ≤ 32 chars | by type | Names the MQTT topics, the Home Assistant entities and the mDNS host. **Must differ on every unit.** |
 | `device_name` | text, ≤ 48 chars | by type | Display name in Home Assistant and on the dashboard. |
-
-Both can also be set from the web UI, under **Settings → Device Settings**.
 
 ### Device identity
 
@@ -21,20 +24,45 @@ Every unit runs the same firmware binary, so the identity comes from
 `config.json` rather than from the build. Left blank, `device_id` and
 `device_name` default by device type:
 
-| `device_type` | `device_id` | `device_name` | Model |
-|---|---|---|---|
-| `C` | `aquasensys` | AquaSensys C3 | AquaSensys C3 |
-| `M` | `aquasensys-m` | AquaSensys M | AquaSensys Monitor |
+| `device_type` | `device_id` | `device_name` | Model | Dashboard header |
+|---|---|---|---|---|
+| `C` | `aquasensys` | AquaSensys C3 | AquaSensys C3 | AquaSensys - C3 |
+| `M` | `aquasensys-m` | AquaSensys M | AquaSensys Monitor | AquaSensys - M |
 
 So one Controller and one Monitor need no configuration. **Two units of the
 same type must each be given their own `device_id`**: with a shared id they
 publish into the same Home Assistant entities, and a Monitor will remove the
-motor switches belonging to the Controller it is impersonating.
+motor switches belonging to the Controller it is impersonating. A `device_name`
+you set replaces the dashboard header too.
 
 The MQTT client id is `<device_id>-<last 3 MAC bytes>`, so two boards never
 knock each other off the broker, even if misconfigured with the same id.
 Changing `device_id` creates a new device in Home Assistant; changing either
 key reboots the unit, since topics and the mDNS name are built at startup.
+
+### Sensor calibration
+
+Offsets are added to the converted reading and are stored in `config.json`.
+
+| Key | Unit | Default | Meaning |
+|---|---|---|---|
+| `pressure_offset` | bar | `0` | Added to both pressure sensors. |
+| `pressure_in_offset`, `pressure_out_offset` | bar | `0` | Per-sensor zero, written by **Calibrate pressure** on the Diagnostics page (run it with the system depressurised). |
+| `temp_offset` | °C | `0` | Added to the water temperature. Set under **Settings → System Parameters**. |
+| `current_offset_l1` … `_l3` | mA | `0` | Per-phase zero, written by **Calibrate current** on the Diagnostics page (run it with the pump stopped). |
+
+`temp_offset` only takes effect from v3.4.10; before that the setting existed
+but was never applied. Units that still carried the old unused default of 0.16
+have it reset to 0 the first time they boot v3.4.10, so their readings don't
+shift. Any other value is kept.
+
+Current is measured as the RMS over two whole mains cycles, around the measured
+mean, so it is accurate without calibration; the residual noise (~40 mA) sits
+below the 0.1 A display floor. Offsets saved before v3.4.6 were measured the old
+way and are discarded once (`current_cal_method` records which method produced
+the saved offsets). A Controller then recalibrates at boot, with its motor
+output held off. A Monitor never calibrates at boot, because it doesn't drive the pump and can't know it is
+stopped.
 
 ### Flow rate
 
@@ -86,7 +114,7 @@ If those counters keep climbing, the cause is electrical, not firmware:
   CPU at all.
 - Use shielded cable for the sensor, routed away from pump and mains wiring.
 
-### Device type
+## Device type
 
 A **Controller** (`"C"`) is the full module: it reads the sensors and drives the
 pump motor from the pressure thresholds, the main switch and the manual override.
@@ -97,8 +125,56 @@ A **Monitor** (`"M"`) only measures. All motor control logic is disabled:
 - No dry-run watchdog, no overcurrent or phase-imbalance trip, no runtime counter.
 - `/command` returns HTTP 409, and the dashboard hides the motor controls.
 - MQTT publishes sensors only — no motor, main-power or override switches. The
-  error state is still reported, as a read-only binary sensor.
+  error state is still reported, as a read-only binary sensor, and follows the
+  live reading instead of latching.
 - The status LED shows only healthy (green heartbeat) or error (red blink).
 
 Changing `device_type` reboots the device, since it changes the MQTT entities
 that are advertised.
+
+## Pump protection (Controller)
+
+In automatic mode the pump starts at `min_pressure` and stops at `max_pressure`
+(defaults 2.5 and 3.5 bar). These faults stop it and latch the error:
+
+| Fault | Trips when | Active in manual mode |
+|---|---|---|
+| Pressure out of range | below 1 bar or above 5 bar | no |
+| Dry run | motor on with no flow for 10 s | no |
+| Overcurrent | total current above `max_current` (default 15 A) | **yes** |
+| Phase imbalance | phases differ by more than `max_phase_imbalance` (default 3 A) | **yes** |
+
+Manual mode overrides the pressure logic, not the motor's own protection:
+low pressure and no flow are expected while an operator primes or refills an
+empty system, but an electrical fault stops the motor whoever is commanding it.
+
+A latched fault is cleared by turning the main switch back on, or by switching
+the error off from Home Assistant. If the cause is still there, it trips again.
+
+On boot the motor output is held off from reset, and no fault is judged and no
+control decision is made until the sensors have produced a first real reading.
+A WiFi outage does not slow the control loop: reconnection runs in the
+background, one short step per loop pass.
+
+## Home Assistant (MQTT)
+
+Each unit publishes its entities through MQTT discovery under its `device_id`,
+with its readings on `homeassistant/<id>/state`. It connects with a last will on
+`homeassistant/<id>/availability`: the broker publishes `offline` there once the
+unit stops answering (within ~25 s), and every entity points at that topic, so Home
+Assistant shows a dead unit as unavailable rather than frozen on its last state.
+
+## Updating a unit
+
+There are two halves, and a firmware update only covers one of them:
+
+1. **Firmware** — flash `aquasensys-firmware-*.bin` from the release through the
+   device's firmware update page (OTA).
+2. **Web UI** — the pages are served from the SD card, and a firmware update
+   does not touch them. Upload `sd-assets.zip` from the same release through the
+   device's `/upload` page. Your `config.json` is never overwritten.
+
+Uploads are staged: each file is written to `<name>.part` and only replaces the
+live one once it has arrived intact, and a ZIP is replaced as a whole only after
+every file in it has passed its CRC check. A failed or interrupted upload
+reports an error and leaves the existing web UI exactly as it was.

@@ -146,8 +146,25 @@ bool loadConfig() {
 
     config.config_version       = doc["config_version"]       | 1;
 
-    if (config.config_version > 2)
-        Serial.printf("[Config] Warning: unexpected config version %d\n", config.config_version);
+    if (config.config_version > CONFIG_SCHEMA_VERSION)
+        Serial.printf("[Config] Warning: config version %d is newer than this firmware's %d\n",
+                      config.config_version, CONFIG_SCHEMA_VERSION);
+
+    // Schema 4 (v3.4.10): temp_offset is applied to the water temperature for the
+    // first time. Earlier firmware wrote 0.16 as its default although the value
+    // was never used; carried over, it would now shift every reading by 0.16 °C
+    // that nobody asked for. That exact default becomes 0 — any other value is
+    // somebody's deliberate setting and is kept.
+    bool migrated = false;
+    if (config.config_version < 4) {
+        if (fabsf(config.temp_offset - 0.16f) < 0.0005f) {
+            Serial.println("[Config] temp_offset 0.16 was the unused old default; resetting to 0");
+            config.temp_offset = 0.0f;
+        }
+        config.config_version = 4;
+        migrated = true;
+    }
+    if (migrated) saveConfig();
 
     // Current-sensor offsets saved before v3.4.6 measured the sensor's DC
     // offset, which the mean-corrected RMS now removes by itself. Applied on top,
@@ -247,7 +264,7 @@ void printConfig() {
     Serial.println("Min Pressure: " + String(config.min_pressure));
     Serial.println("Max Pressure: " + String(config.max_pressure));
     Serial.println("Pressure Offset: " + String(config.pressure_offset));
-    Serial.println("Temp Offset: " + String(config.temp_offset));
+    Serial.println("Water Temp Offset: " + String(config.temp_offset) + " C");
     Serial.println("Current Offset L1: " + String(config.current_offset_l1));
     Serial.println("Current Offset L2: " + String(config.current_offset_l2));
     Serial.println("Current Offset L3: " + String(config.current_offset_l3));

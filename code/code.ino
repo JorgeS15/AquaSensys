@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.7"; //Uploads are staged and verified; a failed one leaves the live files intact
+const char* DEVICE_VERSION = "3.4.8"; //Settings requests are read in full, never past the end of the buffer
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

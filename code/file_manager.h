@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 
 #define ZIP_MAX_FILENAME 128
+#define ZIP_MAX_FILES    32
 
 enum ZipParseState {
     ZIP_IDLE,
@@ -26,6 +27,7 @@ struct ZipUploadState {
 
     uint16_t compressionMethod;
     uint32_t crc32Expected;
+    uint32_t crc32Actual;       // running CRC-32 of the entry being extracted
     uint32_t compressedSize;
     uint32_t uncompressedSize;
     uint16_t filenameLen;
@@ -40,7 +42,7 @@ struct ZipUploadState {
     File     outFile;
     bool     skipFile;
 
-    String   extractedFiles[32];
+    String   extractedFiles[ZIP_MAX_FILES];   // staged as <name>.part until the whole archive checks out
     uint8_t  extractedCount;
 
     uint8_t  sigBuf[4];

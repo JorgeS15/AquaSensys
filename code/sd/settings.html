@@ -73,6 +73,16 @@
       <h2><i class="fas fa-microchip"></i> <span data-i18n="deviceSettings">Device Settings</span></h2>
       <form id="deviceForm">
         <div class="form-group">
+          <label for="device_name" data-i18n="deviceNameLabel">Device Name:</label>
+          <input type="text" id="device_name" name="device_name" maxlength="48" placeholder="AquaSensys C3">
+          <small data-i18n="deviceNameHelp">Shown in Home Assistant and on the dashboard. Leave blank for the default of the device type.</small>
+        </div>
+        <div class="form-group">
+          <label for="device_id" data-i18n="deviceIdLabel">Device ID:</label>
+          <input type="text" id="device_id" name="device_id" maxlength="32" pattern="[a-z0-9\-]*" placeholder="aquasensys">
+          <small data-i18n="deviceIdHelp">Must be different on every unit: it names the MQTT topics and the Home Assistant entities. Lower-case letters, digits and hyphens. Leave blank for the default of the device type. Changing it creates a new device in Home Assistant.</small>
+        </div>
+        <div class="form-group">
           <label for="device_type" data-i18n="deviceTypeLabel">Device Type:</label>
           <select id="device_type" name="device_type">
             <option value="C" data-i18n="controllerType">Controller (C)</option>

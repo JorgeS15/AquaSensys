@@ -30,6 +30,23 @@ String normalizeDeviceType(const String& raw) {
     return "C";
 }
 
+String normalizeDeviceId(const String& raw) {
+    String out;
+    String s = raw;
+    s.trim();
+    s.toLowerCase();
+    for (size_t i = 0; i < s.length() && out.length() < 32; i++) {
+        char c = s[i];
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+            out += c;
+        } else if (out.length() > 0 && out[out.length() - 1] != '-') {
+            out += '-';   // spaces, underscores and the like collapse to one hyphen
+        }
+    }
+    while (out.endsWith("-")) out.remove(out.length() - 1);
+    return out;
+}
+
 float flowKFactor() {
     // An explicit override always wins, so a sensor whose body is printed with
     // a different constant can be calibrated without new firmware.
@@ -116,6 +133,9 @@ bool loadConfig() {
     // Missing keys keep the constructor defaults: 3/4" connection, Controller unit
     config.connection_size = normalizeConnectionSize(doc["connection_size"] | config.connection_size);
     config.device_type     = normalizeDeviceType(doc["device_type"]         | config.device_type);
+    config.device_id       = normalizeDeviceId(doc["device_id"]             | config.device_id);
+    config.device_name     = doc["device_name"]                             | config.device_name;
+    config.device_name.trim();
 
     config.flow_k_factor    = doc["flow_k_factor"]    | config.flow_k_factor;
     config.flow_k_offset    = doc["flow_k_offset"]    | config.flow_k_offset;
@@ -163,6 +183,8 @@ bool saveConfig() {
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
+    doc["device_id"]       = config.device_id;
+    doc["device_name"]     = config.device_name;
 
     doc["flow_k_factor"]    = config.flow_k_factor;
     doc["flow_k_offset"]    = config.flow_k_offset;
@@ -221,6 +243,8 @@ void printConfig() {
                    + "  (ceiling " + String((1000000.0f / config.flow_debounce_us - flowKOffset()) / flowKFactor(), 0) + " L/min)");
     Serial.println("Max plausible flow: " + String(config.max_flow_lpm, 1) + " L/min");
     Serial.println("Device Type: " + config.device_type + (isControllerDevice() ? " (Controller)" : " (Monitor)"));
+    Serial.println("Device ID: " + (config.device_id.length() ? config.device_id : String("(default for type)")));
+    Serial.println("Device Name: " + (config.device_name.length() ? config.device_name : String("(default for type)")));
     Serial.println("===========================");
 }
 
@@ -253,6 +277,8 @@ String getConfigJson() {
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
+    doc["device_id"]       = config.device_id;
+    doc["device_name"]     = config.device_name;
 
     doc["flow_k_factor"]    = config.flow_k_factor;
     doc["flow_k_offset"]    = config.flow_k_offset;
@@ -313,6 +339,13 @@ bool updateConfigFromJson(const String& jsonStr) {
         config.connection_size = normalizeConnectionSize(doc["connection_size"].as<String>());
     if (doc.containsKey("device_type"))
         config.device_type = normalizeDeviceType(doc["device_type"].as<String>());
+    if (doc.containsKey("device_id"))
+        config.device_id = normalizeDeviceId(doc["device_id"].as<String>());
+    if (doc.containsKey("device_name")) {
+        config.device_name = doc["device_name"].as<String>();
+        config.device_name.trim();
+        if (config.device_name.length() > 48) config.device_name = config.device_name.substring(0, 48);
+    }
 
     if (doc.containsKey("flow_k_factor")) {
         float k = doc["flow_k_factor"];

@@ -19,6 +19,12 @@ static char mqttTopicError[64];
 static char mqttTopicReboot[64];
 static char mqttTopicState[64];
 
+// Broker session id. Built from DEVICE_ID plus the last three MAC bytes so it is
+// unique per physical board: the broker drops an existing session whenever a new
+// one connects with the same client id, so two boards sharing an id knock each
+// other offline in turn, every reconnect interval, indefinitely.
+static char mqttClientId[48];
+
 void setupMQTT() {
     snprintf(mqttTopicMotor,    sizeof(mqttTopicMotor),    "homeassistant/%s/motor/set",    DEVICE_ID);
     snprintf(mqttTopicOverride, sizeof(mqttTopicOverride),  "homeassistant/%s/override/set", DEVICE_ID);
@@ -26,6 +32,11 @@ void setupMQTT() {
     snprintf(mqttTopicError,    sizeof(mqttTopicError),     "homeassistant/%s/error/set",    DEVICE_ID);
     snprintf(mqttTopicReboot,   sizeof(mqttTopicReboot),    "homeassistant/%s/reboot/set",   DEVICE_ID);
     snprintf(mqttTopicState,    sizeof(mqttTopicState),     "homeassistant/%s/state",        DEVICE_ID);
+
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    snprintf(mqttClientId, sizeof(mqttClientId), "%s-%02x%02x%02x", DEVICE_ID, mac[3], mac[4], mac[5]);
+    Serial.printf("MQTT client id: %s\n", mqttClientId);
 
     mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
     mqttClient.setCallback(mqttCallback);
@@ -68,7 +79,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 bool reconnectMQTT() {
-    if (mqttClient.connect(DEVICE_ID, config.mqtt_user.c_str(), config.mqtt_password.c_str())) {
+    if (mqttClient.connect(mqttClientId, config.mqtt_user.c_str(), config.mqtt_password.c_str())) {
         Serial.println("MQTT connected");
 
         if (isControllerDevice()) {

@@ -45,6 +45,12 @@ struct Config {
     String connection_size;     // "3/4" or "1" (inches) — selects the flow K-factor
     String device_type;         // "M" = Monitor (no motor control), "C" = Controller
 
+    // Identity on the network. Empty means "derive from device_type" — see
+    // resolveDeviceIdentity() in code.ino. One firmware binary runs on every
+    // unit, so anything that must differ between units has to live here.
+    String device_id;           // MQTT topics, HA unique_ids, mDNS hostname
+    String device_name;         // display name in Home Assistant and the web UI
+
     // Flow sensor calibration:  F(Hz) = flow_k_factor * Q(L/min) + flow_k_offset
     // flow_k_factor <= 0 means "use the default pair for connection_size".
     float flow_k_factor;
@@ -81,6 +87,8 @@ struct Config {
         log_interval_minutes = 5;
         connection_size = "3/4";
         device_type = "C";
+        device_id = "";
+        device_name = "";
         flow_k_factor = 0.0f;       // 0 = derive from connection_size
         flow_k_offset = 0.0f;
         flow_debounce_us = 500;
@@ -119,6 +127,10 @@ bool updateConfigFromJson(const String& jsonStr);
 // Normalisers — accept loose user input, return a canonical value
 String normalizeConnectionSize(const String& raw);
 String normalizeDeviceType(const String& raw);
+// Lower-case [a-z0-9-], at most 32 chars; "" if nothing usable is left.
+// The id becomes an MQTT topic level, a Home Assistant object id and an mDNS
+// hostname, and this is the character set all three accept.
+String normalizeDeviceId(const String& raw);
 
 // Effective flow calibration: the config override when flow_k_factor > 0,
 // otherwise the default pair for the configured connection size.

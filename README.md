@@ -10,8 +10,31 @@ unreadable, the default below is used.
 |---|---|---|---|
 | `connection_size` | `"3/4"`, `"1"` | `"3/4"` | Water connection size, in inches. Selects the flow sensor K-factor. |
 | `device_type` | `"M"`, `"C"` | `"C"` | `M` = Monitor, `C` = Controller. |
+| `device_id` | `[a-z0-9-]`, ≤ 32 chars | by type | Names the MQTT topics, the Home Assistant entities and the mDNS host. **Must differ on every unit.** |
+| `device_name` | text, ≤ 48 chars | by type | Display name in Home Assistant and on the dashboard. |
 
 Both can also be set from the web UI, under **Settings → Device Settings**.
+
+### Device identity
+
+Every unit runs the same firmware binary, so the identity comes from
+`config.json` rather than from the build. Left blank, `device_id` and
+`device_name` default by device type:
+
+| `device_type` | `device_id` | `device_name` | Model |
+|---|---|---|---|
+| `C` | `aquasensys` | AquaSensys C3 | AquaSensys C3 |
+| `M` | `aquasensys-m` | AquaSensys M | AquaSensys Monitor |
+
+So one Controller and one Monitor need no configuration. **Two units of the
+same type must each be given their own `device_id`**: with a shared id they
+publish into the same Home Assistant entities, and a Monitor will remove the
+motor switches belonging to the Controller it is impersonating.
+
+The MQTT client id is `<device_id>-<last 3 MAC bytes>`, so two boards never
+knock each other off the broker, even if misconfigured with the same id.
+Changing `device_id` creates a new device in Home Assistant; changing either
+key reboots the unit, since topics and the mDNS name are built at startup.
 
 ### Flow rate
 

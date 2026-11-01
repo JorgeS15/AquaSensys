@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.8"; //Settings requests are read in full, never past the end of the buffer
+const char* DEVICE_VERSION = "3.4.9"; //MQTT task starts after its setup; dead temperature code removed
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -45,7 +45,6 @@ const unsigned long MQTT_RECONNECT_INTERVAL = 5000;
 #define MOTOR_PIN 26
 #define LED_BLUE 22
 #define FLOW_PIN 33
-#define TEMP_PIN 35      
 
 // MCP3208 Channels - UPDATED MAPPING
 #define MCP_CH_AMBIENT_TEMP  0   // Channel 0 for ambient temperature sensor (LM35)
@@ -81,14 +80,11 @@ uint32_t flowRejectedSamples = 0;
 // Cached from config each cycle so the ISR never touches anything but plain RAM
 volatile uint32_t flowDebounceUs = 500;
 
-int countTemp = 0;
-
 // Measured values - UPDATED
 float pressure = 0;          // Primary pressure (inlet)
 float temperature = 0;       // Water temperature
 float ambientTemp = 0;       // Ambient temperature
 float flow = 0;              // Flow rate
-float totalTemp = 0;         // Accumulator for temperature averaging
 
 // False until readAllSensors() has run once. Before that every reading above is
 // its initial 0, and 0 bar is below the 1 bar fault threshold: evaluating the
@@ -118,7 +114,6 @@ volatile bool error = false;
 // switch back on or switching the error off from Home Assistant.
 volatile bool motorFault = false;
 volatile bool rebootRequested = false;
-bool shouldRead = false;
 bool debug = false;  // Debug mode disabled by default
 
 // Timing for sensor updates
@@ -292,25 +287,6 @@ float readWaterTemp() {
 }
 
 /**
- * DEPRECATED: Old water temperature reading from ESP32 ADC
- * Keeping for backward compatibility but not used in normal operation
- */
-float readAverageTemperature(int read) {
-    totalTemp += readMCP3208Average(TEMP_PIN, 1);
-    countTemp++;
-    
-    if (read) {
-        float temp_voltage = totalTemp / countTemp * (5.0 / 4096.0) + config.temp_offset;
-        float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
-        float temp = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
-        totalTemp = 0;
-        countTemp = 0;
-        return temp;
-    }
-    return 0;
-}
-
-/**
  * NEW: Read all sensors including current sensors
  */
 void readAllSensors() {
@@ -435,10 +411,6 @@ void setup() {
     // Setup WiFi
     setupWiFi();
 
-    // MQTT runs on its own FreeRTOS task (Core 0) so blocking TCP connect()
-    // calls never stall the Arduino loop() task
-    xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 1, NULL, 0);
-
     // Setup OTA updates
     OTA.begin(&server, "/update");
     OTA.enableBackup(true, "/backup");
@@ -448,6 +420,12 @@ void setup() {
     mqttClient.setBufferSize(1024);
     mqttClient.setServer(config.mqtt_server.c_str(), config.mqtt_port);
     setupMQTT();
+
+    // MQTT runs on its own FreeRTOS task (Core 0) so blocking TCP connect()
+    // calls never stall the Arduino loop() task. It is started only now: it
+    // begins connecting at once, and before setupMQTT() its client id, topics
+    // and server were still empty.
+    xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 1, NULL, 0);
     
     // Setup web routes
     webRoutes();

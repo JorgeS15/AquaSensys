@@ -344,35 +344,41 @@
             });
         }
         
+        // A sensor that can't be read arrives as null; toFixed() on it threw and
+        // aborted the rest of the update. Show a dash for it instead.
+        function fmt(v, decimals) {
+            return (typeof v === 'number' && Number.isFinite(v)) ? v.toFixed(decimals) : '--';
+        }
+
         function updateDiagnostics(data) {
             // Update current readings
             if (data.current_l1 !== undefined) {
-                document.getElementById('current_l1').textContent = data.current_l1.toFixed(2);
+                document.getElementById('current_l1').textContent = fmt(data.current_l1, 2);
             }
             if (data.current_l2 !== undefined) {
-                document.getElementById('current_l2').textContent = data.current_l2.toFixed(2);
+                document.getElementById('current_l2').textContent = fmt(data.current_l2, 2);
             }
             if (data.current_l3 !== undefined) {
-                document.getElementById('current_l3').textContent = data.current_l3.toFixed(2);
+                document.getElementById('current_l3').textContent = fmt(data.current_l3, 2);
             }
             if (data.current_total !== undefined) {
-                document.getElementById('current_total').textContent = data.current_total.toFixed(2);
+                document.getElementById('current_total').textContent = fmt(data.current_total, 2);
             }
             
             // Update temperature readings
             if (data.temp_ambient !== undefined) {
-                document.getElementById('temp_ambient').textContent = data.temp_ambient.toFixed(2);
+                document.getElementById('temp_ambient').textContent = fmt(data.temp_ambient, 2);
             }
             if (data.temp_water !== undefined) {
-                document.getElementById('temp_water').textContent = data.temp_water.toFixed(2);
+                document.getElementById('temp_water').textContent = fmt(data.temp_water, 2);
             }
             
             // Update pressure readings
             if (data.pressure_in !== undefined) {
-                document.getElementById('pressure_in').textContent = data.pressure_in.toFixed(2);
+                document.getElementById('pressure_in').textContent = fmt(data.pressure_in, 2);
             }
             if (data.pressure_out !== undefined) {
-                document.getElementById('pressure_out').textContent = data.pressure_out.toFixed(2);
+                document.getElementById('pressure_out').textContent = fmt(data.pressure_out, 2);
             }
             
             // Update system info

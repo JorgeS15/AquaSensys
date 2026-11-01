@@ -462,6 +462,12 @@
             });
         }
 
+        // A sensor that can't be read arrives as null; toFixed() on it threw and
+        // aborted the rest of the update. Show a dash for it instead.
+        function fmt(v, decimals) {
+            return (typeof v === 'number' && Number.isFinite(v)) ? v.toFixed(decimals) : '--';
+        }
+
         function updateDebugData(data) {
             // SD Card Status
             if (data.sd_detected !== undefined) {
@@ -494,15 +500,15 @@
             // Voltage Readings
             for (let i = 0; i < 4; i++) {
                 if (data['volt_ch' + i] !== undefined) {
-                    document.getElementById('volt_ch' + i).textContent = data['volt_ch' + i].toFixed(3) + ' V';
+                    document.getElementById('volt_ch' + i).textContent = fmt(data['volt_ch' + i], 3) + ' V';
                 }
             }
 
             // Processed Values
-            if (data.pressure_in !== undefined) document.getElementById('proc_press_in').textContent = data.pressure_in.toFixed(2) + ' bar';
-            if (data.pressure_out !== undefined) document.getElementById('proc_press_out').textContent = data.pressure_out.toFixed(2) + ' bar';
-            if (data.temp_ambient !== undefined) document.getElementById('proc_temp_amb').textContent = data.temp_ambient.toFixed(2) + ' °C';
-            if (data.temp_water !== undefined) document.getElementById('proc_temp_water').textContent = data.temp_water.toFixed(2) + ' °C';
+            if (data.pressure_in !== undefined) document.getElementById('proc_press_in').textContent = fmt(data.pressure_in, 2) + ' bar';
+            if (data.pressure_out !== undefined) document.getElementById('proc_press_out').textContent = fmt(data.pressure_out, 2) + ' bar';
+            if (data.temp_ambient !== undefined) document.getElementById('proc_temp_amb').textContent = fmt(data.temp_ambient, 2) + ' °C';
+            if (data.temp_water !== undefined) document.getElementById('proc_temp_water').textContent = fmt(data.temp_water, 2) + ' °C';
 
             // Calibration Offsets
             if (data.cal_press_in !== undefined) document.getElementById('cal_press_in').textContent = data.cal_press_in.toFixed(3) + ' bar';

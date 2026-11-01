@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.3"; //MQTT availability: entities go unavailable when a unit drops off
+const char* DEVICE_VERSION = "3.4.4"; //A sensor with no reading shows "--" instead of freezing the web UI
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -272,12 +272,18 @@ float readOutPressure() {
  */
 float readWaterTemp() {
     float temp_voltage = readMCP3208Average(MCP_CH_WATER_TEMP, NUM_SAMPLES);
-    
+
+    // A probe that is disconnected or shorted pins the divider to a rail, and the
+    // conversion below then divides by zero or takes log(0). Report "no reading"
+    // (NAN, serialised as null) rather than a meaningless number. Real readings
+    // sit well inside these bounds (~0.15 V at 100 °C to ~3.3 V near 0 °C).
+    if (temp_voltage < 0.05f || temp_voltage > 4.95f) return NAN;
+
     // Convert voltage to resistance and then to temperature
     float temp_resistance = 100 * (1 / ((5.0 / temp_voltage) - 1));
     float tempC = -26.92 * log(temp_resistance) + 0.0796 * temp_resistance + 126.29 ;
-    
-    return tempC;
+
+    return (isnan(tempC) || isinf(tempC)) ? NAN : tempC;
 }
 
 /**

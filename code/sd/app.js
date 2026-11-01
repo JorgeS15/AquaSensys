@@ -99,11 +99,14 @@ function loadDeviceInfo() {
 function applyDeviceIdentity() {
   if (!deviceInfo) return;
 
-  if (elements.deviceName && deviceInfo.name) {
-    elements.deviceName.textContent = deviceInfo.name;
+  // display_name is "AquaSensys - C3" / "AquaSensys - M" (or the user's own name);
+  // fall back to the plain name for firmware older than 3.4.1
+  const title = deviceInfo.display_name || deviceInfo.name;
+  if (elements.deviceName && title) {
+    elements.deviceName.textContent = title;
     // Stop applyTranslations() putting the generic title back on a language change
     elements.deviceName.removeAttribute('data-i18n');
-    document.title = deviceInfo.name;
+    document.title = title;
   }
   if (elements.deviceModel) {
     elements.deviceModel.textContent = deviceInfo.model || '--';

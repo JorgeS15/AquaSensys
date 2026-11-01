@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.0"; //Per-unit identity from config.json
+const char* DEVICE_VERSION = "3.4.2"; //Pump safety: no boot ERROR latch, non-blocking WiFi reconnect, motor pin low from reset
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -89,6 +89,12 @@ float temperature = 0;       // Water temperature
 float ambientTemp = 0;       // Ambient temperature
 float flow = 0;              // Flow rate
 float totalTemp = 0;         // Accumulator for temperature averaging
+
+// False until readAllSensors() has run once. Before that every reading above is
+// its initial 0, and 0 bar is below the 1 bar fault threshold: evaluating the
+// protections on it latched a Controller into ERROR on every boot, so the pump
+// never restarted on its own after a power cut, an OTA update or a reset.
+bool sensorsReady = false;
 
 // NEW: Additional sensor readings
 float pressureIn = 0;        // Inlet pressure
@@ -313,18 +319,29 @@ void readAllSensors() {
     currentL2 = current.L2;
     currentL3 = current.L3;
     currentTotal = current.total;
+
+    sensorsReady = true;
 }
 
 // Forward declarations for functions defined after setup()/loop()
 void loadRuntime();
 void saveRuntime();
 void appendLogEntry();
+void serviceWiFiReconnect();
+void castDNS();
 
 // ============================================================
 // Setup and Main Functions
 // ============================================================
 
 void setup() {
+    // First thing on boot: hold the motor output low. From reset until
+    // setupPins() runs — through WiFi, calibration and server setup, up to ~20 s —
+    // GPIO26 is otherwise a floating input, and a relay driver without its own
+    // pull-down can pick that up as "on".
+    pinMode(MOTOR_PIN, OUTPUT);
+    digitalWrite(MOTOR_PIN, LOW);
+
     Serial.begin(115200);
     Serial.println("\n\n=== AquaSensys Starting ===");
     Serial.println("Version: " + String(DEVICE_VERSION));
@@ -424,7 +441,12 @@ void setup() {
     digitalWrite(MOTOR_PIN, LOW);
     
     testLEDs();
-    
+
+    // Take a real reading now, so the protections and the control loop start
+    // from actual values rather than from the zero-initialised ones.
+    readAllSensors();
+    Serial.printf("Initial readings: pressure in %.2f bar, out %.2f bar\n", pressureIn, pressureOut);
+
     lastTime = millis();
     Serial.println("=== Setup Complete ===\n");
 }
@@ -508,15 +530,16 @@ void loop() {
         // Sync flag with actual hardware state so reconnect fires on mid-operation drops
         if (wifiConnected && WiFi.status() != WL_CONNECTED) {
             wifiConnected = false;
+            // Give the driver's own auto-reconnect a full interval first: short
+            // drops recover by themselves in a second or two, and scanning straight
+            // away would only abort that.
+            lastWifiReconnectAttempt = millis();
             Serial.println("[WiFi] Connection lost");
         }
 
-        // WiFi reconnection
-        if (!wifiConnected && millis() - lastWifiReconnectAttempt > wifiReconnectInterval) {
-            Serial.println("Attempting to reconnect to Wi-Fi...");
-            lastWifiReconnectAttempt = millis();
-            setupWiFi();
-        }
+        // WiFi reconnection — one non-blocking step per pass, so the pump
+        // control and protections below keep running while the network is down
+        serviceWiFiReconnect();
 
     }
     
@@ -609,8 +632,9 @@ void loop() {
 
 void controlMotor() {
     // Monitor units (device_type "M") have no pump to drive: the motor output
-    // stays de-energised and no control decision is ever made.
-    if (!isControllerDevice()) {
+    // stays de-energised and no control decision is ever made. Nor is one made
+    // before there is a real pressure reading to make it on.
+    if (!isControllerDevice() || !sensorsReady) {
         motor = false;
         digitalWrite(MOTOR_PIN, LOW);
         return;
@@ -740,6 +764,9 @@ void updateLights() {
 }
 
 void checkForErrors() {
+    // No reading yet means nothing to judge — see sensorsReady
+    if (!sensorsReady) return;
+
     // Monitor units only report; nothing is tripped and nothing is switched off,
     // so the flag tracks the live reading instead of latching.
     if (!isControllerDevice()) {
@@ -853,6 +880,103 @@ void setupAPMode() {
     Serial.println("[AP] Connect and open http://192.168.4.1 to configure WiFi.");
 }
 
+// Strongest access point advertising the configured SSID, from the last scan.
+// Pinning to it bypasses band-steering on dual-band routers that share an SSID.
+bool findBestBSSID(int scanCount, uint8_t* bssid, int* rssi) {
+    bool found = false;
+    int best = -100;
+    for (int i = 0; i < scanCount; i++) {
+        if (WiFi.SSID(i) == config.wifi_ssid && WiFi.RSSI(i) > best) {
+            memcpy(bssid, WiFi.BSSID(i), 6);
+            best = WiFi.RSSI(i);
+            found = true;
+        }
+    }
+    *rssi = best;
+    return found;
+}
+
+void beginWiFi(bool pinned, const uint8_t* bssid, int rssi) {
+    if (pinned) {
+        Serial.printf("[WiFi] Pinning to BSSID %02X:%02X:%02X:%02X:%02X:%02X (RSSI %d)\n",
+            bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5], rssi);
+        WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str(), 0, bssid);
+    } else {
+        Serial.println("[WiFi] SSID not found in scan, connecting without BSSID pin");
+        WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str());
+    }
+}
+
+// ------------------------------------------------------------
+// Non-blocking reconnection.
+// The old reconnect re-ran setupWiFi() from loop(): a synchronous scan plus up
+// to 15 s waiting for the link, ~18 s in all, retried every 15 s counted from
+// the start of the previous attempt. With the router down, loop() spent nearly
+// all its time in there, and the pressure control, dry-run watchdog and
+// overcurrent trip ran once every ~18 s. Each call below does one short step
+// and returns.
+// ------------------------------------------------------------
+enum WifiReconnectState : uint8_t { WIFI_RC_IDLE, WIFI_RC_SCANNING, WIFI_RC_CONNECTING };
+static WifiReconnectState wifiRcState = WIFI_RC_IDLE;
+static unsigned long wifiRcStepStart = 0;
+const unsigned long WIFI_SCAN_TIMEOUT_MS    = 10000;
+const unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
+
+static void markWiFiConnected() {
+    wifiConnected = true;
+    wifiRcState = WIFI_RC_IDLE;
+    Serial.printf("[WiFi] Reconnected, IP %s\n", WiFi.localIP().toString().c_str());
+    castDNS();
+}
+
+static void markWiFiAttemptFailed(const char* why) {
+    Serial.printf("[WiFi] Reconnect failed (%s); retrying in %lu s\n",
+                  why, wifiReconnectInterval / 1000);
+    lastWifiReconnectAttempt = millis();   // the next try waits a full interval
+    wifiRcState = WIFI_RC_IDLE;
+}
+
+void serviceWiFiReconnect() {
+    switch (wifiRcState) {
+
+    case WIFI_RC_IDLE:
+        if (wifiConnected) return;
+        // The WiFi driver also retries on its own; if it got there first, adopt it
+        if (WiFi.status() == WL_CONNECTED) { markWiFiConnected(); return; }
+        if (millis() - lastWifiReconnectAttempt < wifiReconnectInterval) return;
+
+        Serial.println("[WiFi] Reconnecting...");
+        WiFi.disconnect();                 // a scan can't run alongside a pending connect
+        WiFi.scanNetworks(true, false);    // async: returns at once
+        wifiRcStepStart = millis();
+        wifiRcState = WIFI_RC_SCANNING;
+        return;
+
+    case WIFI_RC_SCANNING: {
+        int n = WiFi.scanComplete();
+        if (n == WIFI_SCAN_RUNNING) {
+            if (millis() - wifiRcStepStart >= WIFI_SCAN_TIMEOUT_MS) markWiFiAttemptFailed("scan timed out");
+            return;
+        }
+        uint8_t bssid[6] = {0};
+        int rssi = -100;
+        bool pinned = n > 0 && findBestBSSID(n, bssid, &rssi);   // n < 0: scan failed
+        WiFi.scanDelete();
+        beginWiFi(pinned, bssid, rssi);
+        wifiRcStepStart = millis();
+        wifiRcState = WIFI_RC_CONNECTING;
+        return;
+    }
+
+    case WIFI_RC_CONNECTING:
+        if (WiFi.status() == WL_CONNECTED) { markWiFiConnected(); return; }
+        if (millis() - wifiRcStepStart >= WIFI_CONNECT_TIMEOUT_MS) markWiFiAttemptFailed("no link");
+        return;
+    }
+}
+
+// Blocking connect, used once at boot only — before the control loop starts,
+// with the motor output already held low.
 void setupWiFi() {
     if (config.wifi_ssid.isEmpty()) {
         setupAPMode();
@@ -870,26 +994,10 @@ void setupWiFi() {
     Serial.println("[WiFi] Scanning...");
     int scanCount = WiFi.scanNetworks(false, false);
     uint8_t targetBSSID[6] = {0};
-    bool bssidFound = false;
     int bestRSSI = -100;
-    for (int i = 0; i < scanCount; i++) {
-        if (WiFi.SSID(i) == config.wifi_ssid && WiFi.RSSI(i) > bestRSSI) {
-            memcpy(targetBSSID, WiFi.BSSID(i), 6);
-            bestRSSI = WiFi.RSSI(i);
-            bssidFound = true;
-        }
-    }
+    bool bssidFound = scanCount > 0 && findBestBSSID(scanCount, targetBSSID, &bestRSSI);
     WiFi.scanDelete();
-
-    if (bssidFound) {
-        Serial.printf("[WiFi] Pinning to BSSID %02X:%02X:%02X:%02X:%02X:%02X (RSSI %d)\n",
-            targetBSSID[0], targetBSSID[1], targetBSSID[2],
-            targetBSSID[3], targetBSSID[4], targetBSSID[5], bestRSSI);
-        WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str(), 0, targetBSSID);
-    } else {
-        Serial.println("[WiFi] SSID not found in scan, connecting without BSSID pin");
-        WiFi.begin(config.wifi_ssid.c_str(), config.wifi_password.c_str());
-    }
+    beginWiFi(bssidFound, targetBSSID, bestRSSI);
     
     unsigned long startAttemptTime = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {

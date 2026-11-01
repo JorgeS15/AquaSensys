@@ -16,12 +16,21 @@
 #include "ACS712_handler.h"
 #include "web_routes.h"
 
-// Device constants (not saved to config)
-const char* DEVICE_NAME = "AquaSensys C3";
-const char* DEVICE_ID = "aquasensys";
+// Device identity.
+// One firmware binary runs on every unit, so the identity cannot be a compile-time
+// constant: two units flashed with the same build would share an MQTT client id
+// (the broker drops whichever connected first, so they knock each other off in
+// turn), publish into the same Home Assistant entities, and claim the same mDNS
+// name. resolveDeviceIdentity() fills these from config.json at boot, before
+// anything uses them; the initial values only cover the moments before that.
+static char deviceIdBuf[33]    = "aquasensys";
+static char deviceNameBuf[49]  = "AquaSensys";
+static char deviceModelBuf[33] = "AquaSensys";
+const char* DEVICE_NAME  = deviceNameBuf;
+const char* DEVICE_ID    = deviceIdBuf;
+const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_MODEL = "AquaSensys C3";
-const char* DEVICE_VERSION = "3.3.0"; //Show device name and model on the dashboard
+const char* DEVICE_VERSION = "3.4.0"; //Per-unit identity from config.json
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -127,6 +136,37 @@ unsigned long lastRuntimeSave = 0;
 
 // Data logging
 unsigned long lastLogTime = 0;
+
+/**
+ * Resolve this unit's identity from config.json.
+ *
+ * device_id and device_name override everything. Left empty, they default by
+ * device type to the identities these units carried when each was built by hand,
+ * so existing Home Assistant devices and entity history carry straight over:
+ *   Controller: id "aquasensys",   name "AquaSensys C3", model "AquaSensys C3"
+ *   Monitor:    id "aquasensys-m", name "AquaSensys M",  model "AquaSensys Monitor"
+ * Two units of the same type still need an explicit device_id each.
+ *
+ * Called once from setup(); a change to any of these takes effect on reboot,
+ * because MQTT topics and the mDNS name are built from them at startup.
+ */
+void resolveDeviceIdentity() {
+    bool controller = isControllerDevice();
+
+    String id = config.device_id.length() ? config.device_id
+                                          : String(controller ? "aquasensys" : "aquasensys-m");
+    String name = config.device_name.length() ? config.device_name
+                                              : String(controller ? "AquaSensys C3" : "AquaSensys M");
+    const char* model = controller ? "AquaSensys C3" : "AquaSensys Monitor";
+
+    strlcpy(deviceIdBuf,    id.c_str(),   sizeof(deviceIdBuf));
+    strlcpy(deviceNameBuf,  name.c_str(), sizeof(deviceNameBuf));
+    strlcpy(deviceModelBuf, model,        sizeof(deviceModelBuf));
+
+    Serial.printf("Identity: id=%s name=\"%s\" model=\"%s\"%s\n",
+                  DEVICE_ID, DEVICE_NAME, DEVICE_MODEL,
+                  config.device_id.length() ? "" : " (id defaulted from device type)");
+}
 
 void IRAM_ATTR pulseCounter() {
     uint32_t now = micros();
@@ -286,7 +326,7 @@ void appendLogEntry();
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("\n\n=== AquaSensys C3 Starting ===");
+    Serial.println("\n\n=== AquaSensys Starting ===");
     Serial.println("Version: " + String(DEVICE_VERSION));
     
     esp_reset_reason_t reset_reason = esp_reset_reason();
@@ -310,6 +350,7 @@ void setup() {
     initSDCard();
     loadConfig();
     loadRuntime();
+    resolveDeviceIdentity();   // before WiFi/mDNS/MQTT, which all use it
 
     Serial.printf("Device type: %s — %s\n",
                   config.device_type.c_str(),

@@ -84,6 +84,12 @@ function populateFormFields(config) {
   
   // Device profile — defaults match the firmware: 3/4" connection, Controller unit
   document.getElementById('device_type').value = config.device_type === 'M' ? 'M' : 'C';
+  document.getElementById('device_name').value = config.device_name || '';
+  document.getElementById('device_id').value = config.device_id || '';
+  // Show the default a blank field resolves to — it depends on the device type
+  const isMonitor = config.device_type === 'M';
+  document.getElementById('device_name').placeholder = isMonitor ? 'AquaSensys M' : 'AquaSensys C3';
+  document.getElementById('device_id').placeholder = isMonitor ? 'aquasensys-m' : 'aquasensys';
   document.getElementById('connection_size').value = config.connection_size === '1' ? '1' : '3/4';
   document.getElementById('flow_k_factor').value = config.flow_k_factor ?? 0;
   document.getElementById('flow_k_offset').value = config.flow_k_offset ?? 0;

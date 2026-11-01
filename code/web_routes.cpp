@@ -297,12 +297,18 @@ void webRoutes() {
         // Switching between Monitor and Controller changes the MQTT entities and
         // the control loop, so it only takes effect after a restart.
         String previousDeviceType = config.device_type;
+        String previousDeviceId   = config.device_id;
+        String previousDeviceName = config.device_name;
 
         if (updateConfigFromJson(jsonStr)) {
             DynamicJsonDocument doc(256);
             deserializeJson(doc, jsonStr);
             bool wifiChanged = doc.containsKey("wifi_ssid") || doc.containsKey("wifi_password");
-            bool deviceTypeChanged = config.device_type != previousDeviceType;
+            // The identity is resolved once at boot (MQTT topics, discovery,
+            // mDNS), so any change to it needs a restart, like device_type.
+            bool deviceTypeChanged = config.device_type != previousDeviceType
+                                  || config.device_id   != previousDeviceId
+                                  || config.device_name != previousDeviceName;
 
             request->send(200, "application/json",
                 "{\"status\":\"success\",\"wifi_changed\":" + String(wifiChanged ? "true" : "false") +

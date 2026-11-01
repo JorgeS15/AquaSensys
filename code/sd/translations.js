@@ -73,6 +73,10 @@ const translations = {
     
     // Settings page - Device
     "deviceSettings": "Device Settings",
+    "deviceNameLabel": "Device Name:",
+    "deviceNameHelp": "Shown in Home Assistant and on the dashboard. Leave blank for the default of the device type.",
+    "deviceIdLabel": "Device ID:",
+    "deviceIdHelp": "Must be different on every unit: it names the MQTT topics and the Home Assistant entities. Lower-case letters, digits and hyphens. Leave blank for the default of the device type. Changing it creates a new device in Home Assistant.",
     "deviceTypeLabel": "Device Type:",
     "controllerType": "Controller (C)",
     "monitorType": "Monitor (M)",
@@ -90,7 +94,7 @@ const translations = {
     "maxFlow": "Maximum plausible flow (L/min):",
     "maxFlowHelp": "Readings above this are discarded as electrical noise.",
     "saveDeviceSettings": "Save Device Settings",
-    "deviceTypeUpdated": "Device type changed. The device is rebooting to apply it...",
+    "deviceTypeUpdated": "Device identity changed. The device is rebooting to apply it...",
 
     // Settings page - System Parameters
     "systemParameters": "System Parameters",
@@ -350,6 +354,10 @@ const translations = {
     
     // Settings page - Device
     "deviceSettings": "Configurações do Dispositivo",
+    "deviceNameLabel": "Nome do Dispositivo:",
+    "deviceNameHelp": "Aparece no Home Assistant e no painel. Deixe em branco para usar a predefinição do tipo de dispositivo.",
+    "deviceIdLabel": "ID do Dispositivo:",
+    "deviceIdHelp": "Tem de ser diferente em cada unidade: dá nome aos tópicos MQTT e às entidades do Home Assistant. Letras minúsculas, algarismos e hífenes. Deixe em branco para usar a predefinição do tipo de dispositivo. Alterá-lo cria um dispositivo novo no Home Assistant.",
     "deviceTypeLabel": "Tipo de Dispositivo:",
     "controllerType": "Controlador (C)",
     "monitorType": "Monitor (M)",
@@ -367,7 +375,7 @@ const translations = {
     "maxFlow": "Caudal máximo plausível (L/min):",
     "maxFlowHelp": "Leituras acima deste valor são descartadas como ruído elétrico.",
     "saveDeviceSettings": "Guardar Configurações do Dispositivo",
-    "deviceTypeUpdated": "Tipo de dispositivo alterado. O dispositivo está a reiniciar para aplicar...",
+    "deviceTypeUpdated": "Identidade do dispositivo alterada. O dispositivo está a reiniciar para aplicar...",
 
     // Settings page - System Parameters
     "systemParameters": "Parâmetros do Sistema",

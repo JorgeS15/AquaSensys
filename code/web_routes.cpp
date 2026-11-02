@@ -83,9 +83,15 @@ void notifyClients() {
     // In AP mode the network is up, so SSE sends are safe
     if (!events.count()) return;
     if (!apModeActive && !wifiConnected) return;
-    // 320 B: 8 members plus the device_type / connection_size string values
-    StaticJsonDocument<320> doc;
+    // 448 B: up to 13 members plus the device_type / connection_size string values
+    StaticJsonDocument<448> doc;
     doc["pressure"] = pressure;
+    doc["dualPressure"] = config.dual_pressure_sensors;
+    if (config.dual_pressure_sensors) {
+        doc["pressureOut"] = pressureOut;
+        // "off" / "no_flow" / "no_reading" / "ok" / "clogged"
+        doc["filterStatus"] = filterStatus();
+    }
     doc["temperature"] = temperature;
     doc["ambientTemp"] = ambientTemp;
     doc["flow"] = flow;
@@ -122,6 +128,7 @@ void publishDiagnostics() {
 
     doc["pressure_in"] = pressureIn;
     doc["pressure_out"] = pressureOut;
+    doc["dual_pressure"] = config.dual_pressure_sensors;
 
     doc["uptime"] = millis() / 1000;
     doc["free_heap"] = ESP.getFreeHeap();
@@ -305,12 +312,12 @@ void webRoutes() {
     // fetches it once on load rather than carrying it on every SSE update.
     server.on("/api/device", HTTP_GET, [](AsyncWebServerRequest *request) {
         DynamicJsonDocument doc(448);
-        // What the dashboard header shows: "AquaSensys - C3" / "AquaSensys - M",
+        // What the dashboard header shows: "AquaSensys C3" / "AquaSensys M",
         // unless the user gave the unit its own name. Kept separate from
         // DEVICE_NAME so the Home Assistant device names don't change with it.
         String displayName = config.device_name.length()
             ? config.device_name
-            : String("AquaSensys - ") + (isControllerDevice() ? "C3" : "M");
+            : String("AquaSensys ") + (isControllerDevice() ? "C3" : "M");
         doc["display_name"]    = displayName;
         doc["name"]            = DEVICE_NAME;
         doc["model"]           = DEVICE_MODEL;

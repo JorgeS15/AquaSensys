@@ -32,6 +32,15 @@ struct Config {
     float pressure_out_offset;
     bool pressure_calibrated;
 
+    // Pressure sensor layout. Sensor 1 (inlet) sits on the mains before the
+    // filter; the optional sensor 2 (outlet) sits after it. With both fitted,
+    // their difference is the pressure drop across the filter.
+    bool dual_pressure_sensors;
+    bool filter_alarm_enabled;  // flag the filter as clogged when the drop is too high
+    float filter_dp_warning;    // bar of drop that counts as clogged
+    float filter_min_flow_lpm;  // the drop is only judged above this flow
+    int filter_alarm_delay_s;   // the drop must stay high (or low) this long to change the verdict
+
     // Current sensor calibration
     float current_offset_l1;
     float current_offset_l2;
@@ -85,6 +94,11 @@ struct Config {
         pressure_in_offset = 0.0;
         pressure_out_offset = 0.0;
         pressure_calibrated = false;
+        dual_pressure_sensors = false;
+        filter_alarm_enabled = true;
+        filter_dp_warning = 0.5f;
+        filter_min_flow_lpm = 5.0f;
+        filter_alarm_delay_s = 30;
         current_offset_l1 = 0.0;
         current_offset_l2 = 0.0;
         current_offset_l3 = 0.0;
@@ -147,5 +161,18 @@ float flowKOffset();
 
 // True when this unit drives a motor (device_type "C"); false for Monitor units
 bool isControllerDevice();
+
+// Clogged-filter alarm. updateFilterState() runs once per sensor read, from the
+// main loop; filterStatus() returns its latest verdict and is safe to call from
+// the web and MQTT tasks. Verdicts:
+//   "off"        single sensor, or the alarm is disabled
+//   "no_reading" a pressure or the flow can't be read
+//   "no_flow"    flow below filter_min_flow_lpm, so the drop says nothing
+//   "ok"         drop below filter_dp_warning (or above it for less than the delay)
+//   "clogged"    drop above filter_dp_warning for filter_alarm_delay_s. Stays
+//                clogged while there is no flow, and clears only after the drop
+//                has been back below the limit for the same delay.
+void updateFilterState(float pressureIn, float pressureOut, float flowLpm);
+const char* filterStatus();
 
 #endif

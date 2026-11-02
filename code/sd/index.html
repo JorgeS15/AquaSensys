@@ -1,20 +1,21 @@
 <!DOCTYPE HTML>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>AquaSensys</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0F2A32">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
   <div class="topnav">
-    <h1><i class="fas fa-microchip"></i> <span id="deviceName" data-i18n="mainTitle">AquaSensys</span></h1>
-    <div class="nav-right">
-      <a href="/" class="active"><i class="fas fa-tachometer-alt"></i> <span data-i18n="dashboard">Dashboard</span></a>
-      <a href="/diagnostics.html"><i class="fas fa-chart-line"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
-      <a href="/settings.html"><i class="fas fa-cog"></i> <span data-i18n="settings">Settings</span></a>
+    <h1><i class="fas fa-tint" aria-hidden="true"></i> <span id="deviceName">AquaSensys</span></h1>
+    <nav class="nav-right">
+      <a href="/" class="active" aria-current="page"><i class="fas fa-th-large" aria-hidden="true"></i> <span data-i18n="dashboard">Dashboard</span></a>
+      <a href="/diagnostics.html"><i class="fas fa-wave-square" aria-hidden="true"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
+      <a href="/settings.html"><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="settings">Settings</span></a>
       <div class="language-selector">
         <label for="languageSelector" data-i18n="language">Language</label>
         <select id="languageSelector" onchange="changeLanguage(this.value)">
@@ -22,90 +23,168 @@
           <option value="pt" data-i18n="portuguese">Portuguese</option>
         </select>
       </div>
-      <div class="wifi-status" id="wifiStatus">
-        <i class="fas fa-wifi"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
+      <div class="wifi-status offline" id="wifiStatus" role="status">
+        <i class="fas fa-wifi" aria-hidden="true"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
       </div>
-    </div>
+    </nav>
   </div>
-  
-  <div class="content">
-    <div class="card-grid">
-      <div class="card">
-        <h2><i class="fas fa-tachometer-alt"></i> <span data-i18n="pressure">Pressure</span></h2>
-        <div class="value-container">
-          <span id="pressure">0.00</span>
-          <span class="unit">bar</span>
-        </div>
-        <div class="status-bar" id="pressureBar"></div>
-      </div>
-      
-      <div class="card">
-        <h2><i class="fas fa-thermometer-half"></i> <span data-i18n="temperature">Temperature</span></h2>
-        <div class="value-container">
-          <span id="temperature">0.00</span>
-          <span class="unit">&deg;C</span>
-        </div>
-      </div>
-      
-      <div class="card">
-        <h2><i class="fas fa-tint"></i> <span data-i18n="flowRate">Flow Rate</span></h2>
-        <div class="value-container">
-          <span id="flow">0</span>
-          <span class="unit">L/min</span>
-        </div>
-      </div>
-      
-      <div class="card system-card">
-        <h2><i class="fas fa-cog"></i> <span id="systemCardTitle" data-i18n="systemControls">System Controls</span></h2>
-        <div class="system-status">
-          <div class="status-item motor-only" id="motorStatusItem">
-            <span data-i18n="motor">Motor:</span>
-            <span class="status-indicator" id="motor" data-i18n="off">OFF</span>
-          </div>
-          <div class="status-item motor-only" id="modeStatusItem">
-            <span data-i18n="mode">Mode:</span>
-            <span class="status-indicator" id="mode" data-i18n="auto">AUTO</span>
-          </div>
-          <div class="status-item motor-only" id="mainSwitchStatusItem">
-            <span data-i18n="mainSwitch">Main Switch:</span>
-            <span class="status-indicator" id="mainSwitch" data-i18n="on">ON</span>
-          </div>
-          <div class="status-item">
-            <span data-i18n="systemStatus">System Status:</span>
-            <span class="status-indicator" id="systemStatus" data-i18n="statusOk">OK</span>
-          </div>
-          <div class="status-item">
-            <span data-i18n="model">Model:</span>
-            <span class="status-indicator" id="deviceModel">--</span>
-          </div>
-          <div class="status-item">
-            <span data-i18n="firmware">Firmware:</span>
-            <span class="status-indicator" id="deviceVersion">--</span>
-          </div>
-          <div class="status-item">
-            <span data-i18n="deviceType">Device Type:</span>
-            <span class="status-indicator" id="deviceType">--</span>
-          </div>
-          <div class="status-item">
-            <span data-i18n="connectionSize">Connection Size:</span>
-            <span class="status-indicator" id="connectionSize">--</span>
-          </div>
-        </div>
 
-        <div class="control-buttons motor-only" id="controlButtons">
-          <button id="toggleBtn" class="button">
-            <i class="fas fa-power-off"></i> <span data-i18n="toggleMotor">Toggle Motor</span>
-          </button>
-          <button id="mainSwitchBtn" class="button">
-            <i class="fas fa-toggle-on"></i> <span data-i18n="toggleMainSwitch">Toggle Main Switch</span>
-          </button>
-          <button id="overrideBtn" class="button">
-            <i class="fas fa-user-cog"></i> <span data-i18n="manualOverride">Manual Override</span>
-          </button>
+  <main class="content stack">
+    <div class="page-head" style="margin-bottom: 0">
+      <div>
+        <p class="eyebrow" id="deviceSubtitle">&nbsp;</p>
+        <h1 data-i18n="dashboard">Dashboard</h1>
+      </div>
+      <p class="meta"><span data-i18n="lastUpdated">Last updated</span>: <span id="lastUpdate" class="mono">—</span></p>
+    </div>
+
+    <!-- Pump status and controls -->
+    <section class="hero" aria-labelledby="pumpLabel">
+      <div class="hero-main">
+        <button type="button" id="toggleBtn" class="power-btn motor-only" aria-pressed="false" data-i18n-aria="toggleMotor" aria-label="Toggle motor" disabled>
+          <i class="fas fa-power-off" aria-hidden="true"></i>
+        </button>
+        <div>
+          <span class="hero-label" id="pumpLabel">&nbsp;</span>
+          <span class="hero-title" id="motorTitle">—</span>
+          <span class="hero-hint" id="motorHint">—</span>
         </div>
       </div>
-    </div>
-  </div>
+
+      <div class="hero-controls">
+        <div class="hero-tile wide motor-only">
+          <span class="hero-tile-label" data-i18n="operatingMode">Operating mode</span>
+          <div class="segmented" role="group" data-i18n-aria="operatingMode" aria-label="Operating mode">
+            <button type="button" id="modeAutoBtn" aria-pressed="true" data-i18n="modeAuto" disabled>Auto</button>
+            <button type="button" id="modeManualBtn" class="manual" aria-pressed="false" data-i18n="modeManual" disabled>Manual</button>
+          </div>
+        </div>
+        <div class="hero-tile motor-only">
+          <span class="hero-tile-label" data-i18n="mainSwitchLabel">Main switch</span>
+          <button type="button" id="mainSwitchBtn" class="switch" aria-pressed="false" disabled>
+            <span class="switch-track" aria-hidden="true"></span>
+            <span id="mainSwitchText">—</span>
+          </button>
+        </div>
+        <div class="hero-tile">
+          <span class="hero-tile-label" data-i18n="systemStatusLabel">System status</span>
+          <span class="sys-state" id="systemStatus" role="status">
+            <i class="fas fa-check-circle" aria-hidden="true"></i>
+            <span id="systemStatusText">—</span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Readings -->
+    <section class="readings" data-i18n-aria="readings" aria-label="Readings">
+
+      <article class="card gauge-card">
+        <div class="card-head">
+          <h2 id="pressureTitle">Pressure</h2>
+          <span class="chip muted motor-only" id="pressureChip">—</span>
+        </div>
+        <div class="gauge-wrap">
+          <svg class="gauge" viewBox="0 0 200 165" role="img" id="pressureGauge" aria-label="Pressure gauge">
+            <circle class="track" cx="100" cy="100" r="80" fill="none" stroke-width="14" stroke-linecap="round" stroke-dasharray="335.1 1000" transform="rotate(150 100 100)"></circle>
+            <circle class="band motor-only" id="gaugeBand" cx="100" cy="100" r="80" fill="none" stroke-width="14" stroke-dasharray="0 1000" transform="rotate(150 100 100)"></circle>
+            <circle class="needle" id="gaugeNeedle" cx="100" cy="100" r="80" fill="none" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 1000" transform="rotate(150 100 100)"></circle>
+            <text class="g-value" x="100" y="100" text-anchor="middle" id="pressure">0.00</text>
+            <text class="g-unit" x="100" y="122" text-anchor="middle">bar</text>
+            <text class="g-tick" x="30" y="160" text-anchor="middle">0</text>
+            <text class="g-tick" x="170" y="160" text-anchor="middle" id="gaugeMax">6</text>
+          </svg>
+        </div>
+        <div class="threshold-pair motor-only">
+          <div class="mini-stat">
+            <div class="label" data-i18n="startsBelow">Starts below</div>
+            <div class="val"><span id="minPressureVal">—</span> bar</div>
+          </div>
+          <div class="mini-stat">
+            <div class="label" data-i18n="stopsAbove">Stops above</div>
+            <div class="val"><span id="maxPressureVal">—</span> bar</div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Only shown when two pressure sensors are configured -->
+      <article class="card filter-card hidden" id="filterCard">
+        <div class="card-head">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span class="icon-tile" aria-hidden="true"><i class="fas fa-filter"></i></span>
+            <h2 data-i18n="filter">Filter</h2>
+          </div>
+          <span class="chip ok" id="filterChip" role="status">—</span>
+        </div>
+        <div class="filter-flow">
+          <div class="mini-stat">
+            <div class="label" data-i18n="beforeFilter">Before filter (mains)</div>
+            <div class="val"><span id="pressureInVal">0.00</span> bar</div>
+          </div>
+          <div class="arrow" aria-hidden="true"><i class="fas fa-arrow-right"></i></div>
+          <div class="mini-stat">
+            <div class="label" data-i18n="afterFilter">After filter</div>
+            <div class="val"><span id="pressureOutVal">0.00</span> bar</div>
+          </div>
+        </div>
+        <div class="dp-block" id="dpBlock">
+          <div class="label" data-i18n="pressureDrop">Pressure drop across filter</div>
+          <div class="big-value">
+            <span class="num" id="pressureDiff">0.00</span>
+            <span class="unit">bar</span>
+          </div>
+          <div class="meter">
+            <div class="meter-fill" id="dpBar"></div>
+            <div class="meter-mark" id="dpMark" style="left: 50%"></div>
+          </div>
+          <div class="meter-scale"><span>0</span><span id="dpWarnScale"><span data-i18n="alertAt">alert</span> <span id="dpWarnVal">0.5</span> bar</span></div>
+        </div>
+        <p class="dp-note" id="filterNote">&nbsp;</p>
+      </article>
+
+      <article class="card temp-card">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span class="icon-tile warm" aria-hidden="true"><i class="fas fa-thermometer-half"></i></span>
+            <h2 style="margin: 0" data-i18n="waterTemperature">Water temperature</h2>
+          </div>
+          <div class="big-value">
+            <span class="num" id="temperature">0.0</span>
+            <span class="unit">&deg;C</span>
+          </div>
+          <div class="meter">
+            <div class="meter-fill temp" id="tempBar"></div>
+            <div class="meter-mark" style="left: 80%"></div>
+          </div>
+          <div class="meter-scale"><span>0 &deg;C</span><span><span data-i18n="alertAt">alert</span> 40 &deg;C</span><span>50 &deg;C</span></div>
+      </article>
+
+      <article class="card flow-card">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span class="icon-tile cool" aria-hidden="true"><i class="fas fa-water"></i></span>
+            <h2 style="margin: 0" data-i18n="flowRate">Flow Rate</h2>
+          </div>
+          <div class="big-value">
+            <span class="num" id="flow">0</span>
+            <span class="unit">L/min</span>
+          </div>
+          <div class="meter">
+            <div class="meter-fill flow" id="flowBar"></div>
+          </div>
+          <div class="meter-scale"><span>0</span><span>40 L/min</span></div>
+      </article>
+    </section>
+
+    <!-- Device info -->
+    <section class="info-strip" data-i18n-aria="systemInformation" aria-label="System information">
+      <div><div class="label" data-i18n="model">Model</div><div class="val" id="deviceModel">—</div></div>
+      <div><div class="label" data-i18n="firmware">Firmware</div><div class="val" id="deviceVersion">—</div></div>
+      <div><div class="label" data-i18n="connectionSize">Connection Size</div><div class="val" id="connectionSize">—</div></div>
+      <div><div class="label" data-i18n="uptime">Uptime</div><div class="val" id="uptime">—</div></div>
+      <div><div class="label" data-i18n="wifiSignal">WiFi Signal</div><div class="val"><span id="wifiRssi">—</span> dBm</div></div>
+      <div><div class="label" data-i18n="freeMemory">Free Memory</div><div class="val"><span id="freeHeap">—</span> KB</div></div>
+      <div class="motor-only"><div class="label" data-i18n="motorRuntime">Motor runtime</div><div class="val" id="motorRuntime">—</div></div>
+    </section>
+  </main>
 
   <script src="translations.js"></script>
   <script src="language.js"></script>

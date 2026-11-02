@@ -1,124 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>AquaSensys - Diagnostics</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0F2A32">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        .diagnostic-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .diagnostic-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .diagnostic-card h3 {
-            color: var(--primary);
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 1.1rem;
-            border-bottom: 2px solid #f0f0f0;
-            padding-bottom: 10px;
-        }
-        
-        .reading-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 15px;
-            margin: 8px 0;
-            background: #f8f9fa;
-            border-radius: 5px;
-            transition: background 0.2s;
-        }
-        
-        .reading-item:hover {
-            background: #e9ecef;
-        }
-        
-        .reading-label {
-            font-weight: 600;
-            color: var(--dark);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .reading-value {
-            font-size: 1.3rem;
-            font-weight: bold;
-            color: var(--secondary);
-            display: flex;
-            align-items: baseline;
-            gap: 5px;
-        }
-        
-        .reading-unit {
-            font-size: 0.9rem;
-            color: #666;
-            font-weight: normal;
-        }
-        
-        .phase-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        
-        .phase-l1 { background-color: #ff6b6b; }
-        .phase-l2 { background-color: #4ecdc4; }
-        .phase-l3 { background-color: #ffe66d; }
-
-        .total-current {
-            border: 2px solid var(--secondary);
-            background: #f0f8ff !important;
-            font-size: 1.1em;
-        }
-
-        .system-card {
-            border-left: 4px solid var(--secondary);
-        }
-        
-        .last-update {
-            text-align: center;
-            color: #666;
-            font-size: 0.9rem;
-            margin-top: 20px;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 5px;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .updating {
-            animation: pulse 1s infinite;
-        }
-    </style>
 </head>
 <body>
     <div class="topnav">
-        <h1><i class="fas fa-microchip"></i> <span data-i18n="mainTitle">AquaSensys</span></h1>
-        <div class="nav-right">
-            <a href="/"><i class="fas fa-tachometer-alt"></i> <span data-i18n="dashboard">Dashboard</span></a>
-            <a href="/diagnostics.html" class="active"><i class="fas fa-chart-line"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
-            <a href="/settings.html"><i class="fas fa-cog"></i> <span data-i18n="settings">Settings</span></a>
+        <h1><i class="fas fa-tint" aria-hidden="true"></i> <span id="deviceName">AquaSensys</span></h1>
+        <nav class="nav-right">
+            <a href="/"><i class="fas fa-th-large" aria-hidden="true"></i> <span data-i18n="dashboard">Dashboard</span></a>
+            <a href="/diagnostics.html" class="active" aria-current="page"><i class="fas fa-wave-square" aria-hidden="true"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
+            <a href="/settings.html"><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="settings">Settings</span></a>
             <div class="language-selector">
                 <label for="languageSelector" data-i18n="language">Language</label>
                 <select id="languageSelector" onchange="changeLanguage(this.value)">
@@ -126,199 +23,119 @@
                     <option value="pt" data-i18n="portuguese">Portuguese</option>
                 </select>
             </div>
-            <div class="wifi-status" id="wifiStatus">
-                <i class="fas fa-wifi"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
+            <div class="wifi-status offline" id="wifiStatus" role="status">
+                <i class="fas fa-wifi" aria-hidden="true"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
             </div>
-        </div>
+        </nav>
     </div>
-    
-    <div class="content">
-        <h2 style="color: var(--primary); margin-bottom: 20px;">
-            <i class="fas fa-chart-line"></i> <span data-i18n="systemDiagnostics">System Diagnostics</span>
-        </h2>
+
+    <main class="content">
+        <div class="page-head">
+            <div>
+                <p class="eyebrow" data-i18n="diagEyebrow">Sensors and system</p>
+                <h1 data-i18n="diagnostics">Diagnostics</h1>
+            </div>
+            <p class="meta"><span data-i18n="lastUpdated">Last updated</span>: <span id="lastUpdate" class="mono"><span data-i18n="never">Never</span></span></p>
+        </div>
 
         <div class="diagnostic-grid">
             <!-- Motor Current Monitoring -->
-            <div class="diagnostic-card">
-                <h3><i class="fas fa-bolt"></i> <span data-i18n="motorCurrent3Phase">Motor Current (3-Phase)</span></h3>
+            <section class="diagnostic-card span-all">
+                <h3><span class="icon-tile amber" aria-hidden="true"><i class="fas fa-bolt"></i></span> <span data-i18n="motorCurrent3Phase">Motor Current (3-Phase)</span></h3>
 
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <span class="phase-indicator phase-l1"></span>
-                        <span data-i18n="phaseL1">Phase L1</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="current_l1">0.00</span>
-                        <span class="reading-unit">A</span>
-                    </span>
-                </div>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <span class="phase-indicator phase-l2"></span>
-                        <span data-i18n="phaseL2">Phase L2</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="current_l2">0.00</span>
-                        <span class="reading-unit">A</span>
-                    </span>
-                </div>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <span class="phase-indicator phase-l3"></span>
-                        <span data-i18n="phaseL3">Phase L3</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="current_l3">0.00</span>
-                        <span class="reading-unit">A</span>
-                    </span>
-                </div>
-
-                <div class="reading-item total-current">
-                    <span class="reading-label">
-                        <i class="fas fa-equals"></i>
-                        <span data-i18n="totalCurrent">Total Current</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="current_total">0.00</span>
-                        <span class="reading-unit">A</span>
-                    </span>
-                </div>
-
-                <!-- Current Sensor Calibration -->
-                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid var(--secondary);">
-                    <div style="margin-bottom: 10px; font-size: 0.9rem; color: #666;">
-                        ⚠️ <strong data-i18n="important">Important:</strong> <span data-i18n="motorMustBeOff">Motor must be OFF for accurate calibration. This will set zero-current baseline for all three phases.</span>
+                <div class="reading-tiles">
+                    <div class="reading-tile">
+                        <span class="reading-label"><span class="phase-indicator phase-l1"></span> <span data-i18n="phaseL1">Phase L1</span></span>
+                        <span class="reading-value"><span id="current_l1">0.00</span> <span class="reading-unit">A</span></span>
                     </div>
-                    <button onclick="calibrateCurrentSensors()" class="button" style="width: 100%; background: var(--secondary);">
-                        <i class="fas fa-magic"></i> <span data-i18n="calibrateCurrentSensors">Calibrate Current Sensors</span>
-                    </button>
-                    <div id="calibrationStatus" style="margin-top: 10px; padding: 10px; background: white; border-radius: 5px; display: none; font-size: 0.9rem;"></div>
+                    <div class="reading-tile">
+                        <span class="reading-label"><span class="phase-indicator phase-l2"></span> <span data-i18n="phaseL2">Phase L2</span></span>
+                        <span class="reading-value"><span id="current_l2">0.00</span> <span class="reading-unit">A</span></span>
+                    </div>
+                    <div class="reading-tile">
+                        <span class="reading-label"><span class="phase-indicator phase-l3"></span> <span data-i18n="phaseL3">Phase L3</span></span>
+                        <span class="reading-value"><span id="current_l3">0.00</span> <span class="reading-unit">A</span></span>
+                    </div>
+                    <div class="reading-tile dark">
+                        <span class="reading-label"><span data-i18n="totalCurrent">Total Current</span></span>
+                        <span class="reading-value"><span id="current_total">0.00</span> <span class="reading-unit">A</span></span>
+                    </div>
                 </div>
-            </div>
-            
+
+                <div class="cal-box">
+                    <p><strong data-i18n="important">Important:</strong> <span data-i18n="motorMustBeOff">Motor must be OFF for accurate calibration. This will set zero-current baseline for all three phases.</span></p>
+                    <div><button type="button" id="calCurrentBtn" class="button outline"><i class="fas fa-magic" aria-hidden="true"></i> <span data-i18n="calibrateCurrentSensors">Calibrate Current Sensors</span></button></div>
+                    <div id="calibrationStatus" class="cal-status" role="status"></div>
+                </div>
+            </section>
+
             <!-- Temperature Readings -->
-            <div class="diagnostic-card">
-                <h3><i class="fas fa-thermometer-half"></i> <span data-i18n="temperatureSensors">Temperature Sensors</span></h3>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-sun"></i>
-                        <span data-i18n="ambientTemp">Ambient Temp</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="temp_ambient">0.00</span>
-                        <span class="reading-unit">°C</span>
-                    </span>
-                </div>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-tint"></i>
-                        <span data-i18n="waterTemp">Water Temp</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="temp_water">0.00</span>
-                        <span class="reading-unit">°C</span>
-                    </span>
-                </div>
-            </div>
-            
-            <!-- Pressure Readings -->
-            <div class="diagnostic-card">
-                <h3><i class="fas fa-tachometer-alt"></i> <span data-i18n="pressureSensors">Pressure Sensors</span></h3>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-arrow-right"></i>
-                        <span data-i18n="inletPressure">Inlet Pressure</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="pressure_in">0.00</span>
-                        <span class="reading-unit">bar</span>
-                    </span>
-                </div>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-arrow-left"></i>
-                        <span data-i18n="outletPressure">Outlet Pressure</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="pressure_out">0.00</span>
-                        <span class="reading-unit">bar</span>
-                    </span>
-                </div>
-
-                <!-- Pressure Sensor Calibration -->
-                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid var(--secondary);">
-                    <div style="margin-bottom: 10px; font-size: 0.9rem; color: #666;">
-                        ⚠️ <strong data-i18n="important">Important:</strong> <span data-i18n="pressureAtmospheric">Ensure both inlet and outlet are at atmospheric pressure (0 bar gauge). This will set zero-pressure baseline for both sensors.</span>
+            <section class="diagnostic-card">
+                <h3><span class="icon-tile warm" aria-hidden="true"><i class="fas fa-thermometer-half"></i></span> <span data-i18n="temperatureSensors">Temperature Sensors</span></h3>
+                <div class="reading-tiles">
+                    <div class="reading-tile">
+                        <span class="reading-label"><span data-i18n="ambientTemp">Ambient Temp</span></span>
+                        <span class="reading-value"><span id="temp_ambient">0.00</span> <span class="reading-unit">°C</span></span>
                     </div>
-                    <button onclick="calibratePressureSensors()" class="button" style="width: 100%; background: var(--secondary);">
-                        <i class="fas fa-sliders-h"></i> <span data-i18n="calibratePressureSensors">Calibrate Pressure Sensors</span>
-                    </button>
-                    <div id="pressureCalibrationStatus" style="margin-top: 10px; padding: 10px; background: white; border-radius: 5px; display: none; font-size: 0.9rem;"></div>
+                    <div class="reading-tile">
+                        <span class="reading-label"><span data-i18n="waterTemp">Water Temp</span></span>
+                        <span class="reading-value"><span id="temp_water">0.00</span> <span class="reading-unit">°C</span></span>
+                    </div>
                 </div>
-            </div>
-            
+            </section>
+
+            <!-- Pressure Readings -->
+            <section class="diagnostic-card">
+                <h3><span class="icon-tile" aria-hidden="true"><i class="fas fa-tachometer-alt"></i></span> <span data-i18n="pressureSensors">Pressure Sensors</span></h3>
+                <div class="reading-tiles">
+                    <div class="reading-tile">
+                        <span class="reading-label" id="pressureInLabel">—</span>
+                        <span class="reading-value"><span id="pressure_in">0.00</span> <span class="reading-unit">bar</span></span>
+                    </div>
+                    <div class="reading-tile dual-only hidden">
+                        <span class="reading-label" data-i18n="afterFilter">After filter</span>
+                        <span class="reading-value"><span id="pressure_out">0.00</span> <span class="reading-unit">bar</span></span>
+                    </div>
+                    <div class="reading-tile dark dual-only hidden">
+                        <span class="reading-label" data-i18n="pressureDrop">Pressure drop across filter</span>
+                        <span class="reading-value"><span id="pressure_diff">0.00</span> <span class="reading-unit">bar</span></span>
+                    </div>
+                </div>
+
+                <div class="cal-box">
+                    <p><strong data-i18n="important">Important:</strong> <span id="pressureCalHint" data-i18n="pressureAtmospheric">Ensure both inlet and outlet are at atmospheric pressure (0 bar gauge). This will set zero-pressure baseline for both sensors.</span></p>
+                    <div><button type="button" id="calPressureBtn" class="button outline"><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="calibratePressureSensors">Calibrate Pressure Sensors</span></button></div>
+                    <div id="pressureCalibrationStatus" class="cal-status" role="status"></div>
+                </div>
+            </section>
+
             <!-- System Information -->
-            <div class="diagnostic-card system-card">
-                <h3><i class="fas fa-info-circle"></i> <span data-i18n="systemInformation">System Information</span></h3>
-                
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-clock"></i>
-                        <span data-i18n="uptime">Uptime</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="uptime">0s</span>
-                    </span>
+            <section class="diagnostic-card span-all">
+                <h3><span class="icon-tile cool" aria-hidden="true"><i class="fas fa-info-circle"></i></span> <span data-i18n="systemInformation">System Information</span></h3>
+                <div class="info-strip">
+                    <div><div class="label" data-i18n="uptime">Uptime</div><div class="val" id="uptime">0s</div></div>
+                    <div><div class="label" data-i18n="freeMemory">Free Memory</div><div class="val"><span id="free_heap">0</span> KB</div></div>
+                    <div><div class="label" data-i18n="wifiSignal">WiFi Signal</div><div class="val"><span id="wifi_rssi">0</span> dBm</div></div>
+                    <div id="motorRuntimeItem" class="hidden"><div class="label" data-i18n="motorRuntime">Motor runtime</div><div class="val" id="motor_runtime">—</div></div>
                 </div>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-memory"></i>
-                        <span data-i18n="freeMemory">Free Memory</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="free_heap">0</span>
-                        <span class="reading-unit">KB</span>
-                    </span>
-                </div>
-
-                <div class="reading-item">
-                    <span class="reading-label">
-                        <i class="fas fa-wifi"></i>
-                        <span data-i18n="wifiSignal">WiFi Signal</span>
-                    </span>
-                    <span class="reading-value">
-                        <span id="wifi_rssi">0</span>
-                        <span class="reading-unit">dBm</span>
-                    </span>
-                </div>
-            </div>
+            </section>
         </div>
-
-        <div class="last-update">
-            <i class="fas fa-sync-alt"></i> <span data-i18n="lastUpdated">Last updated</span>: <span id="lastUpdate"><span data-i18n="never">Never</span></span>
-        </div>
-    </div>
+    </main>
 
     <script src="translations.js"></script>
     <script src="language.js"></script>
     <script>
         let eventSource;
         let isConnected = false;
-        
+        let dualPressure = false;
+
         function connectSSE() {
             if (eventSource) {
                 eventSource.close();
             }
 
             eventSource = new EventSource('/events');
-            
+
             eventSource.onopen = () => {
                 console.log('SSE connection opened');
                 isConnected = true;
@@ -329,7 +146,7 @@
                 console.log('SSE error:', e);
                 isConnected = false;
                 updateConnectionStatus(false);
-                
+
                 eventSource.close();
                 setTimeout(connectSSE, 3000);
             };
@@ -343,92 +160,86 @@
                 }
             });
         }
-        
+
+        function setText(id, value) {
+            document.getElementById(id).textContent = value;
+        }
+
         // A sensor that can't be read arrives as null; toFixed() on it threw and
         // aborted the rest of the update. Show a dash for it instead.
         function fmt(v, decimals) {
             return (typeof v === 'number' && Number.isFinite(v)) ? v.toFixed(decimals) : '--';
         }
 
-        function updateDiagnostics(data) {
-            // Update current readings
-            if (data.current_l1 !== undefined) {
-                document.getElementById('current_l1').textContent = fmt(data.current_l1, 2);
-            }
-            if (data.current_l2 !== undefined) {
-                document.getElementById('current_l2').textContent = fmt(data.current_l2, 2);
-            }
-            if (data.current_l3 !== undefined) {
-                document.getElementById('current_l3').textContent = fmt(data.current_l3, 2);
-            }
-            if (data.current_total !== undefined) {
-                document.getElementById('current_total').textContent = fmt(data.current_total, 2);
-            }
-            
-            // Update temperature readings
-            if (data.temp_ambient !== undefined) {
-                document.getElementById('temp_ambient').textContent = fmt(data.temp_ambient, 2);
-            }
-            if (data.temp_water !== undefined) {
-                document.getElementById('temp_water').textContent = fmt(data.temp_water, 2);
-            }
-            
-            // Update pressure readings
-            if (data.pressure_in !== undefined) {
-                document.getElementById('pressure_in').textContent = fmt(data.pressure_in, 2);
-            }
-            if (data.pressure_out !== undefined) {
-                document.getElementById('pressure_out').textContent = fmt(data.pressure_out, 2);
-            }
-            
-            // Update system info
-            if (data.uptime !== undefined) {
-                document.getElementById('uptime').textContent = formatUptime(data.uptime);
-            }
-            if (data.free_heap !== undefined) {
-                document.getElementById('free_heap').textContent = (data.free_heap / 1024).toFixed(1);
-            }
-            if (data.wifi_rssi !== undefined) {
-                document.getElementById('wifi_rssi').textContent = data.wifi_rssi;
-            }
-            
-            // Update last update time
-            const now = new Date();
-            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        function applySensorLayout() {
+            document.querySelectorAll('.dual-only').forEach(el => el.classList.toggle('hidden', !dualPressure));
+            setText('pressureInLabel', i18n(dualPressure ? 'beforeFilter' : 'mainsPressure'));
+            setText('pressureCalHint', i18n(dualPressure ? 'pressureAtmospheric' : 'pressureAtmosphericSingle'));
         }
-        
+
+        function updateDiagnostics(data) {
+            if (data.current_l1 !== undefined) setText('current_l1', fmt(data.current_l1, 2));
+            if (data.current_l2 !== undefined) setText('current_l2', fmt(data.current_l2, 2));
+            if (data.current_l3 !== undefined) setText('current_l3', fmt(data.current_l3, 2));
+            if (data.current_total !== undefined) setText('current_total', fmt(data.current_total, 2));
+
+            if (data.temp_ambient !== undefined) setText('temp_ambient', fmt(data.temp_ambient, 2));
+            if (data.temp_water !== undefined) setText('temp_water', fmt(data.temp_water, 2));
+
+            if (data.dual_pressure !== undefined && data.dual_pressure !== dualPressure) {
+                dualPressure = data.dual_pressure;
+                applySensorLayout();
+            }
+            if (data.pressure_in !== undefined) setText('pressure_in', fmt(data.pressure_in, 2));
+            if (data.pressure_out !== undefined) setText('pressure_out', fmt(data.pressure_out, 2));
+            if (data.pressure_in !== undefined && data.pressure_out !== undefined) {
+                const bothRead = [data.pressure_in, data.pressure_out].every(v => typeof v === 'number' && Number.isFinite(v));
+                setText('pressure_diff', bothRead ? (data.pressure_in - data.pressure_out).toFixed(2) : '--');
+            }
+
+            if (data.uptime !== undefined) setText('uptime', formatUptime(data.uptime));
+            if (data.free_heap !== undefined) setText('free_heap', (data.free_heap / 1024).toFixed(1));
+            if (data.wifi_rssi !== undefined) setText('wifi_rssi', data.wifi_rssi);
+            if (data.motor_runtime_s !== undefined) {
+                document.getElementById('motorRuntimeItem').classList.remove('hidden');
+                setText('motor_runtime', formatUptime(data.motor_runtime_s));
+            }
+
+            setText('lastUpdate', new Date().toLocaleTimeString());
+        }
+
         function formatUptime(seconds) {
             const days = Math.floor(seconds / 86400);
             const hours = Math.floor((seconds % 86400) / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
             const secs = seconds % 60;
-            
+
             let result = '';
             if (days > 0) result += days + 'd ';
             if (hours > 0) result += hours + 'h ';
             if (minutes > 0) result += minutes + 'm ';
             result += secs + 's';
-            
+
             return result;
         }
-        
-        function updateConnectionStatus(connected) {
-            const wifiIcon = document.querySelector('#wifiStatus i');
-            const statusText = connected ? window.location.hostname : 'Disconnected';
-            
-            wifiIcon.className = connected ? 'fas fa-wifi' : 'fas fa-wifi-slash';
-            wifiIcon.style.color = connected ? '#4bb543' : '#ec0b43';
-            document.getElementById('ipAddress').textContent = statusText;
-        }
-        
-        // Calibrate current sensors
-        async function calibrateCurrentSensors() {
-            const statusDiv = document.getElementById('calibrationStatus');
-            const button = event.target;
 
-            // Show status
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calibrating... Please wait (this takes ~10 seconds)';
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('wifiStatus');
+            status.classList.toggle('offline', !connected);
+            status.querySelector('i').className = connected ? 'fas fa-wifi' : 'fas fa-exclamation-circle';
+            setText('ipAddress', connected ? window.location.hostname : i18n('disconnected'));
+        }
+
+        function showCalStatus(div, html) {
+            div.style.display = 'block';
+            div.innerHTML = html;
+        }
+
+        // Calibrate current sensors
+        async function calibrateCurrentSensors(button) {
+            const statusDiv = document.getElementById('calibrationStatus');
+
+            showCalStatus(statusDiv, `<i class="fas fa-spinner fa-spin"></i> ${i18n('calibratingCurrentWait')}`);
             button.disabled = true;
 
             try {
@@ -439,42 +250,36 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    statusDiv.innerHTML = `
-                        <i class="fas fa-check-circle"></i> <strong>Calibration successful!</strong><br>
-                        <small style="opacity: 0.8;">
-                            L1: ${data.offset_l1.toFixed(2)} mA |
-                            L2: ${data.offset_l2.toFixed(2)} mA |
-                            L3: ${data.offset_l3.toFixed(2)} mA
+                    showCalStatus(statusDiv, `
+                        <i class="fas fa-check-circle"></i> <strong>${i18n('calibrationSuccessful')}</strong><br>
+                        <small class="mono">
+                            L1: ${fmt(data.offset_l1, 2)} mA |
+                            L2: ${fmt(data.offset_l2, 2)} mA |
+                            L3: ${fmt(data.offset_l3, 2)} mA
                         </small>
-                    `;
+                    `);
 
-                    // Hide success message after 10 seconds
                     setTimeout(() => {
                         statusDiv.style.display = 'none';
                     }, 10000);
                 } else {
-                    statusDiv.innerHTML = `
-                        <i class="fas fa-exclamation-triangle"></i> <strong>Calibration failed!</strong><br>
+                    showCalStatus(statusDiv, `
+                        <i class="fas fa-exclamation-triangle"></i> <strong>${i18n('calibrationFailed')}</strong><br>
                         <small>${data.error || 'Unknown error'}</small>
-                    `;
+                    `);
                 }
             } catch (error) {
-                statusDiv.innerHTML = `
-                    <i class="fas fa-times-circle"></i> <strong>Error:</strong> ${error.message}
-                `;
+                showCalStatus(statusDiv, `<i class="fas fa-times-circle"></i> <strong>Error:</strong> ${error.message}`);
             } finally {
                 button.disabled = false;
             }
         }
 
         // Calibrate pressure sensors
-        async function calibratePressureSensors() {
+        async function calibratePressureSensors(button) {
             const statusDiv = document.getElementById('pressureCalibrationStatus');
-            const button = event.target;
 
-            // Show status
-            statusDiv.style.display = 'block';
-            statusDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calibrating pressure sensors... Please wait';
+            showCalStatus(statusDiv, `<i class="fas fa-spinner fa-spin"></i> ${i18n('calibratingPressure')}`);
             button.disabled = true;
 
             try {
@@ -485,29 +290,25 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    statusDiv.innerHTML = `
-                        <i class="fas fa-check-circle"></i> <strong>Calibration successful!</strong><br>
-                        <small style="opacity: 0.8;">
-                            Inlet offset: ${data.offset_in.toFixed(3)} bar |
-                            Outlet offset: ${data.offset_out.toFixed(3)} bar<br>
-                            Raw readings - Inlet: ${data.raw_in.toFixed(3)} bar | Outlet: ${data.raw_out.toFixed(3)} bar
-                        </small>
-                    `;
+                    const outletLine = dualPressure
+                        ? ` | ${i18n('outletOffset')}: ${fmt(data.offset_out, 3)} bar`
+                        : '';
+                    showCalStatus(statusDiv, `
+                        <i class="fas fa-check-circle"></i> <strong>${i18n('calibrationSuccessful')}</strong><br>
+                        <small class="mono">${i18n('inletOffset')}: ${fmt(data.offset_in, 3)} bar${outletLine}</small>
+                    `);
 
-                    // Hide success message after 10 seconds
                     setTimeout(() => {
                         statusDiv.style.display = 'none';
                     }, 10000);
                 } else {
-                    statusDiv.innerHTML = `
-                        <i class="fas fa-exclamation-triangle"></i> <strong>Calibration failed!</strong><br>
+                    showCalStatus(statusDiv, `
+                        <i class="fas fa-exclamation-triangle"></i> <strong>${i18n('calibrationFailed')}</strong><br>
                         <small>${data.error || 'Unknown error'}</small>
-                    `;
+                    `);
                 }
             } catch (error) {
-                statusDiv.innerHTML = `
-                    <i class="fas fa-times-circle"></i> <strong>Error:</strong> ${error.message}
-                `;
+                showCalStatus(statusDiv, `<i class="fas fa-times-circle"></i> <strong>Error:</strong> ${error.message}`);
             } finally {
                 button.disabled = false;
             }
@@ -518,7 +319,35 @@
             if (typeof initializeLanguage === 'function') {
                 initializeLanguage();
             }
-            
+
+            applySensorLayout();
+            document.addEventListener('languagechanged', applySensorLayout);
+
+            // Header shows which unit this is ("AquaSensys C3" / "AquaSensys M")
+            fetch('/api/device')
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    const name = d && (d.display_name || d.name);
+                    if (name) setText('deviceName', name);
+                })
+                .catch(() => {});
+
+            // Read the sensor layout right away instead of waiting for the first SSE push
+            fetch('/api/config')
+                .then(r => r.ok ? r.json() : null)
+                .then(cfg => {
+                    if (cfg && typeof cfg.dual_pressure_sensors === 'boolean') {
+                        dualPressure = cfg.dual_pressure_sensors;
+                        applySensorLayout();
+                    }
+                })
+                .catch(() => {});
+
+            const calCurrentBtn = document.getElementById('calCurrentBtn');
+            const calPressureBtn = document.getElementById('calPressureBtn');
+            calCurrentBtn.addEventListener('click', () => calibrateCurrentSensors(calCurrentBtn));
+            calPressureBtn.addEventListener('click', () => calibratePressureSensors(calPressureBtn));
+
             connectSSE();
         });
     </script>

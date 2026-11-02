@@ -26,8 +26,8 @@ Every unit runs the same firmware binary, so the identity comes from
 
 | `device_type` | `device_id` | `device_name` | Model | Dashboard header |
 |---|---|---|---|---|
-| `C` | `aquasensys` | AquaSensys C3 | AquaSensys C3 | AquaSensys - C3 |
-| `M` | `aquasensys-m` | AquaSensys M | AquaSensys Monitor | AquaSensys - M |
+| `C` | `aquasensys` | AquaSensys C3 | AquaSensys C3 | AquaSensys C3 |
+| `M` | `aquasensys-m` | AquaSensys M | AquaSensys Monitor | AquaSensys M |
 
 So one Controller and one Monitor need no configuration. **Two units of the
 same type must each be given their own `device_id`**: with a shared id they
@@ -63,6 +63,32 @@ way and are discarded once (`current_cal_method` records which method produced
 the saved offsets). A Controller then recalibrates at boot, with its motor
 output held off. A Monitor never calibrates at boot, because it doesn't drive the pump and can't know it is
 stopped.
+
+### Pressure sensors and filter alarm
+
+Sensor 1 (inlet) sits on the mains, before the filter, and is the one the
+pump control uses. An optional sensor 2 (outlet) sits after the filter; with
+both fitted, the difference between them is the pressure drop across the
+filter, which rises as it clogs. Set under **Settings → Pressure Sensors**.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `dual_pressure_sensors` | `false` | `true` when sensor 2 is fitted after the filter. |
+| `filter_alarm_enabled` | `true` | Flag the filter as clogged when the drop gets too high. Only used with two sensors. |
+| `filter_dp_warning` | `0.5` | Drop across the filter, in bar, that counts as clogged. |
+| `filter_min_flow_lpm` | `5` | The drop is only judged above this flow, in L/min. |
+| `filter_alarm_delay_s` | `30` | The drop must stay above the limit this many seconds before the alarm fires, and below it as long before it clears. |
+
+With no water moving the filter shows no drop, clogged or not, so the alarm is
+judged on the flow rather than on the pump state — which also makes it work on
+Monitor units. Below the minimum flow the drop isn't judged: a filter already
+marked clogged stays clogged, otherwise it reads "no flow". The delay keeps a
+short pressure spike, such as the pump starting, from raising the alarm. The
+alarm is a warning only: it never stops the pump.
+
+With two sensors MQTT publishes `pressure_out`, `filter_dp` and, when the alarm
+is on, `filter_clogged` (a "problem" binary sensor in Home Assistant). These
+entities appear or disappear the next time the unit connects to the broker.
 
 ### Flow rate
 

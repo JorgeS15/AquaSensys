@@ -124,6 +124,13 @@ void publishState() {
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
+    if (config.dual_pressure_sensors) {
+        doc["pressure_out"] = pressureOut;
+        doc["filter_dp"]    = pressureIn - pressureOut;
+        if (config.filter_alarm_enabled) {
+            doc["filter_clogged"] = strcmp(filterStatus(), "clogged") == 0 ? "ON" : "OFF";
+        }
+    }
     if (isControllerDevice()) {
         doc["motor"]        = motor ? "ON" : "OFF";
         doc["override"]     = manualOverride ? "ON" : "OFF";
@@ -177,6 +184,21 @@ void sendAutoDiscoveryConfigs() {
     String stateTopic = mqttTopicState;
 
     createSensorConfig("pressure",    "Pressure",      "bar",   "pressure",         "mdi:gauge",         deviceDoc, stateTopic, "pressure");
+    // Second pressure sensor (after the filter): its reading, the drop across
+    // the filter and, when enabled, the clogged-filter alarm
+    if (config.dual_pressure_sensors) {
+        createSensorConfig("pressure_out", "Pressure After Filter", "bar", "pressure", "mdi:gauge",  deviceDoc, stateTopic, "pressure_out");
+        createSensorConfig("filter_dp",    "Filter Pressure Drop",  "bar", "pressure", "mdi:filter", deviceDoc, stateTopic, "filter_dp");
+    } else {
+        removeDiscoveryConfig("sensor", "pressure_out");
+        removeDiscoveryConfig("sensor", "filter_dp");
+    }
+    if (config.dual_pressure_sensors && config.filter_alarm_enabled) {
+        createBinarySensorConfig("filter_clogged", "Filter Clogged", "problem", "mdi:filter-remove",
+                                 deviceDoc, stateTopic, "filter_clogged");
+    } else {
+        removeDiscoveryConfig("binary_sensor", "filter_clogged");
+    }
     createSensorConfig("temperature", "Temperature",   "°C",    "temperature",       "mdi:thermometer",   deviceDoc, stateTopic, "temperature");
     createSensorConfig("flow",        "Flow Rate",     "L/min", nullptr,             "mdi:water",         deviceDoc, stateTopic, "flow");
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");

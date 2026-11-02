@@ -48,6 +48,8 @@ function applyTranslations() {
   // Update the document title based on the current page
   if (window.location.pathname.includes('settings.html')) {
     document.title = translations[currentLanguage].settingsTitle;
+  } else if (window.location.pathname.includes('diagnostics.html')) {
+    document.title = 'AquaSensys - ' + translations[currentLanguage].diagnostics;
   } else {
     document.title = translations[currentLanguage].mainTitle;
   }
@@ -90,15 +92,6 @@ function applyTranslations() {
     }
   }
   
-  // Re-apply the device profile: it drives labels that data-i18n alone cannot
-  // resolve (the system card title differs between Monitor and Controller).
-  if (typeof applyDeviceType === 'function') {
-    applyDeviceType(typeof deviceType !== 'undefined' ? deviceType : 'C');
-  }
-  if (typeof applyDeviceIdentity === 'function') {
-    applyDeviceIdentity();
-  }
-
   // Update labels inside small tags
   const smallElements = document.querySelectorAll('small[data-i18n]');
   smallElements.forEach(element => {
@@ -107,6 +100,20 @@ function applyTranslations() {
       element.textContent = translations[currentLanguage][key];
     }
   });
+
+  // Update accessible names (icon-only buttons, regions)
+  document.querySelectorAll('[data-i18n-aria]').forEach(element => {
+    const key = element.getAttribute('data-i18n-aria');
+    if (translations[currentLanguage][key]) {
+      element.setAttribute('aria-label', translations[currentLanguage][key]);
+    }
+  });
+
+  document.documentElement.lang = currentLanguage;
+
+  // Let pages re-render text they build from live data (device name, pump
+  // state, filter status), which data-i18n alone cannot resolve
+  document.dispatchEvent(new Event('languagechanged'));
 }
 
 // Function to get translated text by key

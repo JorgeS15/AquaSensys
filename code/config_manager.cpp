@@ -121,6 +121,12 @@ bool loadConfig() {
     config.pressure_out_offset = doc["pressure_out_offset"] | config.pressure_out_offset;
     config.pressure_calibrated = doc["pressure_calibrated"] | config.pressure_calibrated;
 
+    config.dual_pressure_sensors = doc["dual_pressure_sensors"] | config.dual_pressure_sensors;
+    config.filter_alarm_enabled  = doc["filter_alarm_enabled"]  | config.filter_alarm_enabled;
+    config.filter_dp_warning     = doc["filter_dp_warning"]     | config.filter_dp_warning;
+    config.filter_min_flow_lpm   = doc["filter_min_flow_lpm"]   | config.filter_min_flow_lpm;
+    config.filter_alarm_delay_s  = doc["filter_alarm_delay_s"]  | config.filter_alarm_delay_s;
+
     config.current_offset_l1 = doc["current_offset_l1"] | config.current_offset_l1;
     config.current_offset_l2 = doc["current_offset_l2"] | config.current_offset_l2;
     config.current_offset_l3 = doc["current_offset_l3"] | config.current_offset_l3;
@@ -207,6 +213,11 @@ bool saveConfig() {
     doc["pressure_in_offset"]  = config.pressure_in_offset;
     doc["pressure_out_offset"] = config.pressure_out_offset;
     doc["pressure_calibrated"] = config.pressure_calibrated;
+    doc["dual_pressure_sensors"] = config.dual_pressure_sensors;
+    doc["filter_alarm_enabled"]  = config.filter_alarm_enabled;
+    doc["filter_dp_warning"]     = config.filter_dp_warning;
+    doc["filter_min_flow_lpm"]   = config.filter_min_flow_lpm;
+    doc["filter_alarm_delay_s"]  = config.filter_alarm_delay_s;
 
     doc["current_offset_l1"] = config.current_offset_l1;
     doc["current_offset_l2"] = config.current_offset_l2;
@@ -302,6 +313,11 @@ String getConfigJson() {
     doc["pressure_in_offset"]  = config.pressure_in_offset;
     doc["pressure_out_offset"] = config.pressure_out_offset;
     doc["pressure_calibrated"] = config.pressure_calibrated;
+    doc["dual_pressure_sensors"] = config.dual_pressure_sensors;
+    doc["filter_alarm_enabled"]  = config.filter_alarm_enabled;
+    doc["filter_dp_warning"]     = config.filter_dp_warning;
+    doc["filter_min_flow_lpm"]   = config.filter_min_flow_lpm;
+    doc["filter_alarm_delay_s"]  = config.filter_alarm_delay_s;
 
     doc["current_offset_l1"] = config.current_offset_l1;
     doc["current_offset_l2"] = config.current_offset_l2;
@@ -363,6 +379,12 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("pressure_out_offset")) config.pressure_out_offset = doc["pressure_out_offset"];
     if (doc.containsKey("pressure_calibrated")) config.pressure_calibrated = doc["pressure_calibrated"];
 
+    if (doc.containsKey("dual_pressure_sensors")) config.dual_pressure_sensors = doc["dual_pressure_sensors"];
+    if (doc.containsKey("filter_alarm_enabled"))  config.filter_alarm_enabled  = doc["filter_alarm_enabled"];
+    if (doc.containsKey("filter_dp_warning"))     config.filter_dp_warning     = doc["filter_dp_warning"];
+    if (doc.containsKey("filter_min_flow_lpm"))   config.filter_min_flow_lpm   = doc["filter_min_flow_lpm"];
+    if (doc.containsKey("filter_alarm_delay_s"))  config.filter_alarm_delay_s  = doc["filter_alarm_delay_s"];
+
     if (doc.containsKey("current_offset_l1")) config.current_offset_l1 = doc["current_offset_l1"];
     if (doc.containsKey("current_offset_l2")) config.current_offset_l2 = doc["current_offset_l2"];
     if (doc.containsKey("current_offset_l3")) config.current_offset_l3 = doc["current_offset_l3"];
@@ -404,4 +426,52 @@ bool updateConfigFromJson(const String& jsonStr) {
     }
 
     return saveConfig();
+}
+
+// Written by the main loop only; the web and MQTT tasks just read the pointer,
+// which is a single 32-bit load on the ESP32.
+static const char* volatile filterState = "off";
+static bool filterLatched = false;          // verdict is "clogged"
+static unsigned long filterChangeSince = 0; // when the drop first disagreed with the verdict
+
+void updateFilterState(float pressureIn, float pressureOut, float flowLpm) {
+    if (!config.dual_pressure_sensors || !config.filter_alarm_enabled) {
+        filterLatched = false;
+        filterChangeSince = 0;
+        filterState = "off";
+        return;
+    }
+    if (isnan(pressureIn) || isnan(pressureOut) || isnan(flowLpm)) {
+        filterChangeSince = 0;
+        filterState = "no_reading";
+        return;
+    }
+    // Without water moving through it the filter shows no drop, clogged or not:
+    // keep the last verdict if it was clogged, and restart the timing
+    if (flowLpm < config.filter_min_flow_lpm) {
+        filterChangeSince = 0;
+        filterState = filterLatched ? "clogged" : "no_flow";
+        return;
+    }
+
+    bool dropHigh = (pressureIn - pressureOut) >= config.filter_dp_warning;
+    if (dropHigh == filterLatched) {
+        filterChangeSince = 0;              // reading agrees with the verdict
+    } else {
+        // A pressure spike (or dip) must last the whole delay to flip the verdict
+        unsigned long now = millis();
+        if (filterChangeSince == 0) filterChangeSince = now;
+        unsigned long delayMs = (unsigned long)max(0, config.filter_alarm_delay_s) * 1000UL;
+        if (now - filterChangeSince >= delayMs) {
+            filterLatched = dropHigh;
+            filterChangeSince = 0;
+            Serial.printf("[Filter] %s (drop %.2f bar)\n", filterLatched ? "Clogged" : "Clear",
+                          pressureIn - pressureOut);
+        }
+    }
+    filterState = filterLatched ? "clogged" : "ok";
+}
+
+const char* filterStatus() {
+    return filterState;
 }

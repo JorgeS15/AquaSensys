@@ -30,7 +30,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.4.10"; //Temperature Offset (°C) applied to the water temperature; default 0
+const char* DEVICE_VERSION = "3.5.0"; //New web UI; optional 2nd pressure sensor with clogged-filter alarm
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -576,6 +576,7 @@ void loop() {
         
         // Read all sensors (temperatures, pressures, currents)
         readAllSensors();
+        updateFilterState(pressureIn, pressureOut, flow);
 
         // Motor-related bookkeeping only exists on Controller units
         if (isControllerDevice()) {

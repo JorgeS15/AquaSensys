@@ -4,6 +4,7 @@ const formElements = {
   mqttForm: document.getElementById('mqttForm'),
   deviceForm: document.getElementById('deviceForm'),
   paramsForm: document.getElementById('paramsForm'),
+  sensorsForm: document.getElementById('sensorsForm'),
   
   // Status elements
   wifiStatus: document.getElementById('wifiStatus'),
@@ -44,12 +45,10 @@ function connectSSE() {
 }
 
 function updateConnectionStatus(connected) {
-  const wifiIcon = formElements.wifiStatus.querySelector('i');
-  const statusText = connected ? window.location.hostname : i18n('connecting');
-  
-  wifiIcon.className = connected ? 'fas fa-wifi' : 'fas fa-wifi-slash';
-  wifiIcon.style.color = connected ? '#4bb543' : '#ec0b43';
-  formElements.ipAddress.textContent = statusText;
+  formElements.wifiStatus.classList.toggle('offline', !connected);
+  formElements.wifiStatus.querySelector('i').className =
+    connected ? 'fas fa-wifi' : 'fas fa-exclamation-circle';
+  formElements.ipAddress.textContent = connected ? window.location.hostname : i18n('connecting');
 }
 
 function loadConfiguration() {
@@ -101,6 +100,23 @@ function populateFormFields(config) {
   document.getElementById('max_pressure').value = config.max_pressure || 3.5;
   document.getElementById('pressure_offset').value = config.pressure_offset || 0;
   document.getElementById('temp_offset').value = config.temp_offset || 0;
+
+  // Pressure sensors and the clogged-filter alarm
+  const dual = config.dual_pressure_sensors === true;
+  document.querySelector(`input[name="dual_pressure_sensors"][value="${dual}"]`).checked = true;
+  document.getElementById('filter_alarm_enabled').checked = config.filter_alarm_enabled !== false;
+  document.getElementById('filter_dp_warning').value = config.filter_dp_warning ?? 0.5;
+  document.getElementById('filter_min_flow_lpm').value = config.filter_min_flow_lpm ?? 5;
+  document.getElementById('filter_alarm_delay_s').value = config.filter_alarm_delay_s ?? 30;
+  updateSensorFields();
+}
+
+// The alarm settings only apply with two sensors, its values only when it's on
+function updateSensorFields() {
+  const dual = document.querySelector('input[name="dual_pressure_sensors"]:checked').value === 'true';
+  const alarmOn = document.getElementById('filter_alarm_enabled').checked;
+  document.getElementById('filterAlarmGroup').classList.toggle('hidden', !dual);
+  document.getElementById('filterAlarmFields').classList.toggle('hidden', !alarmOn);
 }
 
 function saveConfiguration(formId, event) {
@@ -113,7 +129,8 @@ function saveConfiguration(formId, event) {
   // Fields the firmware parses as numbers; FormData would hand over strings
   const numericKeys = [
     'mqtt_port', 'min_pressure', 'max_pressure', 'pressure_offset', 'temp_offset',
-    'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm'
+    'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm',
+    'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s'
   ];
 
   // Convert FormData to a plain object
@@ -128,8 +145,16 @@ function saveConfiguration(formId, event) {
       data[key] = n;
       continue;
     }
+    if (key === 'dual_pressure_sensors') {
+      data[key] = value === 'true';
+      continue;
+    }
     data[key] = value;
   }
+
+  // An unticked checkbox is left out of FormData, so read it directly
+  const alarmBox = form.querySelector('#filter_alarm_enabled');
+  if (alarmBox) data.filter_alarm_enabled = alarmBox.checked;
   
   console.log('Sending configuration:', data);
   
@@ -258,16 +283,6 @@ function showNotification(messageKey, type = 'info') {
   // Create notification element
   const notification = document.createElement('div');
   notification.className = `notification ${type}`;
-  notification.style.backgroundColor = 
-    type === 'success' ? '#4bb543' : 
-    type === 'error' ? '#ec0b43' : 
-    type === 'warning' ? '#ff9505' : '#0f8b8d';
-  notification.style.color = 'white';
-  notification.style.padding = '15px 20px';
-  notification.style.marginBottom = '10px';
-  notification.style.borderRadius = '5px';
-  notification.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
-  notification.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
   notification.style.opacity = '0';
   notification.style.transform = 'translateX(50px)';
   
@@ -276,9 +291,11 @@ function showNotification(messageKey, type = 'info') {
   // Add close button
   const closeBtn = document.createElement('span');
   closeBtn.innerHTML = '&times;';
-  closeBtn.style.marginLeft = '10px';
+  closeBtn.style.position = 'absolute';
+  closeBtn.style.right = '14px';
+  closeBtn.style.top = '10px';
+  closeBtn.style.fontSize = '1.3rem';
   closeBtn.style.cursor = 'pointer';
-  closeBtn.style.float = 'right';
   closeBtn.onclick = function() {
     notification.style.opacity = '0';
     notification.style.transform = 'translateX(50px)';
@@ -312,7 +329,19 @@ function showNotification(messageKey, type = 'info') {
 }
 
 // Initialize when DOM is loaded
+// Header shows which unit this is ("AquaSensys C3" / "AquaSensys M")
+function loadDeviceName() {
+  fetch('/api/device')
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      const name = d && (d.display_name || d.name);
+      if (name) document.getElementById('deviceName').textContent = name;
+    })
+    .catch(() => {});
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  loadDeviceName();
   connectSSE();
   
   // Add event listeners for forms
@@ -330,6 +359,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (formElements.paramsForm) {
     formElements.paramsForm.addEventListener('submit', (e) => saveConfiguration('paramsForm', e));
+  }
+
+  if (formElements.sensorsForm) {
+    formElements.sensorsForm.addEventListener('submit', (e) => saveConfiguration('sensorsForm', e));
+    formElements.sensorsForm.querySelectorAll('input[name="dual_pressure_sensors"], #filter_alarm_enabled')
+      .forEach(input => input.addEventListener('change', updateSensorFields));
   }
   
   // Add event listeners for action buttons

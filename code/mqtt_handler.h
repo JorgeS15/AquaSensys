@@ -14,6 +14,8 @@ extern const char* DEVICE_VERSION;
 
 // Extern declarations for variables needed by MQTT functions
 extern float pressure;
+extern float pressureIn;
+extern float pressureOut;
 extern float temperature;
 extern float flow;
 extern volatile bool motor;

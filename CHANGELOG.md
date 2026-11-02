@@ -8,6 +8,33 @@ Each release has two parts: the firmware (flashed OTA) and the web UI on the SD
 card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded.
 
+## 3.5.0 — 2026-11-02
+- Optional second pressure sensor, after the filter (`dual_pressure_sensors`,
+  default off). With both fitted, the drop across the filter (inlet − outlet)
+  is published over MQTT (`pressure_out`, `filter_dp`) and on the web UI.
+- Clogged-filter alarm (`filter_alarm_enabled`, on by default): the filter is
+  flagged once the drop has stayed at or above `filter_dp_warning` (0.5 bar)
+  for `filter_alarm_delay_s` (30 s), so short pressure spikes are ignored. The
+  drop is judged only while the flow is above `filter_min_flow_lpm`
+  (5 L/min) — so it works on Monitor units too, where no pump state is known.
+  A clogged verdict holds while there is no flow and clears after the same
+  delay back below the limit. Home Assistant gets a "Filter Clogged" problem
+  sensor. It is a warning only: it never stops the pump.
+- The dashboard header reads "AquaSensys C3" / "AquaSensys M" (was
+  "AquaSensys - C3" / "AquaSensys - M").
+- **[web UI]** New look for every page: the pump state and controls up front,
+  a pressure gauge with the start/stop band, temperature and flow side by side,
+  and the unit's model, firmware and connection size. Monitor units show
+  readings only. Works at phone width.
+- **[web UI]** The Diagnostics and Settings headers show the unit's name too.
+- **[web UI]** With two sensors the dashboard shows a filter card (before,
+  after, drop and the alarm state) and the diagnostics page shows both sensors
+  and the drop; with one sensor only the mains pressure appears.
+- **[web UI]** New **Settings → Pressure Sensors** card: number of sensors,
+  clogged-filter alarm on/off, its threshold, minimum flow and delay.
+- **[web UI]** No longer loads web fonts, so the pages render the same without
+  internet access (AP mode).
+
 ## 3.4.10 — 2026-11-01
 - The **Water Temperature Offset** setting (`temp_offset`, °C) is now applied to
   the water temperature, alongside the pressure offsets in `config.json`.

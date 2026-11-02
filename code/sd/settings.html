@@ -1,20 +1,21 @@
 <!DOCTYPE HTML>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>AquaSensys - Settings</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0F2A32">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" type="text/css" href="style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
   <div class="topnav">
-    <h1><i class="fas fa-microchip"></i> <span data-i18n="mainTitle">AquaSensys</span></h1>
-    <div class="nav-right">
-      <a href="/"><i class="fas fa-tachometer-alt"></i> <span data-i18n="dashboard">Dashboard</span></a>
-      <a href="/diagnostics.html"><i class="fas fa-chart-line"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
-      <a href="/settings.html" class="active"><i class="fas fa-cog"></i> <span data-i18n="settings">Settings</span></a>
+    <h1><i class="fas fa-tint" aria-hidden="true"></i> <span id="deviceName">AquaSensys</span></h1>
+    <nav class="nav-right">
+      <a href="/"><i class="fas fa-th-large" aria-hidden="true"></i> <span data-i18n="dashboard">Dashboard</span></a>
+      <a href="/diagnostics.html"><i class="fas fa-wave-square" aria-hidden="true"></i> <span data-i18n="diagnostics">Diagnostics</span></a>
+      <a href="/settings.html" class="active" aria-current="page"><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="settings">Settings</span></a>
       <div class="language-selector">
         <label for="languageSelector" data-i18n="language">Language</label>
         <select id="languageSelector" onchange="changeLanguage(this.value)">
@@ -22,147 +23,235 @@
           <option value="pt" data-i18n="portuguese">Portuguese</option>
         </select>
       </div>
-      <div class="wifi-status" id="wifiStatus">
-        <i class="fas fa-wifi"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
+      <div class="wifi-status offline" id="wifiStatus" role="status">
+        <i class="fas fa-wifi" aria-hidden="true"></i> <span id="ipAddress" data-i18n="connecting">Connecting...</span>
       </div>
-    </div>
+    </nav>
   </div>
-  
-  <div class="content">
-    <div class="card settings-card">
-      <h2><i class="fas fa-wifi"></i> <span data-i18n="networkSettings">Network Settings</span></h2>
-      <form id="wifiForm">
-        <div class="form-group">
-          <label for="wifi_ssid" data-i18n="wifiSsid">WiFi SSID:</label>
-          <input type="text" id="wifi_ssid" name="wifi_ssid" required>
-        </div>
-        <div class="form-group">
-          <label for="wifi_password" data-i18n="wifiPassword">WiFi Password:</label>
-          <input type="password" id="wifi_password" name="wifi_password">
-          <small data-i18n="leaveBlankPassword">Leave blank to keep current password</small>
-        </div>
-        <button type="submit" class="button save-btn" data-i18n="saveNetworkSettings">Save Network Settings</button>
-      </form>
-    </div>
-    
-    <div class="card settings-card">
-      <h2><i class="fas fa-server"></i> <span data-i18n="mqttSettings">MQTT Settings</span></h2>
-      <form id="mqttForm">
-        <div class="form-group">
-          <label for="mqtt_server" data-i18n="mqttServer">MQTT Server:</label>
-          <input type="text" id="mqtt_server" name="mqtt_server" required>
-        </div>
-        <div class="form-group">
-          <label for="mqtt_port" data-i18n="mqttPort">MQTT Port:</label>
-          <input type="number" id="mqtt_port" name="mqtt_port" required>
-        </div>
-        <div class="form-group">
-          <label for="mqtt_user" data-i18n="mqttUsername">MQTT Username:</label>
-          <input type="text" id="mqtt_user" name="mqtt_user">
-        </div>
-        <div class="form-group">
-          <label for="mqtt_password" data-i18n="mqttPassword">MQTT Password:</label>
-          <input type="password" id="mqtt_password" name="mqtt_password">
-          <small data-i18n="leaveBlankPassword">Leave blank to keep current password</small>
-        </div>
-        <button type="submit" class="button save-btn" data-i18n="saveNetworkSettings">Save MQTT Settings</button>
-      </form>
-    </div>
-    
-    <div class="card settings-card">
-      <h2><i class="fas fa-microchip"></i> <span data-i18n="deviceSettings">Device Settings</span></h2>
-      <form id="deviceForm">
-        <div class="form-group">
-          <label for="device_name" data-i18n="deviceNameLabel">Device Name:</label>
-          <input type="text" id="device_name" name="device_name" maxlength="48" placeholder="AquaSensys C3">
-          <small data-i18n="deviceNameHelp">Shown in Home Assistant and on the dashboard. Leave blank for the default of the device type.</small>
-        </div>
-        <div class="form-group">
-          <label for="device_id" data-i18n="deviceIdLabel">Device ID:</label>
-          <input type="text" id="device_id" name="device_id" maxlength="32" pattern="[a-z0-9\-]*" placeholder="aquasensys">
-          <small data-i18n="deviceIdHelp">Must be different on every unit: it names the MQTT topics and the Home Assistant entities. Lower-case letters, digits and hyphens. Leave blank for the default of the device type. Changing it creates a new device in Home Assistant.</small>
-        </div>
-        <div class="form-group">
-          <label for="device_type" data-i18n="deviceTypeLabel">Device Type:</label>
-          <select id="device_type" name="device_type">
-            <option value="C" data-i18n="controllerType">Controller (C)</option>
-            <option value="M" data-i18n="monitorType">Monitor (M)</option>
-          </select>
-          <small data-i18n="deviceTypeHelp">Monitor units only measure — all motor control is disabled. Changing this reboots the device.</small>
-        </div>
-        <div class="form-group">
-          <label for="connection_size" data-i18n="connectionSizeLabel">Water Connection Size:</label>
-          <select id="connection_size" name="connection_size">
-            <option value="3/4" data-i18n="sizeThreeQuarter">3/4&quot; (396 pulses/L)</option>
-            <option value="1" data-i18n="sizeOneInch">1&quot; (480 pulses/L)</option>
-          </select>
-          <small data-i18n="connectionSizeHelp">Selects the flow sensor K-factor. Defaults to 3/4&quot;.</small>
-        </div>
-        <div class="form-group">
-          <label for="flow_k_factor" data-i18n="flowKFactor">Flow K-factor (0 = use size default):</label>
-          <input type="number" id="flow_k_factor" name="flow_k_factor" step="0.01" min="0">
-          <small data-i18n="flowKFactorHelp">From F = K &times; Q + offset, printed on the sensor body. 3/4&quot; = 6.6, 1&quot; = 8.</small>
-        </div>
-        <div class="form-group">
-          <label for="flow_k_offset" data-i18n="flowKOffset">Flow K-offset (Hz):</label>
-          <input type="number" id="flow_k_offset" name="flow_k_offset" step="0.01">
-          <small data-i18n="flowKOffsetHelp">The constant term in F = K &times; Q + offset. Only used when a K-factor is set.</small>
-        </div>
-        <div class="form-group">
-          <label for="flow_debounce_us" data-i18n="flowDebounce">Flow debounce (&micro;s):</label>
-          <input type="number" id="flow_debounce_us" name="flow_debounce_us" step="10" min="0" max="100000">
-          <small data-i18n="flowDebounceHelp">Rejects edges closer together than a real pulse can be. 500 &micro;s allows up to ~133 L/min.</small>
-        </div>
-        <div class="form-group">
-          <label for="max_flow_lpm" data-i18n="maxFlow">Maximum plausible flow (L/min):</label>
-          <input type="number" id="max_flow_lpm" name="max_flow_lpm" step="1" min="1">
-          <small data-i18n="maxFlowHelp">Readings above this are discarded as electrical noise.</small>
-        </div>
-        <button type="submit" class="button save-btn" data-i18n="saveDeviceSettings">Save Device Settings</button>
-      </form>
+
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <p class="eyebrow" data-i18n="settingsEyebrow">Device configuration</p>
+        <h1 data-i18n="settings">Settings</h1>
+      </div>
     </div>
 
-    <div class="card settings-card">
-      <h2><i class="fas fa-sliders-h"></i> <span data-i18n="systemParameters">System Parameters</span></h2>
-      <form id="paramsForm">
-        <div class="form-group">
-          <label for="min_pressure" data-i18n="minPressureBar">Minimum Pressure (bar):</label>
-          <input type="number" id="min_pressure" name="min_pressure" step="0.1" required>
+    <div class="settings-grid">
+      <div class="settings-card">
+        <h2><i class="fas fa-wifi" aria-hidden="true"></i> <span data-i18n="networkSettings">Network Settings</span></h2>
+        <p class="card-desc" data-i18n="wifiDesc">The device reconnects after saving.</p>
+        <form id="wifiForm">
+          <div class="form-group">
+            <label for="wifi_ssid" data-i18n="wifiSsid">WiFi SSID:</label>
+            <input type="text" id="wifi_ssid" name="wifi_ssid" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label for="wifi_password" data-i18n="wifiPassword">WiFi Password:</label>
+            <input type="password" id="wifi_password" name="wifi_password" autocomplete="new-password">
+            <small data-i18n="leaveBlankPassword">Leave blank to keep current password</small>
+          </div>
+          <button type="submit" class="button save-btn" data-i18n="saveNetworkSettings">Save Network Settings</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h2><i class="fas fa-server" aria-hidden="true"></i> <span data-i18n="mqttSettings">MQTT Settings</span></h2>
+        <p class="card-desc" data-i18n="mqttDesc">Integration with Home Assistant and other systems.</p>
+        <form id="mqttForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="mqtt_server" data-i18n="mqttServerLabel">Server</label>
+              <input type="text" id="mqtt_server" name="mqtt_server" required>
+            </div>
+            <div class="form-group narrow">
+              <label for="mqtt_port" data-i18n="mqttPortLabel">Port</label>
+              <input type="number" id="mqtt_port" name="mqtt_port" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="mqtt_user" data-i18n="mqttUserLabel">Username</label>
+              <input type="text" id="mqtt_user" name="mqtt_user" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="mqtt_password" data-i18n="mqttPasswordLabel">Password</label>
+              <input type="password" id="mqtt_password" name="mqtt_password" autocomplete="new-password">
+            </div>
+          </div>
+          <small class="card-desc" style="display: block; margin-top: -10px" data-i18n="leaveBlankPassword">Leave blank to keep current password</small>
+          <button type="submit" class="button save-btn" data-i18n="saveMqttSettings">Save MQTT Settings</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h2><i class="fas fa-microchip" aria-hidden="true"></i> <span data-i18n="deviceSettings">Device Settings</span></h2>
+        <p class="card-desc" data-i18n="deviceDesc">Identity of this unit and its flow sensor.</p>
+        <form id="deviceForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device_name" data-i18n="deviceNameLabel">Device Name:</label>
+              <input type="text" id="device_name" name="device_name" maxlength="48" placeholder="AquaSensys C3">
+            </div>
+            <div class="form-group">
+              <label for="device_id" data-i18n="deviceIdLabel">Device ID:</label>
+              <input type="text" id="device_id" name="device_id" maxlength="32" pattern="[a-z0-9\-]*" placeholder="aquasensys">
+            </div>
+          </div>
+          <small class="card-desc" style="display: block; margin-top: -10px" data-i18n="deviceIdHelp">Must be different on every unit: it names the MQTT topics and the Home Assistant entities. Lower-case letters, digits and hyphens. Leave blank for the default of the device type. Changing it creates a new device in Home Assistant.</small>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="device_type" data-i18n="deviceTypeLabel">Device Type:</label>
+              <select id="device_type" name="device_type">
+                <option value="C" data-i18n="controllerType">Controller (C)</option>
+                <option value="M" data-i18n="monitorType">Monitor (M)</option>
+              </select>
+              <small data-i18n="deviceTypeHelp">Monitor units only measure — all motor control is disabled. Changing this reboots the device.</small>
+            </div>
+            <div class="form-group">
+              <label for="connection_size" data-i18n="connectionSizeLabel">Water Connection Size:</label>
+              <select id="connection_size" name="connection_size">
+                <option value="3/4" data-i18n="sizeThreeQuarter">3/4&quot; (396 pulses/L)</option>
+                <option value="1" data-i18n="sizeOneInch">1&quot; (480 pulses/L)</option>
+              </select>
+              <small data-i18n="connectionSizeHelp">Selects the flow sensor K-factor. Defaults to 3/4&quot;.</small>
+            </div>
+          </div>
+          <details class="advanced">
+            <summary data-i18n="flowAdvanced">Flow sensor calibration (advanced)</summary>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="flow_k_factor" data-i18n="flowKFactor">Flow K-factor (0 = use size default):</label>
+                <input type="number" id="flow_k_factor" name="flow_k_factor" step="0.01" min="0">
+                <small data-i18n="flowKFactorHelp">From F = K &times; Q + offset, printed on the sensor body. 3/4&quot; = 6.6, 1&quot; = 8.</small>
+              </div>
+              <div class="form-group">
+                <label for="flow_k_offset" data-i18n="flowKOffset">Flow K-offset (Hz):</label>
+                <input type="number" id="flow_k_offset" name="flow_k_offset" step="0.01">
+                <small data-i18n="flowKOffsetHelp">The constant term in F = K &times; Q + offset. Only used when a K-factor is set.</small>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="flow_debounce_us" data-i18n="flowDebounce">Flow debounce (&micro;s):</label>
+                <input type="number" id="flow_debounce_us" name="flow_debounce_us" step="10" min="0" max="100000">
+                <small data-i18n="flowDebounceHelp">Rejects edges closer together than a real pulse can be. 500 &micro;s allows up to ~133 L/min.</small>
+              </div>
+              <div class="form-group">
+                <label for="max_flow_lpm" data-i18n="maxFlow">Maximum plausible flow (L/min):</label>
+                <input type="number" id="max_flow_lpm" name="max_flow_lpm" step="1" min="1">
+                <small data-i18n="maxFlowHelp">Readings above this are discarded as electrical noise.</small>
+              </div>
+            </div>
+          </details>
+          <button type="submit" class="button save-btn" data-i18n="saveDeviceSettings">Save Device Settings</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h2><i class="fas fa-tachometer-alt" aria-hidden="true"></i> <span data-i18n="pressureSensors">Pressure Sensors</span></h2>
+        <p class="card-desc" data-i18n="sensorsDesc">Sensor 1 sits on the mains, before the filter. Sensor 2 (optional) sits after the filter.</p>
+        <form id="sensorsForm">
+          <fieldset class="choice-group">
+            <legend data-i18n="sensorCount">Installed sensors</legend>
+            <label class="choice">
+              <input type="radio" name="dual_pressure_sensors" value="false" checked>
+              <div><strong data-i18n="oneSensor">1 sensor</strong><span data-i18n="oneSensorDesc">Mains pressure only</span></div>
+            </label>
+            <label class="choice">
+              <input type="radio" name="dual_pressure_sensors" value="true">
+              <div><strong data-i18n="twoSensors">2 sensors</strong><span data-i18n="twoSensorsDesc">Before and after the filter, with pressure drop</span></div>
+            </label>
+          </fieldset>
+          <div id="filterAlarmGroup">
+            <div class="form-group">
+              <label class="check-row" for="filter_alarm_enabled">
+                <input type="checkbox" id="filter_alarm_enabled" name="filter_alarm_enabled">
+                <span><strong data-i18n="filterAlarmLabel">Clogged filter alarm</strong>
+                <small data-i18n="filterAlarmHelp">Warns on the dashboard and in Home Assistant when the drop across the filter gets too high.</small></span>
+              </label>
+            </div>
+            <div id="filterAlarmFields">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="filter_dp_warning" data-i18n="filterDpWarningLabel">Alarm above (bar of drop)</label>
+                  <input type="number" id="filter_dp_warning" name="filter_dp_warning" step="0.05" min="0.05">
+                </div>
+                <div class="form-group">
+                  <label for="filter_min_flow_lpm" data-i18n="filterMinFlowLabel">Only with flow above (L/min)</label>
+                  <input type="number" id="filter_min_flow_lpm" name="filter_min_flow_lpm" step="0.5" min="0">
+                </div>
+                <div class="form-group">
+                  <label for="filter_alarm_delay_s" data-i18n="filterDelayLabel">For at least (s)</label>
+                  <input type="number" id="filter_alarm_delay_s" name="filter_alarm_delay_s" step="5" min="0" max="3600">
+                </div>
+              </div>
+              <small class="card-desc" style="display: block; margin-top: -10px" data-i18n="filterMinFlowHelp">The drop must stay above the limit, with water flowing, for this long before the alarm fires, so short pressure spikes are ignored. It clears after the same time back below the limit.</small>
+            </div>
+          </div>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="saveSensors">Save sensors</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h2><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="systemParameters">System Parameters</span></h2>
+        <p class="card-desc" data-i18n="paramsDesc">The pump starts below the minimum and stops above the maximum.</p>
+        <form id="paramsForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="min_pressure" data-i18n="minPressureBar">Minimum Pressure (bar):</label>
+              <input type="number" id="min_pressure" name="min_pressure" step="0.1" required>
+            </div>
+            <div class="form-group">
+              <label for="max_pressure" data-i18n="maxPressureBar">Maximum Pressure (bar):</label>
+              <input type="number" id="max_pressure" name="max_pressure" step="0.1" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="pressure_offset" data-i18n="pressureOffset">Pressure Offset:</label>
+              <input type="number" id="pressure_offset" name="pressure_offset" step="0.01" required>
+            </div>
+            <div class="form-group">
+              <label for="temp_offset" data-i18n="tempOffset">Water Temperature Offset (°C):</label>
+              <input type="number" id="temp_offset" name="temp_offset" step="0.01" required>
+            </div>
+          </div>
+          <button type="submit" class="button save-btn" data-i18n="saveParameters">Save Parameters</button>
+        </form>
+      </div>
+
+      <div class="settings-card system-actions">
+        <h2><i class="fas fa-tools" aria-hidden="true"></i> <span data-i18n="systemActions">System Actions</span></h2>
+        <p class="card-desc" data-i18n="systemActionsDesc">Firmware, files and restart.</p>
+        <div class="action-list">
+          <a href="/update" class="action-link">
+            <i class="fas fa-download" aria-hidden="true"></i>
+            <span class="grow" data-i18n="firmwareUpdate">Firmware Update</span>
+            <i class="fas fa-chevron-right chev" aria-hidden="true"></i>
+          </a>
+          <a href="/upload" class="action-link">
+            <i class="fas fa-upload" aria-hidden="true"></i>
+            <span class="grow" data-i18n="fileUpload">File Upload</span>
+            <i class="fas fa-chevron-right chev" aria-hidden="true"></i>
+          </a>
+          <a href="/debug" class="action-link">
+            <i class="fas fa-bug" aria-hidden="true"></i>
+            <span class="grow" data-i18n="systemDebug">System Debug</span>
+            <i class="fas fa-chevron-right chev" aria-hidden="true"></i>
+          </a>
         </div>
-        <div class="form-group">
-          <label for="max_pressure" data-i18n="maxPressureBar">Maximum Pressure (bar):</label>
-          <input type="number" id="max_pressure" name="max_pressure" step="0.1" required>
+        <div class="action-buttons">
+          <button type="button" id="rebootBtn" class="button outline">
+            <i class="fas fa-undo" aria-hidden="true"></i> <span data-i18n="rebootDevice">Reboot Device</span>
+          </button>
+          <button type="button" id="factoryResetBtn" class="button destructive">
+            <i class="fas fa-trash" aria-hidden="true"></i> <span data-i18n="factoryReset">Factory Reset</span>
+          </button>
         </div>
-        <div class="form-group">
-          <label for="pressure_offset" data-i18n="pressureOffset">Pressure Offset:</label>
-          <input type="number" id="pressure_offset" name="pressure_offset" step="0.01" required>
-        </div>
-        <div class="form-group">
-          <label for="temp_offset" data-i18n="tempOffset">Water Temperature Offset (°C):</label>
-          <input type="number" id="temp_offset" name="temp_offset" step="0.01" required>
-        </div>
-        <button type="submit" class="button save-btn" data-i18n="saveParameters">Save Parameters</button>
-      </form>
-    </div>
-    
-    <div class="card settings-card system-actions">
-      <h2><i class="fas fa-tools"></i> <span data-i18n="systemActions">System Actions</span></h2>
-      <div class="action-buttons">
-        <button id="rebootBtn" class="button destructive">
-          <i class="fas fa-undo"></i> <span data-i18n="rebootDevice">Reboot Device</span>
-        </button>
-        <button id="factoryResetBtn" class="button destructive">
-          <i class="fas fa-trash"></i> <span data-i18n="factoryReset">Factory Reset</span>
-        </button>
-        <a href="/update" class="button update-btn">
-          <i class="fas fa-download"></i> <span data-i18n="firmwareUpdate">Firmware Update</span>
-        </a>
-        <a href="/upload" class="button secondary">
-          <i class="fas fa-upload"></i> <span data-i18n="fileUpload">File Upload</span>
-        </a>
       </div>
     </div>
-  </div>
+  </main>
 
   <script src="translations.js"></script>
   <script src="language.js"></script>

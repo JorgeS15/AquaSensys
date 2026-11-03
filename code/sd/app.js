@@ -77,7 +77,17 @@ const elements = {
   uptime: $('uptime'),
   wifiRssi: $('wifiRssi'),
   freeHeap: $('freeHeap'),
-  motorRuntime: $('motorRuntime')
+  motorRuntime: $('motorRuntime'),
+
+  updateBanner: $('updateBanner'),
+  updateTitle: $('updateTitle'),
+  updateDetail: $('updateDetail'),
+  updateMeter: $('updateMeter'),
+  updateBar: $('updateBar'),
+  updateNotes: $('updateNotes'),
+  updateInstallBtn: $('updateInstallBtn'),
+  updateCheckBtn: $('updateCheckBtn'),
+  updateCheckStatus: $('updateCheckStatus')
 };
 
 // Latest values from the device; re-rendered on every update and language change
@@ -446,6 +456,140 @@ function sendCommand(command) {
   });
 }
 
+// ---------- Firmware updates (/api/update) ----------
+// The unit itself checks GitHub; this page only shows what it found and asks it
+// to install. While an update runs the page polls every 2 s, and once the unit
+// comes back on a new version it reloads, picking up the new web UI.
+
+let updateInfo = null;
+let updatePollTimer = null;
+let installFromVersion = null;  // set when Install is pressed here
+let checkClickedAt = null;      // set when "Check for updates" is pressed here
+
+function isUpdateRunning(u) {
+  return !!u && u.state !== 'idle' && u.state !== 'checking';
+}
+
+function scheduleUpdatePoll(ms) {
+  clearTimeout(updatePollTimer);
+  const fast = isUpdateRunning(updateInfo) || installFromVersion || checkClickedAt;
+  updatePollTimer = setTimeout(loadUpdateStatus, ms || (fast ? 2000 : 10 * 60 * 1000));
+}
+
+function loadUpdateStatus() {
+  fetch('/api/update')
+    .then(response => response.ok ? response.json() : Promise.reject(response.status))
+    .then(data => {
+      // Back after the restart, on the new version: reload for the new web UI
+      if (installFromVersion && data.current !== installFromVersion) {
+        location.reload();
+        return;
+      }
+      updateInfo = data;
+      renderUpdate();
+      scheduleUpdatePoll();
+    })
+    .catch(err => {
+      // While the unit restarts it doesn't answer; keep trying
+      console.error('Error loading update status:', err);
+      scheduleUpdatePoll(installFromVersion ? 3000 : 0);
+    });
+}
+
+function renderUpdate() {
+  const u = updateInfo;
+  if (!u) return;
+  const running = isUpdateRunning(u);
+  let show = false, title = '', detail = '', canInstall = false, failed = false;
+
+  if (running) {
+    show = true;
+    title = i18n('updateInstalling').replace('{v}', u.latest || '');
+    detail = i18n('updateStep_' + u.state);
+  } else if (u.available) {
+    show = true;
+    title = i18n('updateAvailable').replace('{v}', u.latest);
+    if (u.usb_flash_required) {
+      detail = i18n('updateNeedsUsb');
+    } else {
+      detail = i18n('updateCurrent').replace('{v}', u.current);
+      canInstall = true;
+    }
+    // A failed install leaves the version on offer: say why, and allow a retry
+    if (u.error && installFromVersion) {
+      failed = true;
+      detail = i18n('updateFailed') + ' ' + u.error;
+    }
+  }
+  if (!running && installFromVersion && u.current === installFromVersion && u.error) {
+    installFromVersion = null;  // the attempt is over
+  }
+
+  elements.updateBanner.classList.toggle('hidden', !show);
+  elements.updateBanner.classList.toggle('error', failed);
+  elements.updateTitle.textContent = title;
+  elements.updateDetail.textContent = detail;
+
+  const pct = running && typeof u.progress === 'number' ? u.progress : null;
+  elements.updateMeter.classList.toggle('hidden', !running);
+  elements.updateBar.style.width = (pct === null ? (u.state === 'rebooting' ? 100 : 0) : pct) + '%';
+
+  elements.updateInstallBtn.classList.toggle('hidden', !canInstall);
+  elements.updateInstallBtn.disabled = running;
+  if (u.release_url) elements.updateNotes.href = u.release_url;
+  elements.updateNotes.classList.toggle('hidden', !show || !u.release_url);
+
+  // "Check for updates" result, only after a check started from this page
+  elements.updateCheckBtn.disabled = running || u.state === 'checking' || !!checkClickedAt;
+  if (checkClickedAt) {
+    const sinceClick = (Date.now() - checkClickedAt) / 1000;
+    const finished = u.state === 'idle' && typeof u.checked_ago_s === 'number' && u.checked_ago_s <= sinceClick;
+    if (finished) {
+      checkClickedAt = null;
+      elements.updateCheckBtn.disabled = running;
+      elements.updateCheckStatus.textContent = u.error
+        ? i18n('updateCheckFailed') + ' ' + u.error
+        : (u.available ? '' : i18n('upToDate'));
+    } else if (sinceClick > 60) {
+      checkClickedAt = null;  // the unit never got to it (no WiFi?): give the button back
+      elements.updateCheckBtn.disabled = running;
+      elements.updateCheckStatus.textContent = '';
+    } else {
+      elements.updateCheckStatus.textContent = i18n('checkingUpdates');
+    }
+  }
+}
+
+function checkForUpdates() {
+  checkClickedAt = Date.now();
+  elements.updateCheckBtn.disabled = true;
+  elements.updateCheckStatus.textContent = i18n('checkingUpdates');
+  fetch('/api/update/check', { method: 'POST' })
+    .catch(err => console.error('Error requesting update check:', err))
+    .finally(() => scheduleUpdatePoll(2000));
+}
+
+function installUpdate() {
+  const u = updateInfo;
+  if (!u || !u.available) return;
+  let question = i18n('confirmAutoUpdate').replace('{v}', u.latest);
+  if (isController()) question += i18n('confirmAutoUpdatePump');
+  if (!confirm(question)) return;
+
+  elements.updateInstallBtn.disabled = true;
+  fetch('/api/update/install', { method: 'POST' })
+    .then(response => response.json().then(body => ({ ok: response.ok, body })))
+    .then(({ ok, body }) => {
+      if (!ok) throw new Error(body.error || 'refused');
+      installFromVersion = u.current;
+    })
+    .catch(err => {
+      elements.updateInstallBtn.disabled = false;
+      alert(i18n('updateFailed') + ' ' + err.message);
+    })
+    .finally(() => scheduleUpdatePoll(1000));
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize language before connecting
@@ -456,6 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
   render();
   loadDeviceInfo();
   loadConfig();
+  loadUpdateStatus();
   connectSSE();
 
   elements.toggleBtn.addEventListener('click', () => sendCommand('toggle'));
@@ -469,5 +614,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!state.manualOverride) sendCommand('override');
   });
 
-  document.addEventListener('languagechanged', render);
+  elements.updateInstallBtn.addEventListener('click', installUpdate);
+  elements.updateCheckBtn.addEventListener('click', checkForUpdates);
+
+  document.addEventListener('languagechanged', () => {
+    render();
+    renderUpdate();
+  });
 });

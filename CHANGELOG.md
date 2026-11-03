@@ -6,7 +6,26 @@ digit. Versions up to 3.0.38 are recorded in the git history only.
 
 Each release has two parts: the firmware (flashed OTA) and the web UI on the SD
 card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
-only reach a device once the new `sd-assets.zip` is uploaded.
+only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
+automatic update installs both.
+
+## 3.6.0 — 2026-11-03
+- **Automatic updates.** The unit checks GitHub for a newer release every
+  `update_check_hours` (default 12; `0` = only when asked), and installs it once
+  accepted: firmware and web UI together, each checked against the release's
+  SHA-256, then a restart. A failed download leaves the unit as it was.
+- Home Assistant gets a firmware **update** entity (Settings → Updates, with
+  Install) and a **Check for Firmware Update** button.
+- **New flash layout: one USB flash needed.** The partition scheme changes from
+  `default` (1.25 MB app slots) to `min_spiffs` (1.875 MB), since HTTPS makes the
+  firmware too big for the old slots (1.40 MB). A unit on 3.5.0 or older must be
+  flashed once over USB — instructions in the release notes; it refuses this
+  firmware over OTA and keeps running. Settings on the SD card are kept.
+- The release adds `aquasensys-full-*.bin`, a complete image for that USB flash.
+- CI pins the ESP32 core to 3.3.12.
+- **[web UI]** The dashboard shows "Firmware vX is available" with Install and
+  release notes, the progress while it installs, and reloads itself afterwards.
+  "Check for updates" under the firmware version.
 
 ## 3.5.0 — 2026-11-02
 - Optional second pressure sensor, after the filter (`dual_pressure_sensors`,

@@ -15,6 +15,7 @@
 #include "MCP3208.h"
 #include "ACS712_handler.h"
 #include "web_routes.h"
+#include "update_manager.h"
 
 // Device identity.
 // One firmware binary runs on every unit, so the identity cannot be a compile-time
@@ -30,7 +31,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.5.0"; //New web UI; optional 2nd pressure sensor with clogged-filter alarm
+const char* DEVICE_VERSION = "3.6.0"; //Automatic updates from GitHub releases; min_spiffs partitions (1.875 MB app slots)
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -430,6 +431,10 @@ void setup() {
     // begins connecting at once, and before setupMQTT() its client id, topics
     // and server were still empty.
     xTaskCreatePinnedToCore(mqttTask, "mqtt", 8192, NULL, 1, NULL, 0);
+
+    // Checks GitHub for a newer release in the background; installs only when
+    // accepted from the web UI or Home Assistant
+    updateManagerBegin();
     
     // Setup web routes
     webRoutes();

@@ -190,14 +190,71 @@ with its readings on `homeassistant/<id>/state`. It connects with a last will on
 unit stops answering (within ~25 s), and every entity points at that topic, so Home
 Assistant shows a dead unit as unavailable rather than frozen on its last state.
 
+Each unit also has a **Firmware** update entity (state on
+`homeassistant/<id>/update/state`), which appears under **Settings → Updates**
+when a newer release is out; **Install** there runs the update described under
+[Updating a unit](#updating-a-unit). The **Check for Firmware Update** button
+checks GitHub straight away.
+
 ## Updating a unit
 
-There are two halves, and a firmware update only covers one of them:
+There are two halves: the **firmware**, in the ESP32's flash, and the **web UI**,
+served from the SD card. A release carries both (`aquasensys-firmware-*.bin` and
+`sd-assets.zip`).
+
+### Automatic updates (v3.6.0 and later)
+
+The unit asks GitHub for the latest release two minutes after it connects to
+WiFi, and then every `update_check_hours`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `update_check_hours` | `12` | Hours between checks, `1`–`720`. `0` checks only when asked. |
+
+When a newer release is out, the dashboard shows **"Firmware vX is available"**,
+and Home Assistant lists the unit under **Settings → Updates**. Nothing is
+installed until someone presses **Install** in either place. The unit then:
+
+1. downloads `sd-assets.zip` to the SD card, checking its size and SHA-256;
+2. downloads the firmware into the spare OTA slot, checked against the
+   release's SHA-256 — the running firmware is untouched until the restart;
+3. replaces the web UI from the archive (staged and CRC-checked, as below);
+4. restarts — a Controller's pump stops for the restart and then resumes on
+   its own. The dashboard reloads itself on the new version.
+
+A failure in step 1 or 2 is reported on the dashboard and leaves the unit
+exactly as it was. Should step 3 fail, the new firmware still starts with the
+previous web UI; upload `sd-assets.zip` through `/upload` to finish.
+
+**Check for updates** under the firmware version on the dashboard, or the
+**Check for Firmware Update** button in Home Assistant, checks straight away.
+The checks use GitHub's public API without a key, which allows 60 requests an
+hour per internet connection — far more than any number of units will make.
+
+`GET /api/update` returns the update state; `POST /api/update/check` and
+`POST /api/update/install` do what they say.
+
+### Flash layout and the one-time USB flash
+
+From v3.6.0 the firmware is built for the `min_spiffs` partition scheme: two
+1.875 MB app slots, where `default` had 1.25 MB. HTTPS (and the root
+certificates it needs) took the firmware to 1.40 MB, past the old slots. The
+128 KB SPIFFS partition that remains is unused: everything lives on the SD card.
+
+A partition table can only be written over USB, so **a unit on v3.5.0 or older
+must be flashed once over USB** with `aquasensys-full-*.bin`. The release notes
+explain how, from a browser or with esptool. `config.json`, the web UI and the
+logs are on the SD card and survive it. Uploading v3.6.0 or later through the
+old update page is refused ("Not enough space") and the unit keeps running the
+version it had.
+
+### Manual updates
+
+Still available, for a unit without internet access:
 
 1. **Firmware** — flash `aquasensys-firmware-*.bin` from the release through the
    device's firmware update page (OTA).
-2. **Web UI** — the pages are served from the SD card, and a firmware update
-   does not touch them. Upload `sd-assets.zip` from the same release through the
+2. **Web UI** — upload `sd-assets.zip` from the same release through the
    device's `/upload` page. Your `config.json` is never overwritten.
 
 Uploads are staged: each file is written to `<name>.part` and only replaces the

@@ -34,6 +34,7 @@ void setupMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 bool reconnectMQTT();
 void publishState();
+void publishUpdateState();
 void sendAutoDiscoveryConfigs();
 
 // Only attempt MQTT when server is configured
@@ -54,6 +55,7 @@ void createSensorConfig(const char* sensorId, const char* name, const char* unit
 void createSwitchConfig(const char* switchId, const char* name, const char* icon,
                       JsonDocument& deviceDoc, const String& stateTopic,
                       const char* valueKey, const char* commandTopic);
+void createUpdateConfig(JsonDocument& deviceDoc);
 void createButtonConfig(const char* buttonId, const char* name, const char* icon,
                       JsonDocument& deviceDoc, const char* commandTopic);
 

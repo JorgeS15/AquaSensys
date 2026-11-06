@@ -190,6 +190,12 @@ with its readings on `homeassistant/<id>/state`. It connects with a last will on
 unit stops answering (within ~25 s), and every entity points at that topic, so Home
 Assistant shows a dead unit as unavailable rather than frozen on its last state.
 
+Flow is published as a volume flow rate in L/min with long-term statistics,
+so it can be chosen as the **Water flow rate** of a water source in the Energy
+dashboard. Pressure, temperature and the filter pressure drop also keep
+long-term statistics. With two pressure sensors, they appear as **Pressure In**
+(before the filter) and **Pressure Out** (after it); with one, as **Pressure**.
+
 Each unit also has a **Firmware** update entity (state on
 `homeassistant/<id>/update/state`), which appears under **Settings → Updates**
 when a newer release is out; **Install** there runs the update described under

@@ -31,7 +31,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.0"; //Automatic updates from GitHub releases; min_spiffs partitions (1.875 MB app slots)
+const char* DEVICE_VERSION = "3.6.1"; //HA: flow rate selectable in the Energy dashboard; "Pressure In"/"Pressure Out"
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

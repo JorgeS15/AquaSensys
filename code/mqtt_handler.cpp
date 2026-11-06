@@ -217,12 +217,16 @@ void sendAutoDiscoveryConfigs() {
 
     String stateTopic = mqttTopicState;
 
-    createSensorConfig("pressure",    "Pressure",      "bar",   "pressure",         "mdi:gauge",         deviceDoc, stateTopic, "pressure");
+    // With a second sensor after the filter, the first one reads the pressure
+    // before it: "Pressure In" and "Pressure Out". The unique_ids stay as they
+    // were, so Home Assistant keeps the entities and their history.
+    createSensorConfig("pressure", config.dual_pressure_sensors ? "Pressure In" : "Pressure",
+                       "bar", "pressure", "mdi:gauge", deviceDoc, stateTopic, "pressure", "measurement");
     // Second pressure sensor (after the filter): its reading, the drop across
     // the filter and, when enabled, the clogged-filter alarm
     if (config.dual_pressure_sensors) {
-        createSensorConfig("pressure_out", "Pressure After Filter", "bar", "pressure", "mdi:gauge",  deviceDoc, stateTopic, "pressure_out");
-        createSensorConfig("filter_dp",    "Filter Pressure Drop",  "bar", "pressure", "mdi:filter", deviceDoc, stateTopic, "filter_dp");
+        createSensorConfig("pressure_out", "Pressure Out",         "bar", "pressure", "mdi:gauge",  deviceDoc, stateTopic, "pressure_out", "measurement");
+        createSensorConfig("filter_dp",    "Filter Pressure Drop", "bar", "pressure", "mdi:filter", deviceDoc, stateTopic, "filter_dp",    "measurement");
     } else {
         removeDiscoveryConfig("sensor", "pressure_out");
         removeDiscoveryConfig("sensor", "filter_dp");
@@ -233,8 +237,11 @@ void sendAutoDiscoveryConfigs() {
     } else {
         removeDiscoveryConfig("binary_sensor", "filter_clogged");
     }
-    createSensorConfig("temperature", "Temperature",   "°C",    "temperature",       "mdi:thermometer",   deviceDoc, stateTopic, "temperature");
-    createSensorConfig("flow",        "Flow Rate",     "L/min", nullptr,             "mdi:water",         deviceDoc, stateTopic, "flow");
+    createSensorConfig("temperature", "Temperature",   "°C",    "temperature",       "mdi:thermometer",   deviceDoc, stateTopic, "temperature", "measurement");
+    // volume_flow_rate + measurement: Home Assistant then keeps long-term
+    // statistics for it, which is what the Energy dashboard's "Water flow rate"
+    // picker lists. Without a device class it was invisible there.
+    createSensorConfig("flow",        "Flow Rate",     "L/min", "volume_flow_rate",  "mdi:water",         deviceDoc, stateTopic, "flow", "measurement");
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");
@@ -289,7 +296,7 @@ void createUpdateConfig(JsonDocument& deviceDoc) {
 void createSensorConfig(const char* sensorId, const char* name, const char* unit,
                         const char* deviceClass, const char* icon,
                         JsonDocument& deviceDoc, const String& stateTopic,
-                        const char* valueKey) {
+                        const char* valueKey, const char* stateClass) {
     char configTopic[96];
     snprintf(configTopic, sizeof(configTopic), "homeassistant/sensor/%s_%s/config", DEVICE_ID, sensorId);
 
@@ -300,6 +307,7 @@ void createSensorConfig(const char* sensorId, const char* name, const char* unit
     doc["value_template"] = String("{{ value_json.") + valueKey + " }}";
     if (unit)        doc["unit_of_measurement"] = unit;
     if (deviceClass) doc["device_class"]        = deviceClass;
+    if (stateClass)  doc["state_class"]         = stateClass;
     if (icon)        doc["icon"]                = icon;
     doc["availability_topic"] = mqttTopicAvailability;
     doc["device"]    = deviceDoc;

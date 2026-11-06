@@ -9,6 +9,14 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.1 — 2026-11-06
+- Home Assistant: the flow sensor is now a volume flow rate (`volume_flow_rate`,
+  L/min) with long-term statistics, so it can be picked as the **Water flow
+  rate** in the Energy dashboard. Pressure, temperature and the filter pressure
+  drop get long-term statistics too.
+- With two pressure sensors, Home Assistant names them **Pressure In** (before
+  the filter) and **Pressure Out** (after it). Entity ids and history are kept.
+
 ## 3.6.0 — 2026-11-03
 - **Automatic updates.** The unit checks GitHub for a newer release every
   `update_check_hours` (default 12; `0` = only when asked), and installs it once

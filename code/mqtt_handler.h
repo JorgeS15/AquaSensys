@@ -48,10 +48,11 @@ void createBinarySensorConfig(const char* sensorId, const char* name,
                       const char* deviceClass, const char* icon,
                       JsonDocument& deviceDoc, const String& stateTopic,
                       const char* valueKey);
+// stateClass "measurement" makes Home Assistant keep long-term statistics
 void createSensorConfig(const char* sensorId, const char* name, const char* unit, 
                       const char* deviceClass, const char* icon,
                       JsonDocument& deviceDoc, const String& stateTopic,
-                      const char* valueKey);
+                      const char* valueKey, const char* stateClass = nullptr);
 void createSwitchConfig(const char* switchId, const char* name, const char* icon,
                       JsonDocument& deviceDoc, const String& stateTopic,
                       const char* valueKey, const char* commandTopic);

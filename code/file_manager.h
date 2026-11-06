@@ -66,4 +66,9 @@ void handleDeleteFile(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 void handleZipUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
 void handleZipUploadComplete(AsyncWebServerRequest *request);
 
+// Extract a ZIP archive already on the SD card, with the same checks as an
+// upload: every entry is CRC-checked and staged, and the live files are only
+// replaced once the whole archive has checked out. config.json is never touched.
+bool applyZipFile(const char* path, String& error, int& filesReplaced);
+
 #endif

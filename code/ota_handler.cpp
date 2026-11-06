@@ -1,4 +1,5 @@
 #include "ota_handler.h"
+#include "update_manager.h"
 
 // Global OTA instance
 OTAHandler OTA;
@@ -399,6 +400,10 @@ void OTAHandler::begin(AsyncWebServer* server, const String& updatePath) {
 void OTAHandler::handleUploadStart(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     if (_isUpdating) {
         request->send(503, "text/plain", "Update already in progress");
+        return;
+    }
+    if (updateBusy()) {
+        request->send(503, "text/plain", "An automatic update is running");
         return;
     }
     

@@ -417,58 +417,153 @@ static size_t zipFeedBytes(const uint8_t *buf, size_t avail) {
     }
 }
 
-void handleZipUpload(AsyncWebServerRequest *request, String filename,
-                     size_t index, uint8_t *data, size_t len, bool final) {
-    if (index == 0) {
-        if (zipState.outFile) zipState.outFile.close();
-        zipState = ZipUploadState();
-        zipState.state = ZIP_FIND_SIG;
-        Serial.println("[ZIP] Upload started");
+// The ZIP state machine is shared by the /upload page and the automatic updater
+// (update_manager.cpp), which applies sd-assets.zip from the SD card. Only one
+// archive can be extracted at a time: whoever claims it first owns zipState.
+// A browser upload that is abandoned mid-way never reaches its final chunk, so
+// its claim lapses after two minutes without data.
+enum ZipOwner : uint8_t { ZIP_OWNER_NONE, ZIP_OWNER_UPLOAD, ZIP_OWNER_FILE };
+static volatile ZipOwner zipOwner = ZIP_OWNER_NONE;
+static volatile uint32_t zipOwnerActive = 0;
+static portMUX_TYPE zipOwnerMux = portMUX_INITIALIZER_UNLOCKED;
+static const uint32_t ZIP_CLAIM_TIMEOUT_MS = 120000;
+
+static bool zipClaim(ZipOwner who) {
+    portENTER_CRITICAL(&zipOwnerMux);
+    bool ok = zipOwner == ZIP_OWNER_NONE || zipOwner == who ||
+              millis() - zipOwnerActive > ZIP_CLAIM_TIMEOUT_MS;
+    if (ok) {
+        zipOwner = who;
+        zipOwnerActive = millis();
     }
+    portEXIT_CRITICAL(&zipOwnerMux);
+    return ok;
+}
 
-    if (!zipState.hasError && zipState.state != ZIP_DONE) {
-        size_t consumed = 0;
-        while (consumed < len && !zipState.hasError && zipState.state != ZIP_DONE) {
-            consumed += zipFeedBytes(data + consumed, len - consumed);
-        }
-    }
+static void zipRelease() {
+    portENTER_CRITICAL(&zipOwnerMux);
+    zipOwner = ZIP_OWNER_NONE;
+    portEXIT_CRITICAL(&zipOwnerMux);
+}
 
-    if (final) {
-        if (zipState.outFile) zipState.outFile.close();
+static void zipBegin() {
+    if (zipState.outFile) zipState.outFile.close();
+    zipState = ZipUploadState();
+    zipState.state = ZIP_FIND_SIG;
+}
 
-        // An archive must end between entries; anything else means the upload was cut short
-        if (zipState.state != ZIP_DONE && zipState.state != ZIP_FIND_SIG) {
-            zipFail("The archive ended mid-file — upload interrupted?");
-        }
-
-        // Only now, with every entry verified, replace the live files
-        uint8_t committed = 0;
-        if (!zipState.hasError) {
-            for (; committed < zipState.extractedCount; committed++) {
-                String path = "/" + zipState.extractedFiles[committed];
-                if (!commitPart(path)) {
-                    zipFail("Could not replace " + path);
-                    break;
-                }
-            }
-        }
-
-        if (zipState.hasError) {
-            // Throw away whatever was staged; the live files stay as they were
-            for (uint8_t i = committed; i < zipState.extractedCount; i++) {
-                SD.remove(partPath("/" + zipState.extractedFiles[i]));
-            }
-            if (!zipState.skipFile && zipState.filename[0]) {
-                SD.remove(partPath("/" + String(zipState.filename)));
-            }
-            Serial.printf("[ZIP] Failed: %s\n", zipState.errorMsg.c_str());
-        } else {
-            Serial.printf("[ZIP] Upload complete, %d file(s) replaced\n", zipState.extractedCount);
-        }
+static void zipFeed(const uint8_t *data, size_t len) {
+    size_t consumed = 0;
+    while (consumed < len && !zipState.hasError && zipState.state != ZIP_DONE) {
+        consumed += zipFeedBytes(data + consumed, len - consumed);
     }
 }
 
+// The archive is complete: replace the live files with the verified ones, or,
+// if anything failed, throw away whatever was staged.
+static void zipFinish() {
+    if (zipState.outFile) zipState.outFile.close();
+
+    // An archive must end between entries; anything else means it was cut short
+    if (zipState.state != ZIP_DONE && zipState.state != ZIP_FIND_SIG) {
+        zipFail("The archive ended mid-file — upload interrupted?");
+    }
+
+    // Only now, with every entry verified, replace the live files
+    uint8_t committed = 0;
+    if (!zipState.hasError) {
+        for (; committed < zipState.extractedCount; committed++) {
+            String path = "/" + zipState.extractedFiles[committed];
+            if (!commitPart(path)) {
+                zipFail("Could not replace " + path);
+                break;
+            }
+        }
+    }
+
+    if (zipState.hasError) {
+        // Throw away whatever was staged; the live files stay as they were
+        for (uint8_t i = committed; i < zipState.extractedCount; i++) {
+            SD.remove(partPath("/" + zipState.extractedFiles[i]));
+        }
+        if (!zipState.skipFile && zipState.filename[0]) {
+            SD.remove(partPath("/" + String(zipState.filename)));
+        }
+        Serial.printf("[ZIP] Failed: %s\n", zipState.errorMsg.c_str());
+    } else {
+        Serial.printf("[ZIP] Complete, %d file(s) replaced\n", zipState.extractedCount);
+    }
+}
+
+// Set when an upload arrives while the updater is extracting an archive
+static bool zipUploadRefused = false;
+
+void handleZipUpload(AsyncWebServerRequest *request, String filename,
+                     size_t index, uint8_t *data, size_t len, bool final) {
+    if (index == 0) {
+        zipUploadRefused = !zipClaim(ZIP_OWNER_UPLOAD);
+        if (zipUploadRefused) {
+            Serial.println("[ZIP] Upload refused: an automatic update is extracting the web UI");
+            return;
+        }
+        zipBegin();
+        Serial.println("[ZIP] Upload started");
+    }
+    if (zipUploadRefused) return;
+    // An upload that went quiet long enough to lose its claim must not resume
+    // into an archive the updater is now extracting
+    if (zipOwner != ZIP_OWNER_UPLOAD) return;
+
+    zipOwnerActive = millis();
+    if (!zipState.hasError && zipState.state != ZIP_DONE) {
+        zipFeed(data, len);
+    }
+
+    if (final) {
+        zipFinish();
+        zipRelease();
+    }
+}
+
+bool applyZipFile(const char* path, String& error, int& filesReplaced) {
+    filesReplaced = 0;
+    if (!zipClaim(ZIP_OWNER_FILE)) {
+        error = "A ZIP upload is in progress";
+        return false;
+    }
+    File f = SD.open(path, FILE_READ);
+    if (!f) {
+        zipRelease();
+        error = String("Cannot open ") + path;
+        return false;
+    }
+
+    Serial.printf("[ZIP] Extracting %s\n", path);
+    zipBegin();
+    uint8_t buf[1024];
+    while (!zipState.hasError && zipState.state != ZIP_DONE) {
+        int n = f.read(buf, sizeof(buf));
+        if (n <= 0) break;
+        zipFeed(buf, n);
+        zipOwnerActive = millis();
+        vTaskDelay(1);   // called from the update task on core 0: let the idle task (watchdog) run
+    }
+    f.close();
+    zipFinish();
+
+    bool ok = !zipState.hasError;
+    if (ok) filesReplaced = zipState.extractedCount;
+    else    error = zipState.errorMsg;
+    zipRelease();
+    return ok;
+}
+
 void handleZipUploadComplete(AsyncWebServerRequest *request) {
+    if (zipUploadRefused) {
+        request->send(503, "application/json",
+                      "{\"success\":false,\"error\":\"An automatic update is installing the web UI. Try again in a minute.\"}");
+        return;
+    }
     if (zipState.hasError) {
         // Built with ArduinoJson: the message can carry a file name, and a quote
         // in it would have broken the hand-assembled JSON

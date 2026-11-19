@@ -137,6 +137,7 @@ bool loadConfig() {
     config.max_current          = doc["max_current"]          | config.max_current;
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
     config.log_interval_minutes = doc["log_interval_minutes"] | config.log_interval_minutes;
+    config.update_check_hours   = constrain((int)(doc["update_check_hours"] | config.update_check_hours), 0, 720);
 
     // Missing keys keep the constructor defaults: 3/4" connection, Controller unit
     config.connection_size = normalizeConnectionSize(doc["connection_size"] | config.connection_size);
@@ -228,6 +229,7 @@ bool saveConfig() {
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
+    doc["update_check_hours"]   = config.update_check_hours;
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
@@ -283,6 +285,8 @@ void printConfig() {
     Serial.println("Max Current: " + String(config.max_current) + " A");
     Serial.println("Max Phase Imbalance: " + String(config.max_phase_imbalance) + " A");
     Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
+    Serial.println("Update check: " + (config.update_check_hours > 0
+                   ? "every " + String(config.update_check_hours) + " h" : String("manual only")));
     Serial.println("Connection Size: " + config.connection_size + "\"");
     Serial.println("Flow calibration: F = " + String(flowKFactor(), 2) + " * Q "
                    + (flowKOffset() < 0 ? "- " : "+ ") + String(fabsf(flowKOffset()), 2)
@@ -327,6 +331,7 @@ String getConfigJson() {
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
+    doc["update_check_hours"]   = config.update_check_hours;
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
@@ -393,6 +398,7 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("max_current"))          config.max_current          = doc["max_current"];
     if (doc.containsKey("max_phase_imbalance"))  config.max_phase_imbalance  = doc["max_phase_imbalance"];
     if (doc.containsKey("log_interval_minutes")) config.log_interval_minutes = doc["log_interval_minutes"];
+    if (doc.containsKey("update_check_hours"))   config.update_check_hours   = constrain(doc["update_check_hours"].as<int>(), 0, 720);
 
     if (doc.containsKey("connection_size"))
         config.connection_size = normalizeConnectionSize(doc["connection_size"].as<String>());

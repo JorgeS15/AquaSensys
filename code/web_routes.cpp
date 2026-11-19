@@ -9,6 +9,7 @@
 #include "ACS712_handler.h"
 #include "ota_handler.h"
 #include "file_manager.h"
+#include "update_manager.h"
 #include "MCP3208.h"
 
 // Globals from code.ino
@@ -329,6 +330,33 @@ void webRoutes() {
         String json;
         serializeJson(doc, json);
         request->send(200, "application/json", json);
+    });
+
+    // Firmware updates from GitHub releases (see update_manager.h)
+    server.on("/api/update", HTTP_GET, [](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(768);
+        updateStatusJson(doc);
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest *request) {
+        updateRequestCheck();
+        request->send(202, "application/json", "{\"status\":\"checking\"}");
+    });
+
+    server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest *request) {
+        String why;
+        if (updateRequestInstall(why)) {
+            request->send(202, "application/json", "{\"status\":\"installing\"}");
+        } else {
+            DynamicJsonDocument doc(256);
+            doc["error"] = why;
+            String json;
+            serializeJson(doc, json);
+            request->send(409, "application/json", json);
+        }
     });
 
     // API endpoint to get current configuration

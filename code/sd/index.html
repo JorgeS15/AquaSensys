@@ -38,6 +38,20 @@
       <p class="meta"><span data-i18n="lastUpdated">Last updated</span>: <span id="lastUpdate" class="mono">—</span></p>
     </div>
 
+    <!-- Firmware update: shown when a newer release is out, or while one installs -->
+    <section class="update-banner hidden" id="updateBanner" role="status" aria-live="polite">
+      <span class="icon-tile" aria-hidden="true"><i class="fas fa-cloud-download-alt"></i></span>
+      <div class="update-text">
+        <strong id="updateTitle">&nbsp;</strong>
+        <span class="update-detail" id="updateDetail">&nbsp;</span>
+        <div class="meter hidden" id="updateMeter"><div class="meter-fill" id="updateBar"></div></div>
+      </div>
+      <div class="update-actions">
+        <a class="button outline hidden" id="updateNotes" target="_blank" rel="noopener" data-i18n="releaseNotes">Release notes</a>
+        <button type="button" class="button hidden" id="updateInstallBtn" data-i18n="updateInstall">Install</button>
+      </div>
+    </section>
+
     <!-- Pump status and controls -->
     <section class="hero" aria-labelledby="pumpLabel">
       <div class="hero-main">
@@ -177,7 +191,12 @@
     <!-- Device info -->
     <section class="info-strip" data-i18n-aria="systemInformation" aria-label="System information">
       <div><div class="label" data-i18n="model">Model</div><div class="val" id="deviceModel">—</div></div>
-      <div><div class="label" data-i18n="firmware">Firmware</div><div class="val" id="deviceVersion">—</div></div>
+      <div>
+        <div class="label" data-i18n="firmware">Firmware</div>
+        <div class="val" id="deviceVersion">—</div>
+        <button type="button" class="link-btn" id="updateCheckBtn" data-i18n="checkUpdates">Check for updates</button>
+        <span class="update-check-status" id="updateCheckStatus" role="status"></span>
+      </div>
       <div><div class="label" data-i18n="connectionSize">Connection Size</div><div class="val" id="connectionSize">—</div></div>
       <div><div class="label" data-i18n="uptime">Uptime</div><div class="val" id="uptime">—</div></div>
       <div><div class="label" data-i18n="wifiSignal">WiFi Signal</div><div class="val"><span id="wifiRssi">—</span> dBm</div></div>

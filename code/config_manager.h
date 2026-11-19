@@ -56,6 +56,7 @@ struct Config {
 
     // Data logging
     int log_interval_minutes;   // 0 = disabled
+    int update_check_hours;     // look for a new release this often; 0 = only when asked
 
     // Hardware / device profile
     String connection_size;     // "3/4" or "1" (inches) — selects the flow K-factor
@@ -107,6 +108,7 @@ struct Config {
         max_current = 15.0f;
         max_phase_imbalance = 3.0f;
         log_interval_minutes = 5;
+        update_check_hours = 12;
         connection_size = "3/4";
         device_type = "C";
         device_id = "";

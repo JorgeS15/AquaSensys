@@ -45,8 +45,10 @@ jobs:
       - name: Update board index
         run: arduino-cli core update-index
 
+      # Pinned: the firmware relies on this core's HTTPUpdate (SHA-256 checks) and
+      # on the certificate bundle compiled into its mbedTLS
       - name: Install ESP32 core
-        run: arduino-cli core install esp32:esp32
+        run: arduino-cli core install esp32:esp32@3.3.12
 
       - name: Install Arduino registry libraries
         run: |
@@ -72,12 +74,15 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
+      # min_spiffs: two 1.875 MB app slots (OTA) and a 128 KB SPIFFS the firmware
+      # doesn't use. Units built before v3.6.0 have 1.25 MB slots and need one USB
+      # flash to change layout — see the release notes below.
       - name: Compile firmware
         run: |
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
-            --build-property "build.partitions=default" \
-            --build-property "upload.maximum_size=1310720" \
+            --build-property "build.partitions=min_spiffs" \
+            --build-property "upload.maximum_size=1966080" \
             --output-dir build/ \
             code/
 
@@ -87,10 +92,15 @@ jobs:
           mv build/code.ino.bin            "build/aquasensys-firmware-${TAG}.bin"
           mv build/code.ino.bootloader.bin "build/bootloader-${TAG}.bin"
           mv build/code.ino.partitions.bin "build/partitions-${TAG}.bin"
+          # Bootloader + partition table + boot selector + firmware in one 4 MB
+          # image, written at 0x0: the simplest way to flash a unit over USB
+          mv build/code.ino.merged.bin     "build/aquasensys-full-${TAG}.bin"
+          cp "$(ls -d ~/.arduino15/packages/esp32/hardware/esp32/*/ | tail -1)tools/partitions/boot_app0.bin" build/boot_app0.bin
           echo "BIN_PATH=build/aquasensys-firmware-${TAG}.bin"  >> "$GITHUB_ENV"
           echo "BIN_NAME=aquasensys-firmware-${TAG}.bin"         >> "$GITHUB_ENV"
           echo "BOOT_PATH=build/bootloader-${TAG}.bin"           >> "$GITHUB_ENV"
           echo "PART_PATH=build/partitions-${TAG}.bin"           >> "$GITHUB_ENV"
+          echo "FULL_PATH=build/aquasensys-full-${TAG}.bin"      >> "$GITHUB_ENV"
 
       - name: Package SD assets
         run: |
@@ -100,42 +110,91 @@ jobs:
         run: |
           git fetch --tags
           THIS_TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
           PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${THIS_TAG}$" | head -1)
           {
-            echo "## AquaSensys ${{ steps.version.outputs.version }}"
+            echo "## AquaSensys ${VERSION}"
             echo ""
-            echo "Built from commit \`${{ github.sha }}\` on \`main\`."
+            echo "Built from commit \`${{ github.sha }}\` on \`main\`. See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for what changed."
             echo ""
             if [ -n "$PREV_TAG" ]; then
-              echo "### Changes since ${PREV_TAG}"
+              echo "### Commits since ${PREV_TAG}"
               git log --oneline "${PREV_TAG}..HEAD"
             else
-              echo "### Recent changes"
+              echo "### Recent commits"
               git log --oneline -10
             fi
             echo ""
-            echo "### Assets"
-            echo "| File | Description |"
-            echo "|---|---|"
-            echo "| \`aquasensys-firmware-*.bin\` | Firmware — upload via OTA page |"
-            echo "| \`bootloader-*.bin\` | Bootloader (USB initial flash only) |"
-            echo "| \`partitions-*.bin\` | Partition table (USB initial flash only) |"
-            echo "| \`sd-assets.zip\` | Web UI files for SD card |"
-            echo ""
-            echo "### OTA Update"
-            echo "Use the firmware update page on the device and upload \`aquasensys-firmware-*.bin\`."
-            echo ""
-            echo "### Initial / Recovery Flash via USB"
-            echo '```bash'
-            echo "esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 write_flash \\"
-            echo "  0x1000  bootloader-${{ steps.version.outputs.tag }}.bin \\"
-            echo "  0x8000  partitions-${{ steps.version.outputs.tag }}.bin \\"
-            echo "  0x10000 aquasensys-firmware-${{ steps.version.outputs.tag }}.bin"
-            echo '```'
-            echo ""
-            echo "### Board"
-            echo "- FQBN: \`esp32:esp32:esp32\`"
-            echo "- Partition scheme: \`default\` (OTA, 1.25 MB per app slot)"
+            sed -e "s/__TAG__/${THIS_TAG}/g" <<'NOTES'
+          ### Assets
+          | File | What it is |
+          |---|---|
+          | `aquasensys-firmware-__TAG__.bin` | Firmware — for updates (automatic, or the device's firmware update page) |
+          | `sd-assets.zip` | Web UI for the SD card — installed with automatic updates, or through `/upload` |
+          | `aquasensys-full-__TAG__.bin` | Complete flash image for a **USB** flash (bootloader, partition table and firmware) |
+          | `bootloader-__TAG__.bin`, `partitions-__TAG__.bin`, `boot_app0.bin` | The same, as separate files, for a manual USB flash |
+
+          ### Updating a unit that already runs v3.6.0 or later
+          The dashboard shows **"Firmware … is available"** with an **Install** button, and Home
+          Assistant lists the unit under **Settings → Updates**. Installing downloads the firmware
+          and the web UI from this release, checks them, and restarts the unit (about a minute).
+          A Controller's pump stops during the restart and starts again by itself.
+
+          ### Units on v3.5.0 or older: flash once over USB
+          v3.6.0 changes the flash layout (partition table) to make room for automatic updates,
+          and a partition table can only be written over USB. Each unit needs this **once**;
+          from then on it updates itself. Uploading this firmware through the old update page
+          does not work: the unit refuses it ("Not enough space") and keeps running as before.
+
+          `config.json` (WiFi, MQTT, calibration), the web UI and the logs live on the SD card
+          and are not touched. Leave the card in.
+
+          **You need:** a USB data cable, and a computer with Chrome or Edge (option A) or
+          Python (option B). If the computer doesn't see a serial port when the ESP32 is plugged
+          in, install the USB driver for the board's chip (CP210x or CH340).
+
+          **Option A — in the browser, nothing to install**
+          1. Download `aquasensys-full-__TAG__.bin` from this release.
+          2. **Switch off the unit's mains supply before opening it.** Connect the ESP32 to
+             the computer by USB; it runs from the USB power while it is flashed.
+          3. Open <https://espressif.github.io/esptool-js/> in Chrome or Edge.
+          4. Set **Baudrate** to `460800`, click **Connect** and pick the serial port.
+             If it doesn't connect, hold the ESP32's **BOOT** button, click **Connect**, and
+             release the button once it has connected.
+          5. Under **Program**, set **Flash Address** to `0x0`, choose
+             `aquasensys-full-__TAG__.bin`, and click **Program**. Wait for it to finish
+             (about a minute).
+          6. Click **Disconnect**, then press the ESP32's **EN**/**RST** button or unplug it.
+             Put the unit back: it starts on v3.6.0.
+
+          **Option B — esptool on the command line**
+          ```bash
+          pip install esptool
+          python -m esptool --chip esp32 --port COM3 --baud 460800 write_flash 0x0 aquasensys-full-__TAG__.bin
+          ```
+          The port is `COM3`, `COM4`, … on Windows, `/dev/ttyUSB0` on Linux and
+          `/dev/cu.usbserial-…` on macOS. Hold **BOOT** if it stays on "Connecting...".
+
+          **Separate files instead of the full image** (same result):
+          ```bash
+          python -m esptool --chip esp32 --port COM3 --baud 460800 write_flash \
+            0x1000  bootloader-__TAG__.bin \
+            0x8000  partitions-__TAG__.bin \
+            0xe000  boot_app0.bin \
+            0x10000 aquasensys-firmware-__TAG__.bin
+          ```
+          Don't leave out `boot_app0.bin` at `0xe000`: it resets the record of which app slot
+          to start. Without it, a unit whose last update went into its second slot keeps
+          pointing at that slot, which in the new layout holds leftovers of the old firmware,
+          and may not start.
+
+          The full image covers the whole 4 MB flash, so it also clears the ESP32's internal
+          settings area (NVS). AquaSensys keeps nothing there.
+
+          ### Board
+          - FQBN: `esp32:esp32:esp32`, core 3.3.12
+          - Partition scheme: `min_spiffs` (OTA, 1.875 MB per app slot)
+          NOTES
           } > build/release_notes.md
 
       - name: Upload firmware artifact
@@ -153,7 +212,9 @@ jobs:
           body_path: build/release_notes.md
           files: |
             ${{ env.BIN_PATH }}
+            ${{ env.FULL_PATH }}
             ${{ env.BOOT_PATH }}
             ${{ env.PART_PATH }}
+            build/boot_app0.bin
             build/sd-assets.zip
           fail_on_unmatched_files: true

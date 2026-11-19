@@ -348,6 +348,25 @@ const translations = {
     "paramsDesc": "The pump starts below the minimum and stops above the maximum.",
     "systemActionsDesc": "Firmware, files and restart.",
 
+    // Firmware updates
+    "updateAvailable": "Firmware v{v} is available",
+    "updateCurrent": "This unit runs v{v}. The web UI is updated along with it.",
+    "updateInstall": "Install",
+    "releaseNotes": "Release notes",
+    "updateInstalling": "Installing v{v}…",
+    "updateStep_downloading_ui": "Downloading the web UI…",
+    "updateStep_installing": "Downloading and writing the firmware…",
+    "updateStep_applying_ui": "Updating the web UI…",
+    "updateStep_rebooting": "Restarting… this page reloads by itself.",
+    "updateNeedsUsb": "This unit must be flashed once over USB before it can update itself — see the release notes.",
+    "updateFailed": "The update failed:",
+    "confirmAutoUpdate": "Install firmware v{v}? The unit downloads it from GitHub and restarts when done, in about a minute.",
+    "confirmAutoUpdatePump": " The pump stops during the restart and starts again by itself.",
+    "checkUpdates": "Check for updates",
+    "checkingUpdates": "Checking…",
+    "upToDate": "Up to date",
+    "updateCheckFailed": "Check failed:",
+
     // Language
     "language": "Language",
     "english": "English",
@@ -701,6 +720,25 @@ const translations = {
     "saveSensors": "Guardar sensores",
     "paramsDesc": "A bomba liga abaixo do mínimo e desliga acima do máximo.",
     "systemActionsDesc": "Firmware, ficheiros e reinício.",
+
+    // Atualizações de firmware
+    "updateAvailable": "Está disponível o firmware v{v}",
+    "updateCurrent": "Esta unidade tem a v{v}. A interface web é atualizada em conjunto.",
+    "updateInstall": "Instalar",
+    "releaseNotes": "Notas da versão",
+    "updateInstalling": "A instalar a v{v}…",
+    "updateStep_downloading_ui": "A descarregar a interface web…",
+    "updateStep_installing": "A descarregar e gravar o firmware…",
+    "updateStep_applying_ui": "A atualizar a interface web…",
+    "updateStep_rebooting": "A reiniciar… esta página recarrega sozinha.",
+    "updateNeedsUsb": "Esta unidade tem de ser gravada uma vez por USB antes de se poder atualizar sozinha — ver as notas da versão.",
+    "updateFailed": "A atualização falhou:",
+    "confirmAutoUpdate": "Instalar o firmware v{v}? A unidade descarrega-o do GitHub e reinicia no fim, em cerca de um minuto.",
+    "confirmAutoUpdatePump": " A bomba desliga-se durante o reinício e volta a ligar sozinha.",
+    "checkUpdates": "Procurar atualizações",
+    "checkingUpdates": "A procurar…",
+    "upToDate": "Atualizado",
+    "updateCheckFailed": "A verificação falhou:",
 
     // Language
     "language": "Idioma",

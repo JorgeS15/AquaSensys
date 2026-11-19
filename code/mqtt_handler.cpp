@@ -1,5 +1,6 @@
 #include "mqtt_handler.h"
 #include "config_manager.h"
+#include "update_manager.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -18,6 +19,9 @@ static char mqttTopicMain[64];
 static char mqttTopicError[64];
 static char mqttTopicReboot[64];
 static char mqttTopicState[64];
+static char mqttTopicUpdateState[64];
+static char mqttTopicUpdateInstall[64];
+static char mqttTopicUpdateCheck[64];
 
 // "online" / "offline", retained. The broker publishes "offline" itself (the
 // last will) when the board stops answering, and every discovered entity points
@@ -39,6 +43,9 @@ void setupMQTT() {
     snprintf(mqttTopicReboot,   sizeof(mqttTopicReboot),    "homeassistant/%s/reboot/set",   DEVICE_ID);
     snprintf(mqttTopicState,    sizeof(mqttTopicState),     "homeassistant/%s/state",        DEVICE_ID);
     snprintf(mqttTopicAvailability, sizeof(mqttTopicAvailability), "homeassistant/%s/availability", DEVICE_ID);
+    snprintf(mqttTopicUpdateState,   sizeof(mqttTopicUpdateState),   "homeassistant/%s/update/state",   DEVICE_ID);
+    snprintf(mqttTopicUpdateInstall, sizeof(mqttTopicUpdateInstall), "homeassistant/%s/update/install", DEVICE_ID);
+    snprintf(mqttTopicUpdateCheck,   sizeof(mqttTopicUpdateCheck),   "homeassistant/%s/update/check",   DEVICE_ID);
 
     uint8_t mac[6];
     WiFi.macAddress(mac);
@@ -81,6 +88,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
         Serial.println("Reboot requested via MQTT");
         rebootRequested = true;
+    } else if (strcmp(topic, mqttTopicUpdateInstall) == 0 && strcmp(message, "install") == 0) {
+        // "Install" pressed on the update entity in Home Assistant
+        String why;
+        if (updateRequestInstall(why)) Serial.println("Firmware update accepted via MQTT");
+        else                           Serial.printf("Firmware update refused: %s\n", why.c_str());
+        updateStatePending = true;
+    } else if (strcmp(topic, mqttTopicUpdateCheck) == 0 && strcmp(message, "PRESS") == 0) {
+        updateRequestCheck();
     }
 
     publishState();
@@ -101,10 +116,13 @@ bool reconnectMQTT() {
             mqttClient.subscribe(mqttTopicError);
         }
         mqttClient.subscribe(mqttTopicReboot);
+        mqttClient.subscribe(mqttTopicUpdateInstall);
+        mqttClient.subscribe(mqttTopicUpdateCheck);
 
         Serial.println("Subscribed to command topics");
 
         sendAutoDiscoveryConfigs();
+        publishUpdateState();
         return true;
     }
     Serial.printf("MQTT connection failed, rc=%d\n", mqttClient.state());
@@ -149,6 +167,18 @@ void publishState() {
     Serial.printf("Published state: %s\n", state);
 }
 
+// State of the Home Assistant `update` entity: installed and latest version,
+// and the progress while an update installs
+void publishUpdateState() {
+    if (!mqttClient.connected()) return;
+
+    StaticJsonDocument<384> doc;
+    updateMqttStateJson(doc);
+    char payload[384];
+    serializeJson(doc, payload, sizeof(payload));
+    mqttClient.publish(mqttTopicUpdateState, payload, true);
+}
+
 void mqttTask(void* pvParameters) {
     for (;;) {
         if (wifiConnected && isMqttConfigured()) {
@@ -162,6 +192,10 @@ void mqttTask(void* pvParameters) {
                 if (publishStatePending) {
                     publishStatePending = false;
                     publishState();
+                }
+                if (updateStatePending) {
+                    updateStatePending = false;
+                    publishUpdateState();
                 }
             }
         }
@@ -183,12 +217,16 @@ void sendAutoDiscoveryConfigs() {
 
     String stateTopic = mqttTopicState;
 
-    createSensorConfig("pressure",    "Pressure",      "bar",   "pressure",         "mdi:gauge",         deviceDoc, stateTopic, "pressure");
+    // With a second sensor after the filter, the first one reads the pressure
+    // before it: "Pressure In" and "Pressure Out". The unique_ids stay as they
+    // were, so Home Assistant keeps the entities and their history.
+    createSensorConfig("pressure", config.dual_pressure_sensors ? "Pressure In" : "Pressure",
+                       "bar", "pressure", "mdi:gauge", deviceDoc, stateTopic, "pressure", "measurement");
     // Second pressure sensor (after the filter): its reading, the drop across
     // the filter and, when enabled, the clogged-filter alarm
     if (config.dual_pressure_sensors) {
-        createSensorConfig("pressure_out", "Pressure After Filter", "bar", "pressure", "mdi:gauge",  deviceDoc, stateTopic, "pressure_out");
-        createSensorConfig("filter_dp",    "Filter Pressure Drop",  "bar", "pressure", "mdi:filter", deviceDoc, stateTopic, "filter_dp");
+        createSensorConfig("pressure_out", "Pressure Out",         "bar", "pressure", "mdi:gauge",  deviceDoc, stateTopic, "pressure_out", "measurement");
+        createSensorConfig("filter_dp",    "Filter Pressure Drop", "bar", "pressure", "mdi:filter", deviceDoc, stateTopic, "filter_dp",    "measurement");
     } else {
         removeDiscoveryConfig("sensor", "pressure_out");
         removeDiscoveryConfig("sensor", "filter_dp");
@@ -199,8 +237,11 @@ void sendAutoDiscoveryConfigs() {
     } else {
         removeDiscoveryConfig("binary_sensor", "filter_clogged");
     }
-    createSensorConfig("temperature", "Temperature",   "°C",    "temperature",       "mdi:thermometer",   deviceDoc, stateTopic, "temperature");
-    createSensorConfig("flow",        "Flow Rate",     "L/min", nullptr,             "mdi:water",         deviceDoc, stateTopic, "flow");
+    createSensorConfig("temperature", "Temperature",   "°C",    "temperature",       "mdi:thermometer",   deviceDoc, stateTopic, "temperature", "measurement");
+    // volume_flow_rate + measurement: Home Assistant then keeps long-term
+    // statistics for it, which is what the Energy dashboard's "Water flow rate"
+    // picker lists. Without a device class it was invisible there.
+    createSensorConfig("flow",        "Flow Rate",     "L/min", "volume_flow_rate",  "mdi:water",         deviceDoc, stateTopic, "flow", "measurement");
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");
@@ -228,12 +269,34 @@ void sendAutoDiscoveryConfigs() {
     }
 
     createButtonConfig("reboot", "Reboot Device", "mdi:restart", deviceDoc, mqttTopicReboot);
+
+    // Firmware updates: Home Assistant lists the unit under Settings → Updates
+    // when a newer release is out, and "Install" there runs the update.
+    createUpdateConfig(deviceDoc);
+    createButtonConfig("update_check", "Check for Firmware Update", "mdi:update", deviceDoc, mqttTopicUpdateCheck);
+}
+
+void createUpdateConfig(JsonDocument& deviceDoc) {
+    char configTopic[96];
+    snprintf(configTopic, sizeof(configTopic), "homeassistant/update/%s_firmware/config", DEVICE_ID);
+
+    DynamicJsonDocument doc(768);
+    doc["name"]            = "Firmware";
+    doc["unique_id"]       = String(DEVICE_ID) + "_firmware";
+    doc["device_class"]    = "firmware";
+    doc["state_topic"]     = mqttTopicUpdateState;
+    doc["command_topic"]   = mqttTopicUpdateInstall;
+    doc["payload_install"] = "install";
+    doc["availability_topic"] = mqttTopicAvailability;
+    doc["device"]          = deviceDoc;
+
+    publishDiscovery(configTopic, doc);
 }
 
 void createSensorConfig(const char* sensorId, const char* name, const char* unit,
                         const char* deviceClass, const char* icon,
                         JsonDocument& deviceDoc, const String& stateTopic,
-                        const char* valueKey) {
+                        const char* valueKey, const char* stateClass) {
     char configTopic[96];
     snprintf(configTopic, sizeof(configTopic), "homeassistant/sensor/%s_%s/config", DEVICE_ID, sensorId);
 
@@ -244,6 +307,7 @@ void createSensorConfig(const char* sensorId, const char* name, const char* unit
     doc["value_template"] = String("{{ value_json.") + valueKey + " }}";
     if (unit)        doc["unit_of_measurement"] = unit;
     if (deviceClass) doc["device_class"]        = deviceClass;
+    if (stateClass)  doc["state_class"]         = stateClass;
     if (icon)        doc["icon"]                = icon;
     doc["availability_topic"] = mqttTopicAvailability;
     doc["device"]    = deviceDoc;

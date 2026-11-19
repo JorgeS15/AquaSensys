@@ -598,6 +598,38 @@ body.monitor .motor-only { display: none !important; }
 .info-strip .label { font-size: 0.8rem; color: var(--muted); }
 .info-strip .val { font-family: var(--mono); font-size: 1rem; font-weight: 500; }
 
+/* ---------- Firmware update notice ---------- */
+.update-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-band);
+}
+.update-banner.error { background: var(--warn-soft); border-color: #F5D0B0; }
+.update-banner .icon-tile { background: var(--surface); }
+.update-banner.error .icon-tile { color: var(--warn); }
+.update-text { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.update-detail { color: var(--muted); font-size: 0.9rem; overflow-wrap: anywhere; }
+.update-text .meter { margin-top: 6px; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.link-btn {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-btn:disabled { color: var(--muted); text-decoration: none; cursor: default; }
+.update-check-status { display: block; font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
+
 /* ---------- Legacy dashboard bits (kept for compatibility) ---------- */
 .value-container { display: flex; align-items: baseline; gap: 6px; margin-bottom: 10px; }
 .value-container span:first-child { font-size: 2.4rem; font-weight: 800; color: var(--ink); }

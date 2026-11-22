@@ -9,6 +9,12 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.3 — 2026-11-22
+- **[web UI]** Dark theme on every page. A selector next to the language one
+  offers **Auto** (follows the phone's or computer's setting, the default),
+  **Light** and **Dark**; the choice is remembered per browser. The light theme
+  is unchanged.
+
 ## 3.6.2 — 2026-11-22
 - The web UI on the SD card is kept in step with the firmware. Each release's
   `sd-assets.zip` now carries `ui_version.txt`; at boot the unit compares it

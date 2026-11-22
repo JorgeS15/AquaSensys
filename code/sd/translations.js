@@ -367,6 +367,12 @@ const translations = {
     "upToDate": "Up to date",
     "updateCheckFailed": "Check failed:",
 
+    // Theme
+    "theme": "Theme",
+    "themeAuto": "Auto",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+
     // Language
     "language": "Language",
     "english": "English",
@@ -739,6 +745,12 @@ const translations = {
     "checkingUpdates": "A procurar…",
     "upToDate": "Atualizado",
     "updateCheckFailed": "A verificação falhou:",
+
+    // Tema
+    "theme": "Tema",
+    "themeAuto": "Automático",
+    "themeLight": "Claro",
+    "themeDark": "Escuro",
 
     // Language
     "language": "Idioma",

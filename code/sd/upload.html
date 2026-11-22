@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" type="text/css" href="style.css">
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
@@ -33,7 +34,7 @@
             <h2><i class="fas fa-folder-open"></i> <span data-i18n="sdCardFileManager">SD Card File Manager</span></h2>
 
             <!-- Tab buttons -->
-            <div style="display:flex; gap:8px; margin-bottom:16px; border-bottom:2px solid #f0f0f0; padding-bottom:12px;">
+            <div style="display:flex; gap:8px; margin-bottom:16px; border-bottom:2px solid var(--border); padding-bottom:12px;">
                 <button class="button" id="tabBtnFiles" onclick="switchTab('files')">
                     <i class="fas fa-file-upload"></i> <span data-i18n="tabIndividualFiles">Individual Files</span>
                 </button>
@@ -86,10 +87,10 @@
                     <div class="file-info" data-i18n="selectZipFile">Select a .zip archive to extract to the SD card root directory</div>
                 </div>
 
-                <div id="zipSelectedInfo" style="display:none; margin-bottom:12px; padding:10px; background:#f8f9fa; border-radius:5px; font-size:14px;">
+                <div id="zipSelectedInfo" style="display:none; margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:5px; font-size:14px;">
                     <i class="fas fa-file-archive" style="color:var(--warning);"></i>
                     <strong id="zipFileName"></strong>
-                    <span id="zipFileSize" style="color:#666; margin-left:8px;"></span>
+                    <span id="zipFileSize" style="color:var(--muted); margin-left:8px;"></span>
                 </div>
 
                 <div class="button-group">
@@ -367,7 +368,7 @@
 
                 const totalSize = files.reduce((sum, file) => sum + file.size, 0);
                 const summary = document.createElement('div');
-                summary.style.cssText = 'margin-top: 15px; padding: 10px; background-color: #e9ecef; border-radius: 5px; font-size: 14px;';
+                summary.style.cssText = 'margin-top: 15px; padding: 10px; background-color: var(--track); border-radius: 5px; font-size: 14px;';
                 summary.innerHTML = `<i class="fas fa-chart-bar"></i> <strong data-i18n="summary">Summary:</strong> ${files.length} <span data-i18n="files">files</span>, ${formatFileSize(totalSize)} <span data-i18n="total">total</span>`;
                 container.appendChild(summary);
 

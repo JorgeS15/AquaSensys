@@ -166,6 +166,45 @@ static size_t nextSlotSize() {
 // Checking
 // ---------------------------------------------------------------------------
 
+// Feeds ArduinoJson from a TLS connection, waiting for data as it arrives.
+//
+// Parsing straight off the client does not work: ArduinoJson reads a Stream
+// through NetworkClient::readBytes(), which gives up the moment read() returns
+// -1, and NetworkClientSecure::read() returns -1 whenever the next TLS record
+// has not fully arrived yet (the socket is non-blocking). A release's JSON is
+// ~18 KB, more than one record, so the parse saw the answer end half-way and
+// failed with "IncompleteInput". This waits instead, up to timeoutMs per byte,
+// and only reports the end once the connection is closed and drained.
+class WaitingReader {
+public:
+    WaitingReader(NetworkClient& client, uint32_t timeoutMs) : _client(client), _timeoutMs(timeoutMs) {}
+
+    int read() {
+        uint32_t start = millis();
+        for (;;) {
+            int c = _client.read();
+            if (c >= 0) return c;
+            if (!_client.connected()) return -1;          // closed, nothing left
+            if (millis() - start >= _timeoutMs) return -1;
+            delay(2);
+        }
+    }
+
+    size_t readBytes(char* buffer, size_t length) {
+        size_t n = 0;
+        while (n < length) {
+            int c = read();
+            if (c < 0) break;
+            buffer[n++] = (char)c;
+        }
+        return n;
+    }
+
+private:
+    NetworkClient& _client;
+    uint32_t _timeoutMs;
+};
+
 // HTTP status of the last fetchRelease() (negative: no answer)
 static int lastFetchCode = 0;
 
@@ -207,7 +246,8 @@ static bool fetchRelease(const String& url, ReleaseInfo& out, String& err) {
     filter["assets"][0]["digest"] = true;
 
     DynamicJsonDocument doc(4096);
-    DeserializationError jerr = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    WaitingReader reader(*http.getStreamPtr(), 15000);
+    DeserializationError jerr = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
     http.end();
     if (jerr) {
         err = String("Unreadable answer from GitHub: ") + jerr.c_str();

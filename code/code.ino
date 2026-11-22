@@ -31,7 +31,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.3"; //Web UI: dark theme (Auto / Light / Dark)
+const char* DEVICE_VERSION = "3.6.4"; //Fix update check: GitHub answer parsed as it arrives, not cut at the first TLS record
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

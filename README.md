@@ -232,6 +232,11 @@ A failure in step 1 or 2 is reported on the dashboard and leaves the unit
 exactly as it was. Should step 3 fail, the new firmware starts with the
 previous web UI and then fetches its own, as described next.
 
+Versions 3.6.0 to 3.6.3 cannot complete the check ("Unreadable answer from
+GitHub: IncompleteInput"). A unit on one of them needs the firmware of v3.6.4
+or later uploaded once by hand, through its firmware update page; from then
+on the check works, and the web UI follows by itself.
+
 ### Web UI and firmware stay in step (v3.6.2 and later)
 
 Each release's `sd-assets.zip` carries `ui_version.txt`, the firmware version

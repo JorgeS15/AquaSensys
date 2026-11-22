@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="pt" data-lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AquaSensys: monitorização e controlo inteligente de água</title>
+  <meta name="description" content="AquaSensys mede pressão, caudal, temperatura e corrente da bomba em tempo real, protege a bomba e integra com o Home Assistant.">
+  <meta property="og:title" content="AquaSensys">
+  <meta property="og:description" content="Monitorização e controlo inteligente do abastecimento de água.">
+  <meta property="og:image" content="images/dashboard.png">
+  <meta name="theme-color" content="#0F2A32">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230B7A75'/%3E%3Cpath d='M16 7c-3 4.2-6 7.6-6 11a6 6 0 0 0 12 0c0-3.4-3-6.8-6-11z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="AquaSensys">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c-2.6 3.6-5.2 6.6-5.2 9.6a5.2 5.2 0 0 0 10.4 0C17.2 9.6 14.6 6.6 12 3z"/></svg></span>
+      AquaSensys
+    </a>
+    <nav class="nav-links" aria-label="Secções">
+      <a href="#funcionalidades"><span lang="pt">Funcionalidades</span><span lang="en">Features</span></a>
+      <a href="#modelos"><span lang="pt">Modelos</span><span lang="en">Models</span></a>
+      <a href="#especificacoes"><span lang="pt">Especificações</span><span lang="en">Specs</span></a>
+    </nav>
+    <div class="nav-actions">
+      <button class="lang-btn" id="langBtn" type="button" aria-label="Mudar idioma / Change language">EN</button>
+      <a class="btn btn-primary btn-sm" href="#contacto"><span lang="pt">Contactar</span><span lang="en">Contact</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="pulse" aria-hidden="true"></span><span lang="pt">Monitor e controlador de abastecimento de água</span><span lang="en">Water supply monitor and controller</span></p>
+        <h1>
+          <span lang="pt">A sua bomba de água, <em>sob controlo</em>.</span>
+          <span lang="en">Your water pump, <em>under control</em>.</span>
+        </h1>
+        <p class="lead">
+          <span lang="pt">Pressão, caudal, temperatura e corrente da bomba em tempo real, no telemóvel, no computador e no Home Assistant. E proteção automática para a bomba antes que algo corra mal.</span>
+          <span lang="en">Pressure, flow, temperature and pump current in real time, on your phone, your computer and in Home Assistant. Plus automatic protection for the pump before anything goes wrong.</span>
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#contacto"><span lang="pt">Pedir informação</span><span lang="en">Get in touch</span></a>
+          <a class="btn btn-ghost" href="#funcionalidades"><span lang="pt">Ver funcionalidades</span><span lang="en">See features</span></a>
+        </div>
+        <ul class="hero-points">
+          <li><span lang="pt">Sem apps para instalar</span><span lang="en">No app to install</span></li>
+          <li><span lang="pt">Home Assistant pronto a usar</span><span lang="en">Home Assistant ready</span></li>
+          <li><span lang="pt">Atualizações com um clique</span><span lang="en">One-click updates</span></li>
+        </ul>
+      </div>
+      <div class="hero-shot">
+        <div class="browser">
+          <div class="browser-bar"><i></i><i></i><i></i><span>aquasensys.local</span></div>
+          <picture>
+            <source srcset="images/dashboard-dark.png" media="(prefers-color-scheme: dark)">
+            <img src="images/dashboard.png" width="1280" height="1267" alt="Painel do AquaSensys com a bomba a funcionar, pressão de 3,12 bar e caudal de 16,8 L/min">
+          </picture>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem -->
+  <section class="band">
+    <div class="wrap band-inner">
+      <p>
+        <span lang="pt">Uma bomba de furo ou sobrepressora avaria quase sempre sem avisar: trabalha a seco, sobreaquece, perde uma fase ou o filtro entope. Normalmente só se dá por isso quando as torneiras secam. <strong>O AquaSensys vigia o sistema por si.</strong></span>
+        <span lang="en">A well or booster pump almost always fails without warning: it runs dry, overheats, loses a phase or the filter clogs. Usually nobody notices until the taps run dry. <strong>AquaSensys watches the system for you.</strong></span>
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="funcionalidades" class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker"><span lang="pt">Funcionalidades</span><span lang="en">Features</span></p>
+        <h2><span lang="pt">Tudo o que precisa de saber sobre a sua água</span><span lang="en">Everything you need to know about your water</span></h2>
+      </div>
+      <div class="features">
+        <article class="feature">
+          <span class="ficon"><svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 1 9-9"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="1.5"/></svg></span>
+          <h3><span lang="pt">Leituras em tempo real</span><span lang="en">Live readings</span></h3>
+          <p><span lang="pt">Pressão, caudal e temperatura da água atualizados a cada segundo, em qualquer browser da sua rede.</span><span lang="en">Pressure, flow and water temperature updated every second, in any browser on your network.</span></p>
+        </article>
+        <article class="feature">
+          <span class="ficon"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg></span>
+          <h3><span lang="pt">Proteção da bomba</span><span lang="en">Pump protection</span></h3>
+          <p><span lang="pt">Desliga a bomba em funcionamento a seco, sobrecorrente, desequilíbrio de fases e pressão fora dos limites.</span><span lang="en">Stops the pump on dry running, overcurrent, phase imbalance and out-of-range pressure.</span></p>
+        </article>
+        <article class="feature">
+          <span class="ficon"><svg viewBox="0 0 24 24"><path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/></svg></span>
+          <h3><span lang="pt">Alarme de filtro entupido</span><span lang="en">Clogged-filter alarm</span></h3>
+          <p><span lang="pt">Com um segundo sensor de pressão, mede a perda de carga no filtro e avisa quando é altura de o trocar.</span><span lang="en">With a second pressure sensor, it measures the drop across the filter and warns you when it's time to change it.</span></p>
+        </article>
+        <article class="feature">
+          <span class="ficon"><svg viewBox="0 0 24 24"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5h4v5"/></svg></span>
+          <h3><span lang="pt">Integração com Home Assistant</span><span lang="en">Home Assistant integration</span></h3>
+          <p><span lang="pt">Aparece sozinho via MQTT, com sensores, interruptores e alarmes prontos para painéis e automações.</span><span lang="en">Shows up on its own via MQTT, with sensors, switches and alarms ready for dashboards and automations.</span></p>
+        </article>
+        <article class="feature">
+          <span class="ficon"><svg viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></svg></span>
+          <h3><span lang="pt">Corrente nas 3 fases</span><span lang="en">Current on all 3 phases</span></h3>
+          <p><span lang="pt">Mede a corrente do motor fase a fase e conta as horas de funcionamento da bomba.</span><span lang="en">Measures motor current phase by phase and counts the pump's running hours.</span></p>
+        </article>
+        <article class="feature">
+          <span class="ficon"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></span>
+          <h3><span lang="pt">Sempre atualizado</span><span lang="en">Always up to date</span></h3>
+          <p><span lang="pt">Novas versões aparecem no painel e instalam-se com um clique, verificadas antes de serem aplicadas.</span><span lang="en">New versions appear on the dashboard and install with one click, verified before they're applied.</span></p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Showcase rows -->
+  <section class="section alt">
+    <div class="wrap showcase">
+
+      <div class="row">
+        <div class="row-copy">
+          <p class="kicker"><span lang="pt">Em qualquer ecrã</span><span lang="en">On any screen</span></p>
+          <h2><span lang="pt">No telemóvel, de dia ou de noite</span><span lang="en">On your phone, day or night</span></h2>
+          <p><span lang="pt">Abra <code>aquasensys.local</code> em qualquer dispositivo da casa. A interface adapta-se ao ecrã, está em português e inglês e tem tema claro e escuro, que segue o seu dispositivo.</span><span lang="en">Open <code>aquasensys.local</code> on any device at home. The interface fits any screen, comes in English and Portuguese, and has a light and a dark theme that follows your device.</span></p>
+        </div>
+        <div class="row-media duo">
+          <img class="phone" src="images/dashboard-mobile.png" width="780" height="1688" alt="Painel no telemóvel" loading="lazy">
+          <img class="shadowed" src="images/dashboard-dark.png" width="1280" height="1267" alt="Painel em tema escuro" loading="lazy">
+        </div>
+      </div>
+
+      <div class="row reverse">
+        <div class="row-copy">
+          <p class="kicker"><span lang="pt">Diagnóstico</span><span lang="en">Diagnostics</span></p>
+          <h2><span lang="pt">Veja o que se passa dentro do sistema</span><span lang="en">See what's happening inside the system</span></h2>
+          <p><span lang="pt">Corrente em cada fase do motor, temperatura da água e ambiente, pressão antes e depois do filtro. A calibração dos sensores faz-se aqui, com um clique.</span><span lang="en">Current on each motor phase, water and ambient temperature, pressure before and after the filter. Sensor calibration is done here, with one click.</span></p>
+        </div>
+        <div class="row-media"><img class="shadowed" src="images/diagnostics.png" width="1280" height="1356" alt="Página de diagnóstico" loading="lazy"></div>
+      </div>
+
+      <div class="row">
+        <div class="row-copy">
+          <p class="kicker"><span lang="pt">Atualizações</span><span lang="en">Updates</span></p>
+          <h2><span lang="pt">Novas funcionalidades com um clique</span><span lang="en">New features with one click</span></h2>
+          <p><span lang="pt">O AquaSensys procura novas versões duas vezes por dia. Carregue em <strong>Instalar</strong> no painel ou no Home Assistant e ele descarrega, verifica, atualiza e reinicia sozinho. Se algo falhar, continua com a versão que tinha.</span><span lang="en">AquaSensys looks for new versions twice a day. Press <strong>Install</strong> on the dashboard or in Home Assistant and it downloads, verifies, updates and restarts on its own. If anything fails, it keeps the version it had.</span></p>
+        </div>
+        <div class="row-media"><img class="shadowed" src="images/update.png" width="1052" height="83" alt="Aviso de nova versão disponível" loading="lazy"></div>
+      </div>
+
+      <div class="row reverse">
+        <div class="row-copy">
+          <p class="kicker"><span lang="pt">Configuração</span><span lang="en">Settings</span></p>
+          <h2><span lang="pt">Tudo configurável no browser</span><span lang="en">Everything set from the browser</span></h2>
+          <p><span lang="pt">WiFi, MQTT, limites de pressão, sensores e alarmes. Nada precisa de ser reprogramado.</span><span lang="en">WiFi, MQTT, pressure limits, sensors and alarms. Nothing needs reprogramming.</span></p>
+        </div>
+        <div class="row-media"><img class="shadowed" src="images/settings.png" width="1280" height="1675" alt="Página de definições" loading="lazy"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Models -->
+  <section id="modelos" class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker"><span lang="pt">Modelos</span><span lang="en">Models</span></p>
+        <h2><span lang="pt">Escolha o que precisa</span><span lang="en">Choose what you need</span></h2>
+        <p class="sub"><span lang="pt">Os dois modelos usam o mesmo firmware. Um Monitor pode passar a Controlador mais tarde, só com uma definição.</span><span lang="en">Both models run the same firmware. A Monitor can become a Controller later with a single setting.</span></p>
+      </div>
+      <div class="models">
+        <article class="model featured">
+          <p class="badge"><span lang="pt">Controlo completo</span><span lang="en">Full control</span></p>
+          <h3>AquaSensys C3</h3>
+          <p class="model-sub"><span lang="pt">Controlador: substitui o pressostato, comanda e protege a bomba.</span><span lang="en">Controller: replaces the pressure switch, drives and protects the pump.</span></p>
+          <ul class="checks">
+            <li><span lang="pt">Pressão, caudal e temperatura</span><span lang="en">Pressure, flow and temperature</span></li>
+            <li><span lang="pt">Alarme de filtro entupido</span><span lang="en">Clogged-filter alarm</span></li>
+            <li><span lang="pt">Corrente nas 3 fases</span><span lang="en">Current on all 3 phases</span></li>
+            <li><span lang="pt">Home Assistant e atualizações automáticas</span><span lang="en">Home Assistant and automatic updates</span></li>
+            <li class="plus"><span lang="pt">Arranque e paragem da bomba por pressão</span><span lang="en">Pump start and stop on pressure</span></li>
+            <li class="plus"><span lang="pt">Proteção: seco, sobrecorrente, fases</span><span lang="en">Protection: dry run, overcurrent, phases</span></li>
+            <li class="plus"><span lang="pt">Modo automático / manual e interruptor geral</span><span lang="en">Automatic / manual mode and main switch</span></li>
+            <li class="plus"><span lang="pt">Contador de horas da bomba</span><span lang="en">Pump hour counter</span></li>
+          </ul>
+        </article>
+        <article class="model">
+          <p class="badge muted"><span lang="pt">Só medição</span><span lang="en">Measurement only</span></p>
+          <h3>AquaSensys M</h3>
+          <p class="model-sub"><span lang="pt">Monitor: para sistemas que já têm controlo próprio, ou para vigiar uma segunda linha.</span><span lang="en">Monitor: for systems that already have their own control, or to watch a second line.</span></p>
+          <ul class="checks">
+            <li><span lang="pt">Pressão, caudal e temperatura</span><span lang="en">Pressure, flow and temperature</span></li>
+            <li><span lang="pt">Alarme de filtro entupido</span><span lang="en">Clogged-filter alarm</span></li>
+            <li><span lang="pt">Corrente nas 3 fases</span><span lang="en">Current on all 3 phases</span></li>
+            <li><span lang="pt">Home Assistant e atualizações automáticas</span><span lang="en">Home Assistant and automatic updates</span></li>
+          </ul>
+          <img class="model-shot" src="images/monitor.png" width="1280" height="900" alt="Painel do modelo Monitor" loading="lazy">
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Protection -->
+  <section class="section dark">
+    <div class="wrap split">
+      <div>
+        <p class="kicker"><span lang="pt">Proteção da bomba (C3)</span><span lang="en">Pump protection (C3)</span></p>
+        <h2><span lang="pt">Para a bomba antes do estrago</span><span lang="en">Stops the pump before the damage</span></h2>
+        <p><span lang="pt">Ao detetar uma falha, o AquaSensys desliga a bomba de imediato e mantém-na parada até alguém verificar o sistema. As falhas elétricas continuam ativas mesmo em modo manual.</span><span lang="en">When it detects a fault, AquaSensys stops the pump straight away and keeps it stopped until someone checks the system. Electrical faults stay active even in manual mode.</span></p>
+      </div>
+      <dl class="faults">
+        <div><dt><span lang="pt">Funcionamento a seco</span><span lang="en">Dry run</span></dt><dd><span lang="pt">Bomba ligada 10 s sem caudal</span><span lang="en">Pump on for 10 s with no flow</span></dd></div>
+        <div><dt><span lang="pt">Sobrecorrente</span><span lang="en">Overcurrent</span></dt><dd><span lang="pt">Acima do limite (15 A por omissão)</span><span lang="en">Above the limit (15 A by default)</span></dd></div>
+        <div><dt><span lang="pt">Desequilíbrio de fases</span><span lang="en">Phase imbalance</span></dt><dd><span lang="pt">Fases com mais de 3 A de diferença</span><span lang="en">Phases more than 3 A apart</span></dd></div>
+        <div><dt><span lang="pt">Pressão fora dos limites</span><span lang="en">Pressure out of range</span></dt><dd><span lang="pt">Abaixo de 1 bar ou acima de 5 bar</span><span lang="en">Below 1 bar or above 5 bar</span></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- Getting started -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker"><span lang="pt">Primeiros passos</span><span lang="en">Getting started</span></p>
+        <h2><span lang="pt">A funcionar em minutos</span><span lang="en">Up and running in minutes</span></h2>
+      </div>
+      <ol class="steps">
+        <li><h3><span lang="pt">Instalar</span><span lang="en">Install</span></h3><p><span lang="pt">Sensores de pressão, caudal e temperatura na linha de água; no C3, também o contactor e os sensores de corrente da bomba.</span><span lang="en">Pressure, flow and temperature sensors on the water line; on the C3, also the pump contactor and current sensors.</span></p></li>
+        <li><h3><span lang="pt">Ligar</span><span lang="en">Power on</span></h3><p><span lang="pt">Sem WiFi configurado, cria a sua própria rede <code>AquaSensys-…</code>. Ligue-se e abra <code>192.168.4.1</code>.</span><span lang="en">With no WiFi set up, it creates its own network, <code>AquaSensys-…</code>. Connect and open <code>192.168.4.1</code>.</span></p></li>
+        <li><h3><span lang="pt">Configurar</span><span lang="en">Configure</span></h3><p><span lang="pt">Indique a sua rede WiFi e, se quiser, o broker MQTT do Home Assistant.</span><span lang="en">Enter your WiFi network and, optionally, your Home Assistant MQTT broker.</span></p></li>
+        <li><h3><span lang="pt">Usar</span><span lang="en">Use</span></h3><p><span lang="pt">Abra <code>aquasensys.local</code>, ajuste os limites de pressão e está pronto.</span><span lang="en">Open <code>aquasensys.local</code>, set the pressure limits and you're done.</span></p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Specs -->
+  <section id="especificacoes" class="section alt">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="kicker"><span lang="pt">Especificações</span><span lang="en">Specifications</span></p>
+        <h2><span lang="pt">Por dentro</span><span lang="en">Under the hood</span></h2>
+      </div>
+      <dl class="specs">
+        <div><dt><span lang="pt">Controlador</span><span lang="en">Controller</span></dt><dd>ESP32, WiFi 2,4 GHz</dd></div>
+        <div><dt><span lang="pt">Pressão</span><span lang="en">Pressure</span></dt><dd><span lang="pt">1 ou 2 sensores, 0–5 bar</span><span lang="en">1 or 2 sensors, 0–5 bar</span></dd></div>
+        <div><dt><span lang="pt">Caudal</span><span lang="en">Flow</span></dt><dd><span lang="pt">Sensor de efeito Hall, ligação 3/4" ou 1"</span><span lang="en">Hall-effect sensor, 3/4" or 1" connection</span></dd></div>
+        <div><dt><span lang="pt">Temperatura</span><span lang="en">Temperature</span></dt><dd><span lang="pt">Água e ambiente</span><span lang="en">Water and ambient</span></dd></div>
+        <div><dt><span lang="pt">Corrente do motor</span><span lang="en">Motor current</span></dt><dd><span lang="pt">3 fases, medidas separadamente</span><span lang="en">3 phases, measured separately</span></dd></div>
+        <div><dt><span lang="pt">Entradas analógicas</span><span lang="en">Analog inputs</span></dt><dd><span lang="pt">ADC externo de 12 bits</span><span lang="en">External 12-bit ADC</span></dd></div>
+        <div><dt><span lang="pt">Armazenamento</span><span lang="en">Storage</span></dt><dd><span lang="pt">Cartão microSD: definições, interface e registos</span><span lang="en">microSD card: settings, interface and logs</span></dd></div>
+        <div><dt><span lang="pt">Indicador</span><span lang="en">Indicator</span></dt><dd><span lang="pt">LED RGB: estado, bomba, falha</span><span lang="en">RGB LED: status, pump, fault</span></dd></div>
+        <div><dt><span lang="pt">Integrações</span><span lang="en">Integrations</span></dt><dd><span lang="pt">Painel web, MQTT, Home Assistant, mDNS</span><span lang="en">Web dashboard, MQTT, Home Assistant, mDNS</span></dd></div>
+        <div><dt><span lang="pt">Atualizações</span><span lang="en">Updates</span></dt><dd><span lang="pt">Pela rede, com verificação de integridade</span><span lang="en">Over the air, with integrity checks</span></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="contacto" class="section">
+    <div class="wrap">
+      <div class="cta">
+        <h2><span lang="pt">Interessado no AquaSensys?</span><span lang="en">Interested in AquaSensys?</span></h2>
+        <p><span lang="pt">Fale connosco para saber preços, disponibilidade e qual o modelo certo para a sua instalação.</span><span lang="en">Get in touch for pricing, availability and which model suits your installation.</span></p>
+        <div class="hero-cta center">
+          <!-- CONTACTO: troque o href pelo seu email, por exemplo mailto:vendas@exemplo.pt -->
+          <a class="btn btn-light" href="https://github.com/JorgeS15/AquaSensys/issues/new"><span lang="pt">Contactar</span><span lang="en">Contact us</span></a>
+          <a class="btn btn-outline-light" href="https://github.com/JorgeS15/AquaSensys"><span lang="pt">Ver no GitHub</span><span lang="en">View on GitHub</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <span class="brand small"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c-2.6 3.6-5.2 6.6-5.2 9.6a5.2 5.2 0 0 0 10.4 0C17.2 9.6 14.6 6.6 12 3z"/></svg></span>AquaSensys</span>
+    <span>© 2026 AquaSensys · <a href="https://github.com/JorgeS15/AquaSensys"><span lang="pt">Código aberto (MIT)</span><span lang="en">Open source (MIT)</span></a></span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById('langBtn');
+    function set(lang) {
+      root.setAttribute('data-lang', lang);
+      root.setAttribute('lang', lang);
+      btn.textContent = lang === 'pt' ? 'EN' : 'PT';
+      try { localStorage.setItem('aqs_site_lang', lang); } catch (e) {}
+    }
+    var saved = null;
+    try { saved = localStorage.getItem('aqs_site_lang'); } catch (e) {}
+    set(saved || ((navigator.language || 'pt').toLowerCase().indexOf('pt') === 0 ? 'pt' : 'en'));
+    btn.addEventListener('click', function () { set(root.getAttribute('data-lang') === 'pt' ? 'en' : 'pt'); });
+  })();
+</script>
+</body>
+</html>

@@ -12,7 +12,7 @@ Every bump gets an entry in `CHANGELOG.md`, newest first, dated when it reaches
 `main`. Mark changes that live in `code/sd/` with **[web UI]**. Update
 `docs/REFERENCE.md` when a change adds or alters a `config.json` key or a
 behaviour it describes. `README.md` is the product page for customers: touch it
-only for user-visible features, and keep its screenshots (`docs/images/`) in
+only for user-visible features, and keep its screenshots (`site/images/`) in
 step with the web UI.
 
 ## Things that are easy to get wrong

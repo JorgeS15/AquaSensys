@@ -7,7 +7,7 @@
 Pressure, flow, temperature and pump current in real time, on your phone,
 your computer and in Home Assistant, plus automatic protection for the pump.
 
-![AquaSensys dashboard](docs/images/dashboard.png)
+![AquaSensys dashboard](site/images/dashboard.png)
 
 </div>
 
@@ -66,7 +66,7 @@ stops above the maximum), **manual** mode for priming or maintenance, and the
 
 On a **Monitor**, the motor controls are gone and the readings come first:
 
-![Monitor dashboard](docs/images/monitor.png)
+![Monitor dashboard](site/images/monitor.png)
 
 ### Clogged-filter alarm
 
@@ -82,9 +82,9 @@ Every page works on a phone, and comes in **English and Portuguese** with a
 **light and a dark theme**. The theme follows your device by default.
 
 <p align="center">
-  <img src="docs/images/dashboard-mobile.png" alt="Dashboard on a phone" width="300">
+  <img src="site/images/dashboard-mobile.png" alt="Dashboard on a phone" width="300">
   &nbsp;&nbsp;
-  <img src="docs/images/dashboard-dark.png" alt="Dashboard in dark theme" width="520">
+  <img src="site/images/dashboard-dark.png" alt="Dashboard in dark theme" width="520">
 </p>
 
 ### Pump protection
@@ -108,7 +108,7 @@ The current in each of the three motor phases, both temperatures (water and
 ambient), both pressures and the state of the unit itself. You can also
 calibrate the current and pressure sensors from here with one click.
 
-![Diagnostics page](docs/images/diagnostics.png)
+![Diagnostics page](site/images/diagnostics.png)
 
 ### Home Assistant
 
@@ -135,14 +135,14 @@ updates both the firmware and the web interface, and restarts. Nothing is
 installed until you ask, and if a download fails the unit keeps running the
 version it had.
 
-![Update available](docs/images/update.png)
+![Update available](site/images/update.png)
 
 ### Settings
 
 WiFi, MQTT, pressure limits, sensors and alarms are all set from the browser.
 Nothing needs reprogramming.
 
-![Settings page](docs/images/settings.png)
+![Settings page](site/images/settings.png)
 
 ---
 

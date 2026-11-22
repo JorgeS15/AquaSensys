@@ -9,6 +9,17 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.4 — 2026-11-22
+- Fixes the update check, which failed with "Unreadable answer from GitHub:
+  IncompleteInput". GitHub's answer (~18 KB) arrives in more than one TLS
+  record, and the JSON was parsed through a read that gave up at the first
+  moment no data was waiting. It is now read as it arrives. The same fix covers
+  fetching the matching web UI (3.6.2).
+- **Units on 3.6.0 – 3.6.3 cannot find this update themselves**, since their
+  check has the bug. Upload `aquasensys-firmware-*.bin` once through the
+  device's firmware update page; the matching web UI then installs itself
+  (3.6.2), and later updates are automatic.
+
 ## 3.6.3 — 2026-11-22
 - **[web UI]** Dark theme on every page. A selector next to the language one
   offers **Auto** (follows the phone's or computer's setting, the default),

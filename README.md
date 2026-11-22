@@ -229,8 +229,23 @@ installed until someone presses **Install** in either place. The unit then:
    its own. The dashboard reloads itself on the new version.
 
 A failure in step 1 or 2 is reported on the dashboard and leaves the unit
-exactly as it was. Should step 3 fail, the new firmware still starts with the
-previous web UI; upload `sd-assets.zip` through `/upload` to finish.
+exactly as it was. Should step 3 fail, the new firmware starts with the
+previous web UI and then fetches its own, as described next.
+
+### Web UI and firmware stay in step (v3.6.2 and later)
+
+Each release's `sd-assets.zip` carries `ui_version.txt`, the firmware version
+its pages belong to. At boot the unit reads it from the SD card; if it names
+another version, or is missing, the unit fetches `sd-assets.zip` from its own
+release (`v<version>-build<n>`, which CI builds into the firmware) 30 seconds
+after WiFi comes up, and installs it like an upload. A failed attempt is
+retried every hour. So the pages always match the firmware: after an update
+whose web UI step failed, after a USB flash, or with a card taken from another
+unit. `/api/update` shows both (`current`, `build`, `ui_version`).
+
+This also means an `sd-assets.zip` from a *different* release, uploaded by
+hand, is replaced by the matching one at the next boot. A firmware built
+locally (no build number) never fetches anything.
 
 **Check for updates** under the firmware version on the dashboard, or the
 **Check for Firmware Update** button in Home Assistant, checks straight away.

@@ -31,7 +31,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.1"; //HA: flow rate selectable in the Energy dashboard; "Pressure In"/"Pressure Out"
+const char* DEVICE_VERSION = "3.6.3"; //Web UI: dark theme (Auto / Light / Dark)
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

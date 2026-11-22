@@ -83,6 +83,7 @@ jobs:
             --fqbn esp32:esp32:esp32 \
             --build-property "build.partitions=min_spiffs" \
             --build-property "upload.maximum_size=1966080" \
+            --build-property "compiler.cpp.extra_flags=-DAQS_BUILD_NUMBER=${{ github.run_number }}" \
             --output-dir build/ \
             code/
 
@@ -102,8 +103,11 @@ jobs:
           echo "PART_PATH=build/partitions-${TAG}.bin"           >> "$GITHUB_ENV"
           echo "FULL_PATH=build/aquasensys-full-${TAG}.bin"      >> "$GITHUB_ENV"
 
+      # ui_version.txt tells the firmware which version these pages belong to;
+      # a unit whose card holds another version's pages fetches its own
       - name: Package SD assets
         run: |
+          printf '%s' "${{ steps.version.outputs.version }}" > code/sd/ui_version.txt
           cd code/sd && zip -0 -r ../../build/sd-assets.zip . --exclude='config.json'
 
       - name: Generate release notes

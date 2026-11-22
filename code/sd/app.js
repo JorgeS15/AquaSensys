@@ -504,7 +504,8 @@ function renderUpdate() {
 
   if (running) {
     show = true;
-    title = i18n('updateInstalling').replace('{v}', u.latest || '');
+    // A re-fetch of this version's own web UI has no newer version to name
+    title = i18n('updateInstalling').replace('{v}', u.latest || u.current || '');
     detail = i18n('updateStep_' + u.state);
   } else if (u.available) {
     show = true;

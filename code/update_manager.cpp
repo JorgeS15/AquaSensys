@@ -22,6 +22,17 @@ extern const uint8_t crtBundleStart[] asm("_binary_x509_crt_bundle_start");
 extern const uint8_t crtBundleEnd[]   asm("_binary_x509_crt_bundle_end");
 
 static const char* RELEASES_API   = "https://api.github.com/repos/JorgeS15/AquaSensys/releases/latest";
+static const char* RELEASE_BY_TAG = "https://api.github.com/repos/JorgeS15/AquaSensys/releases/tags/";
+// Written into sd-assets.zip by CI: the firmware version the web UI belongs to
+static const char* UI_VERSION_PATH = "/ui_version.txt";
+
+// The CI run number, passed in by the build (-DAQS_BUILD_NUMBER=36). Together
+// with DEVICE_VERSION it names this firmware's own release, v3.6.2-build37,
+// whose sd-assets.zip is the web UI that belongs to it. 0 in a local build,
+// which has no release.
+#ifndef AQS_BUILD_NUMBER
+#define AQS_BUILD_NUMBER 0
+#endif
 static const char* FIRMWARE_PREFIX = "aquasensys-firmware-";
 static const char* UI_ASSET_NAME  = "sd-assets.zip";
 static const char* UI_ZIP_PATH    = "/update-ui.zip";
@@ -69,6 +80,14 @@ static volatile bool installRequested = false;
 static volatile bool lastCheckFailed = false;
 static volatile bool checkedOnce = false;
 static volatile uint32_t lastCheckMs = 0;
+
+// Web UI / firmware match, read from UI_VERSION_PATH at boot. Guarded by stateLock.
+static String uiVersion;
+static volatile bool uiSyncNeeded = false;      // the SD card holds another version's pages
+static volatile bool uiSyncFailed = false;      // last attempt failed; retry later
+static volatile uint32_t uiSyncLastTry = 0;
+// Wait this long after WiFi comes up before fetching the matching web UI
+static const uint32_t UI_SYNC_DELAY_MS = 30UL * 1000UL;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -147,7 +166,11 @@ static size_t nextSlotSize() {
 // Checking
 // ---------------------------------------------------------------------------
 
-static bool fetchLatestRelease(ReleaseInfo& out, String& err) {
+// HTTP status of the last fetchRelease() (negative: no answer)
+static int lastFetchCode = 0;
+
+// Read one release (the latest, or one tag) from the GitHub API
+static bool fetchRelease(const String& url, ReleaseInfo& out, String& err) {
     NetworkClientSecure client;
     secureClient(client);
 
@@ -155,7 +178,7 @@ static bool fetchLatestRelease(ReleaseInfo& out, String& err) {
     // HTTP/1.0: no chunked encoding, so the body can be parsed straight off the stream
     http.useHTTP10(true);
     http.setTimeout(15000);
-    if (!http.begin(client, RELEASES_API)) {
+    if (!http.begin(client, url)) {
         err = "Could not start the request to GitHub";
         return false;
     }
@@ -163,6 +186,7 @@ static bool fetchLatestRelease(ReleaseInfo& out, String& err) {
     http.addHeader("Accept", "application/vnd.github+json");
 
     int code = http.GET();
+    lastFetchCode = code;
     if (code != HTTP_CODE_OK) {
         if (code < 0)                     err = "GitHub unreachable: " + HTTPClient::errorToString(code);
         else if (code == 403 || code == 429) err = "GitHub rate limit reached; will retry later";
@@ -231,7 +255,7 @@ static void runCheck() {
     String err;
     bool ok = ESP.getFreeHeap() >= MIN_FREE_HEAP;
     if (!ok) err = "Not enough free memory to check now";
-    else     ok = fetchLatestRelease(info, err);
+    else     ok = fetchRelease(RELEASES_API, info, err);
 
     lastCheckFailed = !ok;
     if (ok) {
@@ -433,6 +457,76 @@ static void runInstall() {
 }
 
 // ---------------------------------------------------------------------------
+// Keeping the web UI in step with the firmware
+// ---------------------------------------------------------------------------
+
+static String readUiVersion() {
+    File f = SD.open(UI_VERSION_PATH, FILE_READ);
+    if (!f) return String();
+    String v = f.readString();
+    f.close();
+    v.trim();
+    return v;
+}
+
+static String thisReleaseTag() {
+    return String("v") + DEVICE_VERSION + "-build" + String(AQS_BUILD_NUMBER);
+}
+
+// The SD card holds another version's web UI (or none that says which): fetch
+// sd-assets.zip from this firmware's own release and put it in place. Happens
+// when an update replaced the firmware but not the pages, after a USB flash, or
+// when a card from another unit is put in.
+static void runUiSync() {
+    uiSyncLastTry = millis();
+    String tag = thisReleaseTag();
+    Serial.printf("[Update] Web UI on the SD card is %s; fetching the one from %s\n",
+                  uiVersion.length() ? uiVersion.c_str() : "unversioned", tag.c_str());
+
+    setPhase(PHASE_DOWNLOADING_UI, 0);
+    ReleaseInfo r;
+    String err;
+    lastFetchCode = 0;   // a 404 from an earlier request must not count here
+    bool ok = ESP.getFreeHeap() >= MIN_FREE_HEAP;
+    if (!ok) err = "Not enough free memory to fetch the web UI now";
+    else     ok = fetchRelease(String(RELEASE_BY_TAG) + tag, r, err);
+
+    if (ok && r.uiUrl.isEmpty()) {
+        // Nothing to fetch, and asking again won't change that
+        Serial.printf("[Update] Release %s has no web UI archive\n", tag.c_str());
+        uiSyncNeeded = false;
+        setPhase(PHASE_IDLE);
+        return;
+    }
+    if (ok) ok = downloadToSd(r.uiUrl, UI_ZIP_PATH, r.uiSize, r.uiSha256, err);
+    if (ok) {
+        setPhase(PHASE_APPLYING_UI);
+        int files = 0;
+        ok = applyZipFile(UI_ZIP_PATH, err, files);
+        SD.remove(UI_ZIP_PATH);
+        if (ok) Serial.printf("[Update] Web UI replaced with %s's, %d file(s)\n", tag.c_str(), files);
+    }
+
+    if (ok) {
+        String v = readUiVersion();
+        xSemaphoreTake(stateLock, portMAX_DELAY);
+        uiVersion = v;
+        xSemaphoreGive(stateLock);
+        // An archive without the version file (an old release) is not retried
+        uiSyncNeeded = false;
+        uiSyncFailed = false;
+    } else if (lastFetchCode == 404) {
+        // No release for this build (deleted, or built by hand): nothing to retry
+        Serial.printf("[Update] No release %s on GitHub; web UI left as it is\n", tag.c_str());
+        uiSyncNeeded = false;
+    } else {
+        uiSyncFailed = true;
+        setError("Web UI not updated: " + err);
+    }
+    setPhase(PHASE_IDLE);
+}
+
+// ---------------------------------------------------------------------------
 // Task
 // ---------------------------------------------------------------------------
 
@@ -452,6 +546,12 @@ static void updateTask(void*) {
         if (installRequested) {
             installRequested = false;
             runInstall();
+            continue;
+        }
+
+        if (uiSyncNeeded && !OTA.isUpdating() && millis() - wifiSince >= UI_SYNC_DELAY_MS &&
+            (!uiSyncFailed || millis() - uiSyncLastTry >= RETRY_AFTER_FAILURE_MS)) {
+            runUiSync();
             continue;
         }
 
@@ -475,6 +575,17 @@ static void updateTask(void*) {
 void updateManagerBegin() {
     if (stateLock) return;
     stateLock = xSemaphoreCreateMutex();
+
+    uiVersion = readUiVersion();
+    if (uiVersion == DEVICE_VERSION) {
+        Serial.printf("[Update] Web UI matches the firmware (%s)\n", DEVICE_VERSION);
+    } else if (AQS_BUILD_NUMBER == 0) {
+        Serial.printf("[Update] Web UI is %s, firmware %s; a local build has no release to fetch it from\n",
+                      uiVersion.length() ? uiVersion.c_str() : "unversioned", DEVICE_VERSION);
+    } else {
+        uiSyncNeeded = true;
+    }
+
     // TLS handshakes and the SD/flash writes need a deeper stack than the MQTT task
     xTaskCreatePinnedToCore(updateTask, "update", 16384, NULL, 1, NULL, 0);
 }
@@ -525,6 +636,7 @@ void updateStatusJson(JsonDocument& doc) {
     size_t slot = nextSlotSize();
 
     doc["current"]     = DEVICE_VERSION;
+    doc["build"]       = AQS_BUILD_NUMBER;
     doc["state"]       = phaseName(p);
     if (progressPct >= 0 && p != PHASE_IDLE) doc["progress"] = (int)progressPct;
     else                                    doc["progress"] = nullptr;
@@ -549,6 +661,9 @@ void updateStatusJson(JsonDocument& doc) {
     }
     if (lastError.length()) doc["error"] = lastError;
     else                    doc["error"] = nullptr;
+    // Version of the web UI on the SD card; null if it doesn't say
+    if (uiVersion.length()) doc["ui_version"] = uiVersion;
+    else                    doc["ui_version"] = nullptr;
     xSemaphoreGive(stateLock);
 }
 

@@ -9,6 +9,14 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.8 — 2026-11-23
+- Fixes an automatic update failing with "Firmware download failed: HTTP
+  error: read Timeout". The firmware download used the core's default of 8 s
+  to wait for GitHub's file host, which a fresh release, two TLS connections
+  and a slower link can exceed. Every update request now waits up to 30 s, and
+  a download that fails on the network is tried once more.
+- On 3.6.0 – 3.6.7, pressing **Install** again usually gets past this error.
+
 ## 3.6.7 — 2026-11-23
 - **[web UI]** Settings → System Parameters has the log interval
   (`log_interval_minutes`) and how often to check for updates

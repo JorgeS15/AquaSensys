@@ -33,7 +33,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.7"; //Web UI: log interval and update check in Settings; debug page fits a phone; rollback notice
+const char* DEVICE_VERSION = "3.6.8"; //Update downloads wait 30 s for GitHub (was 8 s: "read Timeout") and retry once
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

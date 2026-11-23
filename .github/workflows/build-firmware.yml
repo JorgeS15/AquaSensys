@@ -1,9 +1,14 @@
 name: Build & Release Firmware
 
+# A push to main builds and publishes a release. A pull request (and a manual
+# run) only compiles, so a broken build shows up before the merge; its firmware
+# and web UI are kept as a downloadable workflow artifact for testing.
 on:
   push:
     branches:
       - main
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -55,17 +60,22 @@ jobs:
           arduino-cli lib install "ArduinoJson@6.21.5"
           arduino-cli lib install "PubSubClient@2.8.0"
 
-      - name: Install AsyncTCP (GitHub)
+      # Pinned to the commits every release so far was built with (master as of
+      # 2025-01-20), so an upstream change can't alter or break the firmware.
+      # Fetched fresh each run: a cached copy could be any commit.
+      - name: Install AsyncTCP and ESPAsyncWebServer (GitHub, pinned)
         run: |
-          [ -d ~/Arduino/libraries/AsyncTCP ] || \
-            git clone --depth 1 https://github.com/me-no-dev/AsyncTCP \
-              ~/Arduino/libraries/AsyncTCP
-
-      - name: Install ESPAsyncWebServer (GitHub)
-        run: |
-          [ -d ~/Arduino/libraries/ESPAsyncWebServer ] || \
-            git clone --depth 1 https://github.com/me-no-dev/ESPAsyncWebServer \
-              ~/Arduino/libraries/ESPAsyncWebServer
+          fetch_pinned() {
+            rm -rf "$2"
+            git init -q "$2"
+            git -C "$2" fetch -q --depth 1 "$1" "$3"
+            git -C "$2" checkout -q FETCH_HEAD
+            echo "$(basename "$2") @ $(git -C "$2" rev-parse --short HEAD)"
+          }
+          fetch_pinned https://github.com/me-no-dev/AsyncTCP \
+            ~/Arduino/libraries/AsyncTCP ef448a8a1dffe4ec1b72326dd5a26211ff227b49
+          fetch_pinned https://github.com/me-no-dev/ESPAsyncWebServer \
+            ~/Arduino/libraries/ESPAsyncWebServer ad3741d159f9cfd50c567e81b67f3bef1dc6d89f
 
       - name: Extract firmware version
         id: version
@@ -83,11 +93,31 @@ jobs:
             --fqbn esp32:esp32:esp32 \
             --build-property "build.partitions=min_spiffs" \
             --build-property "upload.maximum_size=1966080" \
-            --build-property "compiler.cpp.extra_flags=-DAQS_BUILD_NUMBER=${{ github.run_number }}" \
+            --build-property "compiler.cpp.extra_flags=-DAQS_BUILD_NUMBER=${{ github.event_name == 'push' && github.run_number || 0 }}" \
             --output-dir build/ \
             code/
 
+      # Pull requests: keep the build for testing on a unit (firmware through the
+      # update page, web UI through /upload). Built without a build number, so it
+      # never fetches a web UI from a release.
+      - name: Keep the pull request build
+        if: github.event_name != 'push'
+        run: |
+          mkdir -p pr-build
+          cp build/code.ino.bin pr-build/aquasensys-firmware-test.bin
+          printf '%s' "${{ steps.version.outputs.version }}" > code/sd/ui_version.txt
+          (cd code/sd && zip -q -0 -r ../../pr-build/sd-assets.zip . --exclude='config.json')
+
+      - name: Upload the pull request build
+        if: github.event_name != 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aquasensys-test-build-${{ github.run_number }}
+          path: pr-build/
+          retention-days: 14
+
       - name: Rename firmware binary
+        if: github.event_name == 'push'
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           mv build/code.ino.bin            "build/aquasensys-firmware-${TAG}.bin"
@@ -106,11 +136,13 @@ jobs:
       # ui_version.txt tells the firmware which version these pages belong to;
       # a unit whose card holds another version's pages fetches its own
       - name: Package SD assets
+        if: github.event_name == 'push'
         run: |
           printf '%s' "${{ steps.version.outputs.version }}" > code/sd/ui_version.txt
           cd code/sd && zip -0 -r ../../build/sd-assets.zip . --exclude='config.json'
 
       - name: Generate release notes
+        if: github.event_name == 'push'
         run: |
           git fetch --tags
           THIS_TAG="${{ steps.version.outputs.tag }}"
@@ -202,6 +234,7 @@ jobs:
           } > build/release_notes.md
 
       - name: Upload firmware artifact
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BIN_NAME }}
@@ -209,6 +242,7 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}

@@ -16,6 +16,8 @@
 #include "ACS712_handler.h"
 #include "web_routes.h"
 #include "update_manager.h"
+#include <esp_timer.h>
+#include <esp_rom_sys.h>
 
 // Device identity.
 // One firmware binary runs on every unit, so the identity cannot be a compile-time
@@ -31,7 +33,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.4"; //Fix update check: GitHub answer parsed as it arrives, not cut at the first TLS record
+const char* DEVICE_VERSION = "3.6.7"; //Web UI: log interval and update check in Settings; debug page fits a phone; rollback notice
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -126,6 +128,60 @@ const unsigned long DEBUG_DATA_INTERVAL = 30000;         // 30s — heavy JSON, 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 AsyncEventSource events("/events");
+
+// ------------------------------------------------------------
+// Loop watchdog
+// ------------------------------------------------------------
+// The web server and MQTT run in their own tasks, so if loop() hangs they keep
+// answering with frozen readings and nothing ever resets the unit: it looks
+// alive while the pump control and protections are stopped. loop() stamps
+// loopHeartbeat on every pass; a 1 s timer restarts the unit once it is older
+// than LOOP_STALL_LIMIT_MS. The longest legitimate pass is well under a second
+// (the sensor reads take ~320 ms), so 30 s only catches a real hang.
+static const uint32_t LOOP_STALL_LIMIT_MS = 30000;
+volatile uint32_t loopHeartbeat = 0;
+
+// Survives esp_restart() (not a power cut), so the next boot can tell a
+// watchdog restart from an ordinary one
+RTC_NOINIT_ATTR static uint32_t resetMarker;
+static const uint32_t RESET_MARKER_LOOP_STALL = 0x4C4F4F50;   // "LOOP"
+
+// Why the unit last started, for the diagnostics and Home Assistant
+const char* lastResetReason = "unknown";
+
+static void loopWatchdogCheck(void*) {
+    if (millis() - loopHeartbeat > LOOP_STALL_LIMIT_MS) {
+        esp_rom_printf("\n[Watchdog] loop() stalled for over %u s, restarting\n",
+                       (unsigned)(LOOP_STALL_LIMIT_MS / 1000));
+        resetMarker = RESET_MARKER_LOOP_STALL;
+        esp_restart();
+    }
+}
+
+static void startLoopWatchdog() {
+    loopHeartbeat = millis();
+    const esp_timer_create_args_t args = { .callback = loopWatchdogCheck, .arg = nullptr,
+                                           .dispatch_method = ESP_TIMER_TASK, .name = "loopwdt",
+                                           .skip_unhandled_events = true };
+    esp_timer_handle_t timer;
+    if (esp_timer_create(&args, &timer) == ESP_OK) esp_timer_start_periodic(timer, 1000000);
+}
+
+static const char* describeResetReason() {
+    bool loopStall = resetMarker == RESET_MARKER_LOOP_STALL;
+    resetMarker = 0;
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:  return "power_on";
+        case ESP_RST_EXT:      return "reset_pin";
+        case ESP_RST_SW:       return loopStall ? "loop_stall" : "restart";
+        case ESP_RST_PANIC:    return "crash";
+        case ESP_RST_INT_WDT:  return "interrupt_watchdog";
+        case ESP_RST_TASK_WDT: return "task_watchdog";
+        case ESP_RST_WDT:      return "watchdog";
+        case ESP_RST_BROWNOUT: return "brownout";
+        default:               return "unknown";
+    }
+}
 
 // Track Wi-Fi status
 bool wifiConnected = false;
@@ -338,9 +394,8 @@ void setup() {
     Serial.println("\n\n=== AquaSensys Starting ===");
     Serial.println("Version: " + String(DEVICE_VERSION));
     
-    esp_reset_reason_t reset_reason = esp_reset_reason();
-    Serial.print("Reset reason: ");
-    Serial.println(reset_reason);
+    lastResetReason = describeResetReason();
+    Serial.printf("Reset reason: %s\n", lastResetReason);
     
     // Initialize SPI for both SD and MCP3208
     SPI.begin(16, 17, 18, -1); // SCK, MISO, MOSI, SS
@@ -457,10 +512,13 @@ void setup() {
     Serial.printf("Initial readings: pressure in %.2f bar, out %.2f bar\n", pressureIn, pressureOut);
 
     lastTime = millis();
+    startLoopWatchdog();
     Serial.println("=== Setup Complete ===\n");
 }
 
 void loop() {
+    loopHeartbeat = millis();   // see the loop watchdog
+
     // ============================================================
     // DEBUG MODE - Test all sensor readings
     // ============================================================

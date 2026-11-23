@@ -567,6 +567,58 @@ static void runUiSync() {
 }
 
 // ---------------------------------------------------------------------------
+// Rollback of an update that doesn't come up
+// ---------------------------------------------------------------------------
+//
+// The bootloader (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE) starts a freshly
+// written firmware in the "pending verify" state. By default the Arduino core
+// confirms it at once; verifyRollbackLater() below tells it not to, so the
+// firmware has to prove itself first: connected to WiFi and running for
+// CONFIRM_AFTER_MS. Until then any restart (a crash, the loop watchdog, a
+// power cut) makes the bootloader go back to the previous firmware, and so
+// does going ROLLBACK_AFTER_MS without WiFi. A firmware flashed over USB, or
+// one already confirmed, is never pending and none of this applies.
+
+extern "C" bool verifyRollbackLater() { return true; }
+
+static const uint32_t CONFIRM_AFTER_MS  = 30UL * 1000UL;
+static const uint32_t ROLLBACK_AFTER_MS = 10UL * 60UL * 1000UL;
+static bool pendingVerify = false;   // this firmware still has to prove itself
+static bool rolledBack = false;      // an update before this boot was undone
+
+static void checkImageAtBoot() {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    esp_ota_img_states_t state;
+    if (running && esp_ota_get_state_partition(running, &state) == ESP_OK) {
+        pendingVerify = state == ESP_OTA_IMG_PENDING_VERIFY;
+    }
+    // The other slot holds a firmware that was started and failed to confirm
+    rolledBack = esp_ota_get_last_invalid_partition() != nullptr;
+    if (pendingVerify) {
+        Serial.println("[Update] New firmware on trial: confirmed once WiFi has been up for 30 s, "
+                       "rolled back after 10 min without it or on any restart before");
+    } else if (rolledBack) {
+        Serial.println("[Update] The last update did not come up and was rolled back");
+    }
+}
+
+// Called every pass of the update task, connected or not
+static void serviceImageTrial(uint32_t wifiSince) {
+    if (!pendingVerify) return;
+    if (wifiSince && millis() - wifiSince >= CONFIRM_AFTER_MS) {
+        if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+            Serial.printf("[Update] Firmware %s confirmed\n", DEVICE_VERSION);
+        }
+        pendingVerify = false;
+    } else if (millis() >= ROLLBACK_AFTER_MS) {
+        Serial.println("[Update] No WiFi 10 min after an update: rolling back to the previous firmware");
+        delay(100);
+        esp_ota_mark_app_invalid_rollback_and_reboot();   // does not return if there is one to go back to
+        pendingVerify = false;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Task
 // ---------------------------------------------------------------------------
 
@@ -579,9 +631,11 @@ static void updateTask(void*) {
 
         if (!wifiConnected) {
             wifiSince = 0;
+            serviceImageTrial(0);
             continue;
         }
         if (!wifiSince) wifiSince = millis();
+        serviceImageTrial(wifiSince);
 
         if (installRequested) {
             installRequested = false;
@@ -616,6 +670,8 @@ void updateManagerBegin() {
     if (stateLock) return;
     stateLock = xSemaphoreCreateMutex();
 
+    checkImageAtBoot();
+
     uiVersion = readUiVersion();
     if (uiVersion == DEVICE_VERSION) {
         Serial.printf("[Update] Web UI matches the firmware (%s)\n", DEVICE_VERSION);
@@ -645,6 +701,8 @@ bool updateBusy() {
 bool updateRequestInstall(String& why) {
     if (phase != PHASE_IDLE || installRequested) { why = "An update is already running"; return false; }
     if (OTA.isUpdating())                        { why = "A firmware upload is in progress"; return false; }
+    // Installing now would overwrite the previous firmware, the one a rollback returns to
+    if (pendingVerify)                           { why = "This firmware is still on trial; try again in a minute"; return false; }
     if (!wifiConnected)                          { why = "No internet connection"; return false; }
 
     xSemaphoreTake(stateLock, portMAX_DELAY);
@@ -701,6 +759,9 @@ void updateStatusJson(JsonDocument& doc) {
     }
     if (lastError.length()) doc["error"] = lastError;
     else                    doc["error"] = nullptr;
+    // An update that didn't come up was undone; this one is still on trial
+    doc["rolled_back"] = rolledBack;
+    doc["on_trial"]    = pendingVerify;
     // Version of the web UI on the SD card; null if it doesn't say
     if (uiVersion.length()) doc["ui_version"] = uiVersion;
     else                    doc["ui_version"] = nullptr;

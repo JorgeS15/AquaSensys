@@ -27,6 +27,7 @@ extern const char* DEVICE_NAME;
 extern const char* DEVICE_ID;
 extern const char* DEVICE_VERSION;
 extern const char* DEVICE_MODEL;
+extern const char* lastResetReason;
 
 // Sensor readings from code.ino
 extern float pressure, temperature, flow;
@@ -324,6 +325,7 @@ void webRoutes() {
         doc["model"]           = DEVICE_MODEL;
         doc["id"]              = DEVICE_ID;
         doc["version"]         = DEVICE_VERSION;
+        doc["reset_reason"]    = lastResetReason;
         doc["device_type"]     = config.device_type;
         doc["connection_size"] = config.connection_size;
 
@@ -334,7 +336,7 @@ void webRoutes() {
 
     // Firmware updates from GitHub releases (see update_manager.h)
     server.on("/api/update", HTTP_GET, [](AsyncWebServerRequest *request) {
-        DynamicJsonDocument doc(768);
+        DynamicJsonDocument doc(1024);
         updateStatusJson(doc);
         String json;
         serializeJson(doc, json);

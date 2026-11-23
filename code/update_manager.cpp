@@ -41,6 +41,15 @@ static const char* UI_ZIP_PATH    = "/update-ui.zip";
 static const uint32_t FIRST_CHECK_DELAY_MS = 2UL * 60UL * 1000UL;
 // After a failed check (no internet, GitHub rate limit), retry sooner.
 static const uint32_t RETRY_AFTER_FAILURE_MS = 60UL * 60UL * 1000UL;
+// How long to wait for GitHub to answer or send more data. Generous: each
+// download makes two TLS connections (github.com, then the file host it
+// redirects to) and a release's files can be slow to start right after it is
+// published. The core's HTTPUpdate default of 8 s failed in the field with
+// "read Timeout".
+static const uint32_t NET_TIMEOUT_MS = 30000;
+// A failed download is tried once more, after this pause
+static const uint32_t RETRY_PAUSE_MS = 3000;
+
 // TLS needs ~45 KB of heap on top of what the unit already uses.
 static const uint32_t MIN_FREE_HEAP = 60000;
 
@@ -216,7 +225,7 @@ static bool fetchRelease(const String& url, ReleaseInfo& out, String& err) {
     HTTPClient http;
     // HTTP/1.0: no chunked encoding, so the body can be parsed straight off the stream
     http.useHTTP10(true);
-    http.setTimeout(15000);
+    http.setTimeout(NET_TIMEOUT_MS);
     if (!http.begin(client, url)) {
         err = "Could not start the request to GitHub";
         return false;
@@ -246,7 +255,7 @@ static bool fetchRelease(const String& url, ReleaseInfo& out, String& err) {
     filter["assets"][0]["digest"] = true;
 
     DynamicJsonDocument doc(4096);
-    WaitingReader reader(*http.getStreamPtr(), 15000);
+    WaitingReader reader(*http.getStreamPtr(), NET_TIMEOUT_MS);
     DeserializationError jerr = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
     http.end();
     if (jerr) {
@@ -328,7 +337,7 @@ static bool downloadToSd(const String& url, const char* path, uint32_t expectedS
     HTTPClient http;
     http.useHTTP10(true);   // a plain byte stream: no chunk markers mixed into the file
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);   // GitHub redirects to its file host
-    http.setTimeout(20000);
+    http.setTimeout(NET_TIMEOUT_MS);
     if (!http.begin(client, url)) {
         err = "Could not start the web UI download";
         return false;
@@ -366,7 +375,7 @@ static bool downloadToSd(const String& url, const char* path, uint32_t expectedS
     while (declared < 0 || got < (uint32_t)declared) {
         size_t avail = stream->available();
         if (!avail) {
-            if (!http.connected() || millis() - lastData > 20000) break;
+            if (!http.connected() || millis() - lastData > NET_TIMEOUT_MS) break;
             delay(5);
             continue;
         }
@@ -410,24 +419,37 @@ static bool downloadToSd(const String& url, const char* path, uint32_t expectedS
     return true;
 }
 
-static bool flashFirmware(const ReleaseInfo& r, String& err) {
-    NetworkClientSecure client;
-    secureClient(client);
+// Network trouble is worth a second try; a bad file or a full slot is not
+static bool firmwareErrorIsTransient(int code) {
+    return code < 0                                   // HTTPClient: no answer, read timeout, connection lost
+        || code == HTTP_UE_SERVER_WRONG_HTTP_CODE      // e.g. a 5xx from the file host
+        || code == HTTP_UE_SERVER_NOT_REPORT_SIZE;
+}
 
-    httpUpdate.rebootOnUpdate(false);   // the web UI goes in first; we reboot after
-    httpUpdate.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+static bool flashFirmware(const ReleaseInfo& r, String& err) {
+    // Own instance rather than the global httpUpdate, for the longer timeout
+    static HTTPUpdate updater(NET_TIMEOUT_MS);
+    updater.rebootOnUpdate(false);   // the web UI goes in first; we reboot after
+    updater.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     // Update refuses to switch slots unless the image matches the release's digest
-    httpUpdate.setSHA256sum(r.fwSha256.length() == 64 ? r.fwSha256 : String());
-    httpUpdate.onProgress([](int done, int total) {
+    updater.setSHA256sum(r.fwSha256.length() == 64 ? r.fwSha256 : String());
+    updater.onProgress([](int done, int total) {
         if (total > 0) setProgress((int)((int64_t)done * 100 / total));
     });
 
-    t_httpUpdate_return res = httpUpdate.update(client, r.fwUrl);
-    if (res != HTTP_UPDATE_OK) {
-        err = "Firmware download failed: " + httpUpdate.getLastErrorString();
-        return false;
+    for (int attempt = 1; attempt <= 2; attempt++) {
+        NetworkClientSecure client;
+        secureClient(client);
+        if (updater.update(client, r.fwUrl) == HTTP_UPDATE_OK) return true;
+
+        int code = updater.getLastError();
+        err = "Firmware download failed: " + updater.getLastErrorString();
+        Serial.printf("[Update] %s (attempt %d)\n", err.c_str(), attempt);
+        if (attempt == 2 || !firmwareErrorIsTransient(code)) break;
+        setProgress(0);
+        delay(RETRY_PAUSE_MS);
     }
-    return true;
+    return false;
 }
 
 static void runInstall() {
@@ -459,7 +481,15 @@ static void runInstall() {
     bool haveUi = r.uiUrl.length() > 0;
     if (haveUi) {
         setPhase(PHASE_DOWNLOADING_UI, 0);
-        if (!downloadToSd(r.uiUrl, UI_ZIP_PATH, r.uiSize, r.uiSha256, err)) {
+        bool ok = downloadToSd(r.uiUrl, UI_ZIP_PATH, r.uiSize, r.uiSha256, err);
+        if (!ok) {
+            Serial.printf("[Update] %s; trying once more\n", err.c_str());
+            err = "";
+            setProgress(0);
+            delay(RETRY_PAUSE_MS);
+            ok = downloadToSd(r.uiUrl, UI_ZIP_PATH, r.uiSize, r.uiSha256, err);
+        }
+        if (!ok) {
             setError(err);
             setPhase(PHASE_IDLE);
             return;

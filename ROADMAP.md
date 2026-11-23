@@ -9,11 +9,11 @@ step with them. See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
 | # | Item | Issue | Status |
 |---|---|---|---|
-| 1 | CI compiles pull requests (no release) | [#43](https://github.com/JorgeS15/AquaSensys/issues/43) | 🔵 in review |
-| 2 | CI pins AsyncTCP and ESPAsyncWebServer | [#44](https://github.com/JorgeS15/AquaSensys/issues/44) | 🔵 in review |
-| 3 | Watchdog on the main loop, last reset reason reported | [#45](https://github.com/JorgeS15/AquaSensys/issues/45) | 🔵 in review — 3.6.5 |
-| 4 | Roll back an update that doesn't come up | [#46](https://github.com/JorgeS15/AquaSensys/issues/46) | 🔵 in review — 3.6.6 |
-| 5 | Web UI: debug page on phones; log interval and update check in Settings | [#47](https://github.com/JorgeS15/AquaSensys/issues/47) | 🔵 in review — 3.6.7 |
+| 1 | CI compiles pull requests (no release) | [#43](https://github.com/JorgeS15/AquaSensys/issues/43) | 🔵 in review ([#57](https://github.com/JorgeS15/AquaSensys/pull/57)) |
+| 2 | CI pins AsyncTCP and ESPAsyncWebServer | [#44](https://github.com/JorgeS15/AquaSensys/issues/44) | 🔵 in review ([#57](https://github.com/JorgeS15/AquaSensys/pull/57)) |
+| 3 | Watchdog on the main loop, last reset reason reported | [#45](https://github.com/JorgeS15/AquaSensys/issues/45) | 🔵 in review ([#57](https://github.com/JorgeS15/AquaSensys/pull/57)) — 3.6.5 |
+| 4 | Roll back an update that doesn't come up | [#46](https://github.com/JorgeS15/AquaSensys/issues/46) | 🔵 in review ([#57](https://github.com/JorgeS15/AquaSensys/pull/57)) — 3.6.6 |
+| 5 | Web UI: debug page on phones; log interval and update check in Settings | [#47](https://github.com/JorgeS15/AquaSensys/issues/47) | 🔵 in review ([#57](https://github.com/JorgeS15/AquaSensys/pull/57)) — 3.6.7 |
 
 ## Phase 2 — More from the monitoring
 

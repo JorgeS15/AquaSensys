@@ -33,7 +33,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.8"; //Update downloads wait 30 s for GitHub (was 8 s: "read Timeout") and retry once
+const char* DEVICE_VERSION = "3.6.9"; //Total water volume counter, kept on the SD card, for the Home Assistant Energy dashboard
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -196,6 +196,18 @@ const unsigned long NO_FLOW_TIMEOUT_MS = 10000;
 // Motor runtime accumulator
 unsigned long motorRuntimeSeconds = 0;
 unsigned long lastRuntimeSave = 0;
+
+// Total water through the flow sensor, in litres. Integrated from the flow
+// rate every second (not from the raw pulses: the 1" curve has an offset, so
+// pulses are not proportional to litres) and kept in /runtime.json with the
+// motor runtime. Saved every minute while either changes and before a clean
+// restart, so a power cut loses at most a minute of counting.
+double waterTotalLitres = 0;
+// POST /api/water_total runs in the web server's task: it leaves the new
+// value here and the loop applies it, so it never races the integration.
+double waterTotalSetValue = 0;
+volatile bool waterTotalSetPending = false;
+const unsigned long RUNTIME_SAVE_INTERVAL_MS = 60000UL;
 
 // Data logging
 unsigned long lastLogTime = 0;
@@ -574,6 +586,7 @@ void loop() {
         
         // Keep minimal system functions running in debug mode
         if (rebootRequested) {
+            saveRuntime();
             delay(1000);
             ESP.restart();
         }
@@ -589,6 +602,7 @@ void loop() {
     
     // Reboot if requested
     if (rebootRequested) {
+        saveRuntime();
         delay(1000);
         ESP.restart();
     }
@@ -656,10 +670,20 @@ void loop() {
 
             // Motor runtime accumulator
             if (motor) motorRuntimeSeconds++;
-            if (millis() - lastRuntimeSave > 300000UL) {
-                lastRuntimeSave = millis();
-                saveRuntime();
-            }
+        }
+
+        // Water volume: litres = L/min x minutes in this window
+        bool totalSet = waterTotalSetPending;
+        if (totalSet) {
+            waterTotalLitres = waterTotalSetValue;
+            waterTotalSetPending = false;
+            Serial.printf("[Water] Total set to %.1f L\n", waterTotalLitres);
+        } else if (flow > 0.0f) {
+            waterTotalLitres += (double)flow * (double)elapsedMs / 60000.0;
+        }
+        if (totalSet || millis() - lastRuntimeSave >= RUNTIME_SAVE_INTERVAL_MS) {
+            lastRuntimeSave = millis();
+            saveRuntime();   // writes only if something changed
         }
 
         // Periodic data logging to SD
@@ -881,23 +905,63 @@ void checkForErrors() {
 // SD Card Functions
 // ============================================================
 
-void loadRuntime() {
-    File f = SD.open("/runtime.json");
-    if (!f) return;
-    DynamicJsonDocument doc(128);
-    if (deserializeJson(doc, f) == DeserializationError::Ok)
-        motorRuntimeSeconds = doc["motor_runtime_s"] | (unsigned long)0;
+// /runtime.json holds the counters: motor runtime and total water. It is
+// written to /runtime.tmp first and then renamed, so a power cut mid-write
+// leaves one of the two whole; loading falls back to the .tmp copy.
+static const char* RUNTIME_PATH     = "/runtime.json";
+static const char* RUNTIME_TMP_PATH = "/runtime.tmp";
+static SemaphoreHandle_t runtimeLock = nullptr;   // the loop and the OTA handler both save
+static unsigned long savedMotorRuntime = 0;
+static double savedWaterTotal = 0;
+
+static bool readRuntimeFile(const char* path) {
+    File f = SD.open(path);
+    if (!f) return false;
+    StaticJsonDocument<192> doc;
+    bool ok = deserializeJson(doc, f) == DeserializationError::Ok;
     f.close();
-    Serial.printf("[Runtime] Loaded motor runtime: %lu s\n", motorRuntimeSeconds);
+    if (!ok) return false;
+    motorRuntimeSeconds = doc["motor_runtime_s"] | (unsigned long)0;
+    waterTotalLitres    = doc["water_total_l"] | 0.0;
+    if (waterTotalLitres < 0 || isnan(waterTotalLitres)) waterTotalLitres = 0;
+    return true;
+}
+
+void loadRuntime() {
+    if (!runtimeLock) runtimeLock = xSemaphoreCreateMutex();
+    if (!readRuntimeFile(RUNTIME_PATH) && readRuntimeFile(RUNTIME_TMP_PATH)) {
+        Serial.println("[Runtime] Restored the counters from runtime.tmp");
+    }
+    savedMotorRuntime = motorRuntimeSeconds;
+    savedWaterTotal   = waterTotalLitres;
+    Serial.printf("[Runtime] Motor runtime %lu s, water total %.1f L\n",
+                  motorRuntimeSeconds, waterTotalLitres);
 }
 
 void saveRuntime() {
-    File f = SD.open("/runtime.json", FILE_WRITE);
-    if (!f) return;
-    DynamicJsonDocument doc(128);
-    doc["motor_runtime_s"] = motorRuntimeSeconds;
-    serializeJson(doc, f);
-    f.close();
+    if (!runtimeLock) return;   // loadRuntime() not run yet
+    if (xSemaphoreTake(runtimeLock, pdMS_TO_TICKS(2000)) != pdTRUE) return;
+    // Copies: the loop updates both while the OTA handler may be saving
+    unsigned long runtime = motorRuntimeSeconds;
+    double total = waterTotalLitres;
+    if (runtime != savedMotorRuntime || total != savedWaterTotal) {
+        File f = SD.open(RUNTIME_TMP_PATH, FILE_WRITE);
+        if (f) {
+            StaticJsonDocument<192> doc;
+            doc["motor_runtime_s"] = runtime;
+            doc["water_total_l"]   = serialized(String(total, 3));
+            bool written = serializeJson(doc, f) > 0;
+            f.close();
+            if (written) {
+                SD.remove(RUNTIME_PATH);
+                if (SD.rename(RUNTIME_TMP_PATH, RUNTIME_PATH)) {
+                    savedMotorRuntime = runtime;
+                    savedWaterTotal   = total;
+                }
+            }
+        }
+    }
+    xSemaphoreGive(runtimeLock);
 }
 
 void appendLogEntry() {

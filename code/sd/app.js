@@ -73,6 +73,7 @@ const elements = {
   tempBar: $('tempBar'),
   flow: $('flow'),
   flowBar: $('flowBar'),
+  waterTotal: $('waterTotal'),
 
   uptime: $('uptime'),
   wifiRssi: $('wifiRssi'),
@@ -100,6 +101,7 @@ const state = {
   filterStatus: null,   // "off" | "no_flow" | "no_reading" | "ok" | "clogged"
   temperature: null,
   flow: null,
+  waterTotal: null,     // litres since the counter started
   motor: false,
   manualOverride: false,
   mainSwitch: false,
@@ -204,6 +206,7 @@ function updateDashboard(data) {
   if (data.filterStatus !== undefined) state.filterStatus = data.filterStatus;
   if (data.temperature !== undefined) state.temperature = data.temperature;
   if (data.flow !== undefined) state.flow = data.flow;
+  if (data.waterTotal !== undefined) state.waterTotal = data.waterTotal;
   if (data.motor !== undefined) state.motor = data.motor;
   if (data.manualOverride !== undefined) state.manualOverride = data.manualOverride;
   if (data.mainSwitch !== undefined) state.mainSwitch = data.mainSwitch;
@@ -388,6 +391,15 @@ function renderFlow() {
   elements.flowBar.style.width = isReading(f)
     ? Math.min(100, Math.max(0, (f / config.flow.max) * 100)) + '%'
     : '0%';
+  elements.waterTotal.textContent = formatVolume(state.waterTotal);
+}
+
+// Litres below 1000, cubic metres (as on a water meter) from there
+function formatVolume(litres) {
+  if (!isReading(litres)) return '—';
+  return litres < 1000
+    ? litres.toFixed(1) + ' L'
+    : (litres / 1000).toFixed(3) + ' m³';
 }
 
 function updateInfoStrip(data) {

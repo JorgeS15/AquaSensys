@@ -1,6 +1,8 @@
 #include "ota_handler.h"
 #include "update_manager.h"
 
+void saveRuntime();   // code.ino: writes /runtime.json if a counter changed
+
 // Global OTA instance
 OTAHandler OTA;
 
@@ -531,6 +533,7 @@ void OTAHandler::handleUploadEnd(AsyncWebServerRequest *request, String filename
         
         // Schedule restart with a flag in NVS or just restart
         Serial.println("OTA: Restarting device...");
+        saveRuntime();   // keep the counters (motor runtime, water total)
         delay(500);
         ESP.restart();
     } else {
@@ -685,6 +688,7 @@ bool OTAHandler::updateFromFile(const String& filepath) {
         
         // Remove update file after successful update
         SD.remove(filepath);
+        saveRuntime();   // keep the counters (motor runtime, water total)
         
         delay(1000);
         ESP.restart();

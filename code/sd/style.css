@@ -674,6 +674,25 @@ body.monitor .motor-only { display: none !important; }
   color: var(--muted);
 }
 
+/* Total water under the flow meter */
+.flow-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.flow-total .val {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--ink);
+}
+
 /* Filter / pressure-drop card */
 .filter-flow {
   display: flex;

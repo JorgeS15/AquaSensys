@@ -18,6 +18,9 @@ extern AsyncEventSource events;
 extern bool wifiConnected;
 extern bool apModeActive;
 extern unsigned long motorRuntimeSeconds;
+extern double waterTotalLitres;
+extern double waterTotalSetValue;
+extern volatile bool waterTotalSetPending;
 extern unsigned long lastMqttReconnectAttempt;
 extern PubSubClient mqttClient;
 extern MCP3208 adc;
@@ -85,7 +88,7 @@ void notifyClients() {
     // In AP mode the network is up, so SSE sends are safe
     if (!events.count()) return;
     if (!apModeActive && !wifiConnected) return;
-    // 448 B: up to 13 members plus the device_type / connection_size string values
+    // 448 B: up to 14 members plus the device_type / connection_size string values
     StaticJsonDocument<448> doc;
     doc["pressure"] = pressure;
     doc["dualPressure"] = config.dual_pressure_sensors;
@@ -97,6 +100,7 @@ void notifyClients() {
     doc["temperature"] = temperature;
     doc["ambientTemp"] = ambientTemp;
     doc["flow"] = flow;
+    doc["waterTotal"] = serialized(String(waterTotalLitres, 1));   // litres
     doc["deviceType"] = config.device_type;
     doc["connectionSize"] = config.connection_size;
     doc["error"] = error;
@@ -362,6 +366,27 @@ void webRoutes() {
     });
 
     // API endpoint to get current configuration
+    // Set the water total, to match the house meter or to start again from 0:
+    // POST /api/water_total with litres=<value> (form field or query string)
+    server.on("/api/water_total", HTTP_POST, [](AsyncWebServerRequest *request) {
+        bool inBody = request->hasParam("litres", true);
+        if (!inBody && !request->hasParam("litres")) {
+            request->send(400, "application/json", "{\"error\":\"litres is required\"}");
+            return;
+        }
+        String raw = request->getParam("litres", inBody)->value();
+        char* end = nullptr;
+        double litres = strtod(raw.c_str(), &end);
+        if (raw.length() == 0 || *end != '\0' || !(litres >= 0) || litres > 1e9) {
+            request->send(400, "application/json", "{\"error\":\"litres must be a number from 0 to 1000000000\"}");
+            return;
+        }
+        waterTotalSetValue = litres;
+        waterTotalSetPending = true;   // the loop applies it within a second and saves it
+        request->send(200, "application/json",
+                      String("{\"status\":\"ok\",\"water_total_l\":") + String(litres, 1) + "}");
+    });
+
     server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", getConfigJson());
     });

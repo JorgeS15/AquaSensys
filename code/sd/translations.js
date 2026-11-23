@@ -11,6 +11,7 @@ const translations = {
     "pressure": "Pressure",
     "temperature": "Temperature",
     "flowRate": "Flow Rate",
+    "waterTotal": "Total water",
     "systemControls": "System Controls",
     "systemInfo": "System Info",
     
@@ -396,6 +397,7 @@ const translations = {
     "pressure": "Pressão",
     "temperature": "Temperatura",
     "flowRate": "Fluxo",
+    "waterTotal": "Água total",
     "systemControls": "Controlos do Sistema",
     "systemInfo": "Informações do Sistema",
     

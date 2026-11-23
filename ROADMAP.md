@@ -19,7 +19,7 @@ step with them. See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
 | # | Item | Issue | Status |
 |---|---|---|---|
-| 6 | Total water volume counter (Energy dashboard ready) | [#48](https://github.com/JorgeS15/AquaSensys/issues/48) | ⬜ planned |
+| 6 | Total water volume counter (Energy dashboard ready) | [#48](https://github.com/JorgeS15/AquaSensys/issues/48) | 🔵 in review — 3.6.9 |
 | 7 | Leak detection | [#49](https://github.com/JorgeS15/AquaSensys/issues/49) | ⬜ planned |
 | 8 | Pump short-cycling detection | [#50](https://github.com/JorgeS15/AquaSensys/issues/50) | ⬜ planned |
 | 9 | Separate alarms in Home Assistant | [#51](https://github.com/JorgeS15/AquaSensys/issues/51) | ⬜ planned |

@@ -201,7 +201,9 @@ Assistant shows a dead unit as unavailable rather than frozen on its last state.
 Flow is published as a volume flow rate in L/min with long-term statistics,
 so it can be chosen as the **Water flow rate** of a water source in the Energy
 dashboard. Pressure, temperature and the filter pressure drop also keep
-long-term statistics. With two pressure sensors, they appear as **Pressure In**
+long-term statistics. **Water Total** is the volume through the flow sensor in
+litres (`device_class: water`, `state_class: total_increasing`), which the
+Energy dashboard lists under **Water consumption**. With two pressure sensors, they appear as **Pressure In**
 (before the filter) and **Pressure Out** (after it); with one, as **Pressure**.
 
 Each unit also has a **Firmware** update entity (state on
@@ -209,6 +211,23 @@ Each unit also has a **Firmware** update entity (state on
 when a newer release is out; **Install** there runs the update described under
 [Updating a unit](#updating-a-unit). The **Check for Firmware Update** button
 checks GitHub straight away.
+
+## Water total
+
+The unit adds up the water through the flow sensor from the flow rate it
+measures every second, so the total matches the flow it shows. It is kept on
+the SD card in `/runtime.json` (`water_total_l`, with the Controller's
+`motor_runtime_s`), saved every minute while either changes and before a clean
+restart (a reboot, an update). A power cut loses at most the last minute. The
+file is written to `/runtime.tmp` and renamed, and the unit reads the `.tmp`
+copy if a power cut came between the two.
+
+`POST /api/water_total` with `litres=<value>` (form field or query string)
+sets the total, for example to match the house water meter or to start again
+from 0. Home Assistant treats a lower value as a new meter, so its statistics
+stay correct.
+
+The dashboard shows the total under the flow rate.
 
 ## Updating a unit
 

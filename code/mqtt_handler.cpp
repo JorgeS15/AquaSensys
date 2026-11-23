@@ -142,6 +142,7 @@ void publishState() {
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
+    doc["water_total"]      = serialized(String(waterTotalLitres, 1));   // litres
     if (config.dual_pressure_sensors) {
         doc["pressure_out"] = pressureOut;
         doc["filter_dp"]    = pressureIn - pressureOut;
@@ -243,6 +244,9 @@ void sendAutoDiscoveryConfigs() {
     // statistics for it, which is what the Energy dashboard's "Water flow rate"
     // picker lists. Without a device class it was invisible there.
     createSensorConfig("flow",        "Flow Rate",     "L/min", "volume_flow_rate",  "mdi:water",         deviceDoc, stateTopic, "flow", "measurement");
+    // water + total_increasing in litres: the Energy dashboard's "Water
+    // consumption" picker lists it, and Home Assistant keeps daily totals.
+    createSensorConfig("water_total", "Water Total",  "L",     "water",             "mdi:counter",       deviceDoc, stateTopic, "water_total", "total_increasing");
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");

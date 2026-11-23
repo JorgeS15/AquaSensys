@@ -9,6 +9,21 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.9 — 2026-11-23
+- Counts the total water through the flow sensor. Home Assistant gets a
+  **Water Total** sensor in litres (`water`, `total_increasing`), which the
+  Energy dashboard lists under **Water consumption**, with daily, weekly and
+  monthly totals.
+- The total is kept on the SD card in `/runtime.json` (with the motor
+  runtime), saved every minute while water flows and before any clean
+  restart (reboot, update). A power cut loses at most a minute of counting.
+  `runtime.json` is now written to a temporary file and renamed, so a power
+  cut while writing it no longer loses the counters.
+- `POST /api/water_total` with `litres=<value>` sets the total, to match the
+  house meter or to start again from 0.
+- **[web UI]** The dashboard shows the total under the flow rate, in litres
+  up to 1000 L and in m³ from there.
+
 ## 3.6.8 — 2026-11-23
 - Fixes an automatic update failing with "Firmware download failed: HTTP
   error: read Timeout". The firmware download used the core's default of 8 s

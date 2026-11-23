@@ -115,12 +115,14 @@ calibrate the current and pressure sensors from here with one click.
 AquaSensys announces itself to Home Assistant through MQTT. Point it at your
 broker and every entity appears on its own, with nothing to set up in YAML:
 
-- **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate,
+- **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate, total water,
   water temperature, WiFi signal and uptime.
 - **Switches** (Controller): pump, main switch, manual mode.
 - **Alarms**: system fault and clogged filter.
-- **Energy dashboard**: the flow rate can be used as the water source, with
-  long-term statistics.
+- **Energy dashboard**: the total water used goes straight into *Water
+  consumption*, and the flow rate can be shown as the water flow, both with
+  long-term statistics. The total is counted by the unit and kept on its SD
+  card, so it survives restarts and Home Assistant being down.
 - **Updates**: new firmware shows up under *Settings → Updates*, ready to
   install from Home Assistant.
 

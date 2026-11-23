@@ -516,6 +516,8 @@ function renderUpdate() {
       detail = i18n('updateCurrent').replace('{v}', u.current);
       canInstall = true;
     }
+    // The bootloader went back to this version after the new one failed to come up
+    if (u.rolled_back) detail = i18n('updateRolledBack') + ' ' + detail;
     // A failed install leaves the version on offer: say why, and allow a retry
     if (u.error && installFromVersion) {
       failed = true;

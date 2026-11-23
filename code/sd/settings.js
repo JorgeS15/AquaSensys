@@ -100,6 +100,8 @@ function populateFormFields(config) {
   document.getElementById('max_pressure').value = config.max_pressure || 3.5;
   document.getElementById('pressure_offset').value = config.pressure_offset || 0;
   document.getElementById('temp_offset').value = config.temp_offset || 0;
+  document.getElementById('log_interval_minutes').value = config.log_interval_minutes ?? 5;
+  document.getElementById('update_check_hours').value = config.update_check_hours ?? 12;
 
   // Pressure sensors and the clogged-filter alarm
   const dual = config.dual_pressure_sensors === true;
@@ -130,7 +132,8 @@ function saveConfiguration(formId, event) {
   const numericKeys = [
     'mqtt_port', 'min_pressure', 'max_pressure', 'pressure_offset', 'temp_offset',
     'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm',
-    'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s'
+    'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s',
+    'log_interval_minutes', 'update_check_hours'
   ];
 
   // Convert FormData to a plain object

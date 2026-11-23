@@ -9,6 +9,32 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.7 — 2026-11-23
+- **[web UI]** Settings → System Parameters has the log interval
+  (`log_interval_minutes`) and how often to check for updates
+  (`update_check_hours`); both were only reachable in `config.json`.
+- **[web UI]** The debug page fits a phone screen (it scrolled sideways).
+- **[web UI]** After a rollback (3.6.6), the update notice says the last
+  attempt didn't start and the unit went back to the previous version.
+
+## 3.6.6 — 2026-11-23
+- A new firmware is on trial until it has been connected to WiFi for 30 s.
+  If it restarts before that (a crash, the loop watchdog, a power cut) or
+  goes 10 minutes without WiFi, the unit returns to the previous firmware by
+  itself, instead of needing a USB flash. Applies to automatic and manual
+  updates alike; a USB flash is never on trial.
+- While on trial, a further update is refused, since it would overwrite the
+  firmware a rollback returns to. `/api/update` reports `on_trial` and
+  `rolled_back`.
+
+## 3.6.5 — 2026-11-23
+- Loop watchdog: if the main loop stops for 30 s, the unit restarts. Before,
+  a hung loop left the web UI and MQTT answering with frozen readings while
+  the pump control and protections were stopped.
+- The reason for the last start is reported: `power_on`, `restart`,
+  `loop_stall` (the watchdog), `crash`, `brownout`, … as the **Last Reset
+  Reason** sensor in Home Assistant and `reset_reason` in `/api/device`.
+
 ## 3.6.4 — 2026-11-22
 - Fixes the update check, which failed with "Unreadable answer from GitHub:
   IncompleteInput". GitHub's answer (~18 KB) arrives in more than one TLS

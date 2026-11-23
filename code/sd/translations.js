@@ -367,6 +367,12 @@ const translations = {
     "upToDate": "Up to date",
     "updateCheckFailed": "Check failed:",
 
+    "logInterval": "Log Interval (min):",
+    "logIntervalHelp": "How often readings are written to the SD card. 0 turns logging off.",
+    "updateCheckHours": "Check for Updates Every (h):",
+    "updateCheckHoursHelp": "0 checks only when you press \"Check for updates\". Nothing is installed without you.",
+    "updateRolledBack": "The last attempt did not start correctly, so the unit went back to the previous version.",
+
     // Theme
     "theme": "Theme",
     "themeAuto": "Auto",
@@ -745,6 +751,12 @@ const translations = {
     "checkingUpdates": "A procurar…",
     "upToDate": "Atualizado",
     "updateCheckFailed": "A verificação falhou:",
+
+    "logInterval": "Intervalo de registo (min):",
+    "logIntervalHelp": "De quanto em quanto tempo as leituras são gravadas no cartão SD. 0 desliga o registo.",
+    "updateCheckHours": "Procurar atualizações a cada (h):",
+    "updateCheckHoursHelp": "Com 0, só procura quando carrega em \"Procurar atualizações\". Nada é instalado sem si.",
+    "updateRolledBack": "A última tentativa não arrancou bem, por isso a unidade voltou à versão anterior.",
 
     // Tema
     "theme": "Tema",

@@ -138,7 +138,7 @@ bool isMqttConfigured() {
 void publishState() {
     if (!mqttClient.connected()) return;
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<640> doc;
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
@@ -159,8 +159,9 @@ void publishState() {
     doc["uptime"]           = millis() / 1000;
     doc["free_heap"]        = ESP.getFreeHeap();
     doc["wifi_rssi"]        = WiFi.RSSI();
+    doc["reset_reason"]     = lastResetReason;
 
-    char state[512];
+    char state[640];
     serializeJson(doc, state, sizeof(state));
     mqttClient.publish(mqttTopicState, state, true);
 
@@ -245,6 +246,9 @@ void sendAutoDiscoveryConfigs() {
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");
+    // Why the unit last started: power_on, restart, loop_stall (the loop
+    // watchdog), crash, brownout, ...
+    createSensorConfig("reset_reason", "Last Reset Reason", nullptr, nullptr,     "mdi:restart-alert", deviceDoc, stateTopic, "reset_reason");
 
     // Monitor units (device_type "M") expose sensors only — no motor entities.
     if (isControllerDevice()) {

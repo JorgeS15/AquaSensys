@@ -25,6 +25,7 @@ extern volatile bool mainSwitch;
 extern volatile bool error;
 extern volatile bool motorFault;
 extern volatile bool rebootRequested;
+extern const char* lastResetReason;
 
 // Set true by loop() when sensor state changes; MQTT task reads and publishes
 extern volatile bool publishStatePending;

@@ -184,6 +184,12 @@ control decision is made until the sensors have produced a first real reading.
 A WiFi outage does not slow the control loop: reconnection runs in the
 background, one short step per loop pass.
 
+A watchdog checks the control loop every second. If it stops for 30 s, the
+unit restarts, rather than leaving the web UI and MQTT answering with frozen
+readings while the pump control and protections are stopped. The reason for
+the last start (`power_on`, `restart`, `loop_stall`, `crash`, `brownout`, …)
+is published as **Last Reset Reason** and in `/api/device` (`reset_reason`).
+
 ## Home Assistant (MQTT)
 
 Each unit publishes its entities through MQTT discovery under its `device_id`,
@@ -233,6 +239,18 @@ installed until someone presses **Install** in either place. The unit then:
 A failure in step 1 or 2 is reported on the dashboard and leaves the unit
 exactly as it was. Should step 3 fail, the new firmware starts with the
 previous web UI and then fetches its own, as described next.
+
+**Rollback (v3.6.6 and later).** A new firmware starts on trial, and is kept
+once it has been connected to WiFi for 30 seconds. If it restarts before that
+(a crash, the loop watchdog, a power cut) or has no WiFi for 10 minutes, the
+bootloader goes back to the previous firmware, and the update notice says so.
+This applies to updates through the firmware update page as well. While a
+firmware is on trial, another update is refused. A unit updated while the
+WiFi network is down therefore returns to its previous version; install the
+update again once the network is back.
+
+The log interval and the update check interval can be set under **Settings →
+System Parameters** (v3.6.7), or in `config.json`.
 
 Versions 3.6.0 to 3.6.3 cannot complete the check ("Unreadable answer from
 GitHub: IncompleteInput"). A unit on one of them needs the firmware of v3.6.4

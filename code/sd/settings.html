@@ -218,6 +218,18 @@
               <input type="number" id="temp_offset" name="temp_offset" step="0.01" required>
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="log_interval_minutes" data-i18n="logInterval">Log Interval (min):</label>
+              <input type="number" id="log_interval_minutes" name="log_interval_minutes" min="0" max="1440" step="1" required>
+              <small data-i18n="logIntervalHelp">How often readings are written to the SD card. 0 turns logging off.</small>
+            </div>
+            <div class="form-group">
+              <label for="update_check_hours" data-i18n="updateCheckHours">Check for Updates Every (h):</label>
+              <input type="number" id="update_check_hours" name="update_check_hours" min="0" max="720" step="1" required>
+              <small data-i18n="updateCheckHoursHelp">0 checks only when you press "Check for updates". Nothing is installed without you.</small>
+            </div>
+          </div>
           <button type="submit" class="button save-btn" data-i18n="saveParameters">Save Parameters</button>
         </form>
       </div>

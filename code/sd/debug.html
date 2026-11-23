@@ -11,9 +11,15 @@
     <style>
         .debug-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
             gap: 20px;
             margin-bottom: 20px;
+        }
+
+        /* One column on a phone: a card spanning two columns would otherwise
+           force a second one and push the page sideways */
+        @media (max-width: 720px) {
+            .debug-grid > .debug-card { grid-column: auto !important; }
         }
 
         .debug-card {

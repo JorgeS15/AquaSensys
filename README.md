@@ -1,289 +1,189 @@
-# AquaSensys
-Intelligent Water Supply Monitor and Controller Module
-
-See [CHANGELOG.md](CHANGELOG.md) for what changed in each firmware version.
-
-## Configuration (`config.json` on the SD card)
-
-Every setting lives in `config.json` on the SD card, and every key is optional:
-a missing or unreadable key falls back to the default listed here. Most can also
-be changed from the web UI, under **Settings**.
-
-### The unit itself
-
-| Key | Values | Default | Meaning |
-|---|---|---|---|
-| `device_type` | `"M"`, `"C"` | `"C"` | `M` = Monitor, `C` = Controller. |
-| `connection_size` | `"3/4"`, `"1"` | `"3/4"` | Water connection size, in inches. Selects the flow sensor K-factor. |
-| `device_id` | `[a-z0-9-]`, ≤ 32 chars | by type | Names the MQTT topics, the Home Assistant entities and the mDNS host. **Must differ on every unit.** |
-| `device_name` | text, ≤ 48 chars | by type | Display name in Home Assistant and on the dashboard. |
-
-### Device identity
-
-Every unit runs the same firmware binary, so the identity comes from
-`config.json` rather than from the build. Left blank, `device_id` and
-`device_name` default by device type:
-
-| `device_type` | `device_id` | `device_name` | Model | Dashboard header |
-|---|---|---|---|---|
-| `C` | `aquasensys` | AquaSensys C3 | AquaSensys C3 | AquaSensys C3 |
-| `M` | `aquasensys-m` | AquaSensys M | AquaSensys Monitor | AquaSensys M |
-
-So one Controller and one Monitor need no configuration. **Two units of the
-same type must each be given their own `device_id`**: with a shared id they
-publish into the same Home Assistant entities, and a Monitor will remove the
-motor switches belonging to the Controller it is impersonating. A `device_name`
-you set replaces the dashboard header too.
-
-The MQTT client id is `<device_id>-<last 3 MAC bytes>`, so two boards never
-knock each other off the broker, even if misconfigured with the same id.
-Changing `device_id` creates a new device in Home Assistant; changing either
-key reboots the unit, since topics and the mDNS name are built at startup.
-
-### Sensor calibration
-
-Offsets are added to the converted reading and are stored in `config.json`.
-
-| Key | Unit | Default | Meaning |
-|---|---|---|---|
-| `pressure_offset` | bar | `0` | Added to both pressure sensors. |
-| `pressure_in_offset`, `pressure_out_offset` | bar | `0` | Per-sensor zero, written by **Calibrate pressure** on the Diagnostics page (run it with the system depressurised). |
-| `temp_offset` | °C | `0` | Added to the water temperature. Set under **Settings → System Parameters**. |
-| `current_offset_l1` … `_l3` | mA | `0` | Per-phase zero, written by **Calibrate current** on the Diagnostics page (run it with the pump stopped). |
-
-`temp_offset` only takes effect from v3.4.10; before that the setting existed
-but was never applied. Units that still carried the old unused default of 0.16
-have it reset to 0 the first time they boot v3.4.10, so their readings don't
-shift. Any other value is kept.
-
-Current is measured as the RMS over two whole mains cycles, around the measured
-mean, so it is accurate without calibration; the residual noise (~40 mA) sits
-below the 0.1 A display floor. Offsets saved before v3.4.6 were measured the old
-way and are discarded once (`current_cal_method` records which method produced
-the saved offsets). A Controller then recalibrates at boot, with its motor
-output held off. A Monitor never calibrates at boot, because it doesn't drive the pump and can't know it is
-stopped.
-
-### Pressure sensors and filter alarm
-
-Sensor 1 (inlet) sits on the mains, before the filter, and is the one the
-pump control uses. An optional sensor 2 (outlet) sits after the filter; with
-both fitted, the difference between them is the pressure drop across the
-filter, which rises as it clogs. Set under **Settings → Pressure Sensors**.
-
-| Key | Default | Meaning |
-|---|---|---|
-| `dual_pressure_sensors` | `false` | `true` when sensor 2 is fitted after the filter. |
-| `filter_alarm_enabled` | `true` | Flag the filter as clogged when the drop gets too high. Only used with two sensors. |
-| `filter_dp_warning` | `0.5` | Drop across the filter, in bar, that counts as clogged. |
-| `filter_min_flow_lpm` | `5` | The drop is only judged above this flow, in L/min. |
-| `filter_alarm_delay_s` | `30` | The drop must stay above the limit this many seconds before the alarm fires, and below it as long before it clears. |
-
-With no water moving the filter shows no drop, clogged or not, so the alarm is
-judged on the flow rather than on the pump state — which also makes it work on
-Monitor units. Below the minimum flow the drop isn't judged: a filter already
-marked clogged stays clogged, otherwise it reads "no flow". The delay keeps a
-short pressure spike, such as the pump starting, from raising the alarm. The
-alarm is a warning only: it never stops the pump.
-
-With two sensors MQTT publishes `pressure_out`, `filter_dp` and, when the alarm
-is on, `filter_clogged` (a "problem" binary sensor in Home Assistant). These
-entities appear or disappear the next time the unit connects to the broker.
-
-### Flow rate
-
-The sensors follow the datasheet form `F = K × Q + offset`, where `F` is the
-pulse frequency in Hz and `Q` the flow in L/min — so `Q = (F − offset) / K`.
-
-| `connection_size` | K | offset | Pulses per litre |
-|---|---|---|---|
-| `3/4` | 6.6 | 0 | 396 |
-| `1` | 8.0 | −4 | ~476 |
-
-The exact constant is printed on the sensor body and differs between YF-B
-variants, so both numbers can be overridden per device without reflashing:
-
-| Key | Default | Meaning |
-|---|---|---|
-| `flow_k_factor` | `0` | `K`. `0` means "use the default for `connection_size`". |
-| `flow_k_offset` | `0` | The constant term, in Hz. Only read when `flow_k_factor > 0`. |
-
-### Flow input noise
-
-The flow input is counted by a GPIO interrupt, so anything that makes the line
-oscillate is counted as water. A signal edge that crosses the ESP32's input
-threshold slowly will do exactly that: bursts of ~730 kHz have been observed in
-the field, against ~130 Hz for a real 20 L/min — the count then measures how
-fast the ESP32 can service interrupts, not how much water is flowing.
-
-Two settings bound the damage:
+<div align="center">
 
-| Key | Default | Meaning |
-|---|---|---|
-| `flow_debounce_us` | `500` | Edges closer together than this are ignored. 500 µs allows up to ~133 L/min on a 3/4" connection. |
-| `max_flow_lpm` | `150` | A sample above this is discarded and the previous reading kept. |
+# 💧 AquaSensys
 
-`flow_glitches` (edges rejected) and `flow_rejected` (whole samples discarded)
-are published in the diagnostics, so a noisy install is visible rather than
-silently wrong.
-
-If those counters keep climbing, the cause is electrical, not firmware:
-
-- The pin is configured as plain `INPUT`. **Never `INPUT_PULLDOWN`** — the YF-B
-  output is push-pull and usually reaches the ESP32 through a 5 V → 3.3 V level
-  converter that already pulls the line up through ~10 kΩ. The ESP32's internal
-  ~45 kΩ pull-down divides that to ~2.7 V against a 2.475 V input threshold,
-  leaving ~0.2 V of margin — close enough to oscillate.
-- An RC low-pass at the pin (1 kΩ in series, 100 nF to GND) cuts off around
-  1.6 kHz: it passes the sensor's full scale comfortably and kills the ringing.
-  Unlike the software debounce, it also stops the interrupts from reaching the
-  CPU at all.
-- Use shielded cable for the sensor, routed away from pump and mains wiring.
-
-## Device type
-
-A **Controller** (`"C"`) is the full module: it reads the sensors and drives the
-pump motor from the pressure thresholds, the main switch and the manual override.
-
-A **Monitor** (`"M"`) only measures. All motor control logic is disabled:
-
-- The motor output stays de-energised; `controlMotor()` makes no decision.
-- No dry-run watchdog, no overcurrent or phase-imbalance trip, no runtime counter.
-- `/command` returns HTTP 409, and the dashboard hides the motor controls.
-- MQTT publishes sensors only — no motor, main-power or override switches. The
-  error state is still reported, as a read-only binary sensor, and follows the
-  live reading instead of latching.
-- The status LED shows only healthy (green heartbeat) or error (red blink).
-
-Changing `device_type` reboots the device, since it changes the MQTT entities
-that are advertised.
-
-## Pump protection (Controller)
-
-In automatic mode the pump starts at `min_pressure` and stops at `max_pressure`
-(defaults 2.5 and 3.5 bar). These faults stop it and latch the error:
-
-| Fault | Trips when | Active in manual mode |
-|---|---|---|
-| Pressure out of range | below 1 bar or above 5 bar | no |
-| Dry run | motor on with no flow for 10 s | no |
-| Overcurrent | total current above `max_current` (default 15 A) | **yes** |
-| Phase imbalance | phases differ by more than `max_phase_imbalance` (default 3 A) | **yes** |
-
-Manual mode overrides the pressure logic, not the motor's own protection:
-low pressure and no flow are expected while an operator primes or refills an
-empty system, but an electrical fault stops the motor whoever is commanding it.
-
-A latched fault is cleared by turning the main switch back on, or by switching
-the error off from Home Assistant. If the cause is still there, it trips again.
-
-On boot the motor output is held off from reset, and no fault is judged and no
-control decision is made until the sensors have produced a first real reading.
-A WiFi outage does not slow the control loop: reconnection runs in the
-background, one short step per loop pass.
-
-## Home Assistant (MQTT)
-
-Each unit publishes its entities through MQTT discovery under its `device_id`,
-with its readings on `homeassistant/<id>/state`. It connects with a last will on
-`homeassistant/<id>/availability`: the broker publishes `offline` there once the
-unit stops answering (within ~25 s), and every entity points at that topic, so Home
-Assistant shows a dead unit as unavailable rather than frozen on its last state.
-
-Flow is published as a volume flow rate in L/min with long-term statistics,
-so it can be chosen as the **Water flow rate** of a water source in the Energy
-dashboard. Pressure, temperature and the filter pressure drop also keep
-long-term statistics. With two pressure sensors, they appear as **Pressure In**
-(before the filter) and **Pressure Out** (after it); with one, as **Pressure**.
-
-Each unit also has a **Firmware** update entity (state on
-`homeassistant/<id>/update/state`), which appears under **Settings → Updates**
-when a newer release is out; **Install** there runs the update described under
-[Updating a unit](#updating-a-unit). The **Check for Firmware Update** button
-checks GitHub straight away.
-
-## Updating a unit
-
-There are two halves: the **firmware**, in the ESP32's flash, and the **web UI**,
-served from the SD card. A release carries both (`aquasensys-firmware-*.bin` and
-`sd-assets.zip`).
-
-### Automatic updates (v3.6.0 and later)
-
-The unit asks GitHub for the latest release two minutes after it connects to
-WiFi, and then every `update_check_hours`:
-
-| Key | Default | Meaning |
-|---|---|---|
-| `update_check_hours` | `12` | Hours between checks, `1`–`720`. `0` checks only when asked. |
-
-When a newer release is out, the dashboard shows **"Firmware vX is available"**,
-and Home Assistant lists the unit under **Settings → Updates**. Nothing is
-installed until someone presses **Install** in either place. The unit then:
-
-1. downloads `sd-assets.zip` to the SD card, checking its size and SHA-256;
-2. downloads the firmware into the spare OTA slot, checked against the
-   release's SHA-256 — the running firmware is untouched until the restart;
-3. replaces the web UI from the archive (staged and CRC-checked, as below);
-4. restarts — a Controller's pump stops for the restart and then resumes on
-   its own. The dashboard reloads itself on the new version.
-
-A failure in step 1 or 2 is reported on the dashboard and leaves the unit
-exactly as it was. Should step 3 fail, the new firmware starts with the
-previous web UI and then fetches its own, as described next.
-
-Versions 3.6.0 to 3.6.3 cannot complete the check ("Unreadable answer from
-GitHub: IncompleteInput"). A unit on one of them needs the firmware of v3.6.4
-or later uploaded once by hand, through its firmware update page; from then
-on the check works, and the web UI follows by itself.
-
-### Web UI and firmware stay in step (v3.6.2 and later)
-
-Each release's `sd-assets.zip` carries `ui_version.txt`, the firmware version
-its pages belong to. At boot the unit reads it from the SD card; if it names
-another version, or is missing, the unit fetches `sd-assets.zip` from its own
-release (`v<version>-build<n>`, which CI builds into the firmware) 30 seconds
-after WiFi comes up, and installs it like an upload. A failed attempt is
-retried every hour. So the pages always match the firmware: after an update
-whose web UI step failed, after a USB flash, or with a card taken from another
-unit. `/api/update` shows both (`current`, `build`, `ui_version`).
-
-This also means an `sd-assets.zip` from a *different* release, uploaded by
-hand, is replaced by the matching one at the next boot. A firmware built
-locally (no build number) never fetches anything.
-
-**Check for updates** under the firmware version on the dashboard, or the
-**Check for Firmware Update** button in Home Assistant, checks straight away.
-The checks use GitHub's public API without a key, which allows 60 requests an
-hour per internet connection — far more than any number of units will make.
-
-`GET /api/update` returns the update state; `POST /api/update/check` and
-`POST /api/update/install` do what they say.
-
-### Flash layout and the one-time USB flash
-
-From v3.6.0 the firmware is built for the `min_spiffs` partition scheme: two
-1.875 MB app slots, where `default` had 1.25 MB. HTTPS (and the root
-certificates it needs) took the firmware to 1.40 MB, past the old slots. The
-128 KB SPIFFS partition that remains is unused: everything lives on the SD card.
-
-A partition table can only be written over USB, so **a unit on v3.5.0 or older
-must be flashed once over USB** with `aquasensys-full-*.bin`. The release notes
-explain how, from a browser or with esptool. `config.json`, the web UI and the
-logs are on the SD card and survive it. Uploading v3.6.0 or later through the
-old update page is refused ("Not enough space") and the unit keeps running the
+**Smart monitoring and pump control for your water supply.**
+
+Pressure, flow, temperature and pump current in real time, on your phone,
+your computer and in Home Assistant, plus automatic protection for the pump.
+
+![AquaSensys dashboard](site/images/dashboard.png)
+
+</div>
+
+---
+
+## Why AquaSensys?
+
+A booster pump or a well pump usually fails without warning. It runs dry,
+it overheats, a filter clogs, a phase drops out. Most of the time nobody knows
+until the taps run dry. AquaSensys sits on the water line and watches the
+whole system for you:
+
+- **See what your water is doing.** Live pressure, flow and water temperature,
+  from any browser on your network. Nothing to install.
+- **Protect the pump.** It shuts the pump down on dry running, overcurrent,
+  phase imbalance and out-of-range pressure, before any damage is done.
+- **Know when to change the filter.** With a second pressure sensor it
+  measures the drop across the filter and warns you when it starts to clog.
+- **Fits into your smart home.** It appears in Home Assistant on its own, with
+  every sensor, switch and alarm ready for dashboards and automations.
+- **Keeps itself up to date.** New firmware is announced on the dashboard and
+  installed with one click.
+
+## Two models
+
+| | **AquaSensys C3**: Controller | **AquaSensys M**: Monitor |
+|---|:---:|:---:|
+| Pressure, flow and water temperature | ✅ | ✅ |
+| Clogged-filter alarm (second pressure sensor) | ✅ | ✅ |
+| 3-phase motor current measurement | ✅ | ✅ |
+| Home Assistant integration | ✅ | ✅ |
+| Automatic updates | ✅ | ✅ |
+| **Pump control** (starts and stops on pressure) | ✅ | — |
+| **Pump protection** (dry run, overcurrent, phase imbalance) | ✅ | — |
+| Automatic / manual mode and main switch | ✅ | — |
+| Pump runtime counter | ✅ | — |
+
+The **Controller** replaces a traditional pressure switch: it drives the pump
+and protects it. The **Monitor** only measures, for systems that already
+have their own control, or for keeping an eye on a second line.
+
+Both run the same firmware. A unit's model, its pipe size (3/4" or 1") and
+its name are settings, so a Monitor can become a Controller later.
+
+---
+
+## A closer look
+
+### Dashboard: everything at a glance
+
+The dashboard opens at `http://aquasensys.local` (or the unit's IP address)
+and updates every second. On a Controller the top panel shows the pump and
+its controls: **automatic** mode (it starts below the minimum pressure and
+stops above the maximum), **manual** mode for priming or maintenance, and the
+**main switch**.
+
+On a **Monitor**, the motor controls are gone and the readings come first:
+
+![Monitor dashboard](site/images/monitor.png)
+
+### Clogged-filter alarm
+
+With a second pressure sensor after the filter, AquaSensys shows the pressure
+on both sides and the **drop across the filter**. As the filter clogs, the drop
+rises. Past the limit you set (0.5 bar by default) the dashboard and Home
+Assistant raise an alarm. It is only judged while water is flowing, and must
+last a while before it fires, so pressure spikes don't cause false alarms.
+
+### On your phone, day or night
+
+Every page works on a phone, and comes in **English and Portuguese** with a
+**light and a dark theme**. The theme follows your device by default.
+
+<p align="center">
+  <img src="site/images/dashboard-mobile.png" alt="Dashboard on a phone" width="300">
+  &nbsp;&nbsp;
+  <img src="site/images/dashboard-dark.png" alt="Dashboard in dark theme" width="520">
+</p>
+
+### Pump protection
+
+On a Controller, these faults stop the pump straight away and keep it stopped
+until someone checks the system:
+
+| Fault | When it trips |
+|---|---|
+| **Dry run** | The pump runs for 10 s with no water flowing |
+| **Overcurrent** | Total motor current above the limit (15 A by default) |
+| **Phase imbalance** | The three phases differ by more than 3 A |
+| **Pressure out of range** | Below 1 bar or above 5 bar |
+
+The electrical faults stay active even in manual mode. Whoever is running
+the pump, the motor stays protected.
+
+### Diagnostics
+
+The current in each of the three motor phases, both temperatures (water and
+ambient), both pressures and the state of the unit itself. You can also
+calibrate the current and pressure sensors from here with one click.
+
+![Diagnostics page](site/images/diagnostics.png)
+
+### Home Assistant
+
+AquaSensys announces itself to Home Assistant through MQTT. Point it at your
+broker and every entity appears on its own, with nothing to set up in YAML:
+
+- **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate,
+  water temperature, WiFi signal and uptime.
+- **Switches** (Controller): pump, main switch, manual mode.
+- **Alarms**: system fault and clogged filter.
+- **Energy dashboard**: the flow rate can be used as the water source, with
+  long-term statistics.
+- **Updates**: new firmware shows up under *Settings → Updates*, ready to
+  install from Home Assistant.
+
+If a unit goes offline, Home Assistant shows it as *unavailable* within
+about 25 seconds instead of showing old readings as if they were current.
+
+### One-click updates
+
+The unit checks for new firmware twice a day. When a new version is out, the
+dashboard says so. Press **Install** and the unit downloads it, verifies it,
+updates both the firmware and the web interface, and restarts. Nothing is
+installed until you ask, and if a download fails the unit keeps running the
 version it had.
 
-### Manual updates
+![Update available](site/images/update.png)
 
-Still available, for a unit without internet access:
+### Settings
 
-1. **Firmware** — flash `aquasensys-firmware-*.bin` from the release through the
-   device's firmware update page (OTA).
-2. **Web UI** — upload `sd-assets.zip` from the same release through the
-   device's `/upload` page. Your `config.json` is never overwritten.
+WiFi, MQTT, pressure limits, sensors and alarms are all set from the browser.
+Nothing needs reprogramming.
 
-Uploads are staged: each file is written to `<name>.part` and only replaces the
-live one once it has arrived intact, and a ZIP is replaced as a whole only after
-every file in it has passed its CRC check. A failed or interrupted upload
-reports an error and leaves the existing web UI exactly as it was.
+![Settings page](site/images/settings.png)
+
+---
+
+## Getting started
+
+1. **Install** the module on the water line: pressure sensor(s), flow sensor,
+   temperature probe and, on a Controller, the pump contactor and current
+   sensors.
+2. **Power it on.** With no WiFi set up yet, it creates its own network,
+   `AquaSensys-XXXXXXXXXXXX`. Connect to it and open `http://192.168.4.1`.
+3. **Enter your WiFi** (and, optionally, your MQTT broker for Home Assistant).
+   The unit restarts and joins your network.
+4. **Open `http://aquasensys.local`** and set the pressure limits for your
+   installation. That's it.
+
+Running several units? Give each one its own **Device ID** under
+*Settings → Device Settings*, so their Home Assistant entities stay separate.
+
+## Technical specifications
+
+| | |
+|---|---|
+| Controller | ESP32, WiFi 2.4 GHz |
+| Pressure | 1 or 2 sensors, 0–5 bar (0.5–4.5 V) |
+| Flow | Hall-effect flow sensor, 3/4" or 1" connection |
+| Temperature | Water and ambient |
+| Motor current | 3 phases, measured separately (ACS712) |
+| Analog inputs | 12-bit external ADC (MCP3208) |
+| Storage | microSD card: settings, web interface and logs |
+| Status light | RGB LED: healthy, pump running, fault |
+| Integrations | Web dashboard, MQTT, Home Assistant (auto-discovery), mDNS |
+| Updates | Over the air, from GitHub releases, with checksum verification |
+
+---
+
+## Documentation
+
+- **[Technical reference](docs/REFERENCE.md)**: every setting in `config.json`,
+  calibration, protection rules, Home Assistant entities and the update process.
+- **[Changelog](CHANGELOG.md)**: what changed in each firmware version.
+
+## License
+
+[MIT](LICENSE)

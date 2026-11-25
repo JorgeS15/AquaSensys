@@ -113,6 +113,8 @@ until someone checks the system:
 | **Phase imbalance** | The three phases differ by more than 3 A |
 | **Pressure out of range** | Below 1 bar or above 5 bar |
 
+The limits shown are the defaults; each one can be changed in Settings.
+
 The electrical faults stay active even in manual mode. Whoever is running
 the pump, the motor stays protected.
 

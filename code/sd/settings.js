@@ -7,6 +7,7 @@ const formElements = {
   sensorsForm: document.getElementById('sensorsForm'),
   leakForm: document.getElementById('leakForm'),
   shortCycleForm: document.getElementById('shortCycleForm'),
+  protectionForm: document.getElementById('protectionForm'),
   securityForm: document.getElementById('securityForm'),
   
   // Status elements
@@ -138,6 +139,15 @@ function populateFormFields(config) {
   document.getElementById('admin_password_confirm').value = '';
   document.getElementById('admin_password_clear').checked = false;
 
+  // Fault limits; the motor ones only on a Controller
+  lastConfig = config;
+  document.getElementById('fault_min_pressure').value = config.fault_min_pressure ?? 1;
+  document.getElementById('fault_max_pressure').value = config.fault_max_pressure ?? 5;
+  document.getElementById('dry_run_seconds').value = config.dry_run_seconds ?? 10;
+  document.getElementById('max_current').value = config.max_current ?? 15;
+  document.getElementById('max_phase_imbalance').value = config.max_phase_imbalance ?? 3;
+  document.getElementById('motorProtectionFields').classList.toggle('hidden', config.device_type === 'M');
+
   // Pump short-cycling: a Controller only
   document.getElementById('shortCycleCard').classList.toggle('hidden', config.device_type === 'M');
   document.getElementById('short_cycle_max_starts').value = config.short_cycle_max_starts ?? 20;
@@ -174,8 +184,32 @@ function updateSensorFields() {
   document.getElementById('filterAlarmFields').classList.toggle('hidden', !alarmOn);
 }
 
+// The settings as last loaded, to check one form against another
+let lastConfig = {};
+
+// A pressure fault inside the pump's start/stop band would trip it on every
+// start (or stop): refuse it, whichever of the two forms is being saved
+function pressureLimitsProblem(formId) {
+  const num = id => Number(document.getElementById(id).value);
+  const fromForm = (id, key) => (formId === 'paramsForm' || formId === 'protectionForm') && document.getElementById(id).form.id === formId
+    ? num(id) : Number(lastConfig[key]);
+  const start = fromForm('min_pressure', 'min_pressure');
+  const stop = fromForm('max_pressure', 'max_pressure');
+  const lo = fromForm('fault_min_pressure', 'fault_min_pressure');
+  const hi = fromForm('fault_max_pressure', 'fault_max_pressure');
+  if ([start, stop, lo, hi].some(v => !Number.isFinite(v))) return null;
+  if (hi <= lo) return 'faultRangeInverted';
+  if (lo >= start) return 'faultMinTooHigh';
+  if (hi <= stop) return 'faultMaxTooLow';
+  return null;
+}
+
 function saveConfiguration(formId, event) {
   event.preventDefault();
+  if (formId === 'paramsForm' || formId === 'protectionForm') {
+    const problem = pressureLimitsProblem(formId);
+    if (problem) { showNotification(problem, 'error'); return; }
+  }
   
   const form = document.getElementById(formId);
   const formData = new FormData(form);
@@ -187,7 +221,8 @@ function saveConfiguration(formId, event) {
     'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm',
     'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s',
     'log_interval_minutes', 'update_check_hours',
-    'leak_max_minutes', 'leak_quiet_minutes', 'short_cycle_max_starts'
+    'leak_max_minutes', 'leak_quiet_minutes', 'short_cycle_max_starts',
+    'fault_min_pressure', 'fault_max_pressure', 'dry_run_seconds', 'max_current', 'max_phase_imbalance'
   ];
 
   // Convert FormData to a plain object
@@ -559,6 +594,10 @@ document.addEventListener('DOMContentLoaded', () => {
     formElements.leakForm.addEventListener('submit', (e) => saveConfiguration('leakForm', e));
     formElements.leakForm.querySelectorAll('#leak_alarm_enabled, #leak_quiet_enabled')
       .forEach(input => input.addEventListener('change', updateLeakFields));
+  }
+
+  if (formElements.protectionForm) {
+    formElements.protectionForm.addEventListener('submit', (e) => saveConfiguration('protectionForm', e));
   }
 
   if (formElements.shortCycleForm) {

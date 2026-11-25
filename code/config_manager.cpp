@@ -63,6 +63,16 @@ float flowKOffset() {
                                          : FLOW_K_OFFSET_THREE_QUARTER;
 }
 
+void sanitizeFaultLimits() {
+    if (!(config.fault_min_pressure >= 0.0f)) config.fault_min_pressure = 1.0f;   // also catches NaN
+    if (config.fault_min_pressure > 10.0f) config.fault_min_pressure = 10.0f;
+    if (!(config.fault_max_pressure > config.fault_min_pressure)) config.fault_max_pressure = config.fault_min_pressure + 0.5f;
+    if (config.fault_max_pressure > 16.0f) config.fault_max_pressure = 16.0f;
+    config.dry_run_seconds = constrain(config.dry_run_seconds, 3, 600);
+    if (!(config.max_current > 0.0f)) config.max_current = 15.0f;
+    if (!(config.max_phase_imbalance > 0.0f)) config.max_phase_imbalance = 3.0f;
+}
+
 String normalizeHhMm(const String& raw, const char* fallback) {
     int colon = raw.indexOf(':');
     if (colon < 1) return fallback;
@@ -159,6 +169,10 @@ bool loadConfig() {
 
     config.max_current          = doc["max_current"]          | config.max_current;
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
+    config.fault_min_pressure   = doc["fault_min_pressure"]   | config.fault_min_pressure;
+    config.fault_max_pressure   = doc["fault_max_pressure"]   | config.fault_max_pressure;
+    config.dry_run_seconds      = doc["dry_run_seconds"]      | config.dry_run_seconds;
+    sanitizeFaultLimits();
     config.log_interval_minutes = doc["log_interval_minutes"] | config.log_interval_minutes;
     config.update_check_hours   = constrain((int)(doc["update_check_hours"] | config.update_check_hours), 0, 720);
     config.leak_alarm_enabled = doc["leak_alarm_enabled"] | config.leak_alarm_enabled;
@@ -264,6 +278,9 @@ bool saveConfig() {
 
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
+    doc["fault_min_pressure"]   = config.fault_min_pressure;
+    doc["fault_max_pressure"]   = config.fault_max_pressure;
+    doc["dry_run_seconds"]      = config.dry_run_seconds;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["update_check_hours"]   = config.update_check_hours;
     doc["leak_alarm_enabled"]   = config.leak_alarm_enabled;
@@ -332,6 +349,11 @@ void printConfig() {
     Serial.println("Current Calibrated: " + String(config.current_calibrated ? "Yes" : "No"));
     Serial.println("Max Current: " + String(config.max_current) + " A");
     Serial.println("Max Phase Imbalance: " + String(config.max_phase_imbalance) + " A");
+    Serial.println("Pressure fault: below " + String(config.fault_min_pressure, 2) + " or above "
+                   + String(config.fault_max_pressure, 2) + " bar; dry run after "
+                   + String(config.dry_run_seconds) + " s");
+    if (config.fault_min_pressure >= config.min_pressure || config.fault_max_pressure <= config.max_pressure)
+        Serial.println("Warning: the pressure fault limits overlap the pump's start/stop pressures");
     Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
     Serial.println("Update check: " + (config.update_check_hours > 0
                    ? "every " + String(config.update_check_hours) + " h" : String("manual only")));
@@ -388,6 +410,9 @@ String getConfigJson() {
 
     doc["max_current"]          = config.max_current;
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
+    doc["fault_min_pressure"]   = config.fault_min_pressure;
+    doc["fault_max_pressure"]   = config.fault_max_pressure;
+    doc["dry_run_seconds"]      = config.dry_run_seconds;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["update_check_hours"]   = config.update_check_hours;
     doc["leak_alarm_enabled"]   = config.leak_alarm_enabled;
@@ -490,6 +515,10 @@ bool updateConfigFromJson(const String& jsonStr) {
 
     if (doc.containsKey("max_current"))          config.max_current          = doc["max_current"];
     if (doc.containsKey("max_phase_imbalance"))  config.max_phase_imbalance  = doc["max_phase_imbalance"];
+    if (doc.containsKey("fault_min_pressure"))   config.fault_min_pressure   = doc["fault_min_pressure"];
+    if (doc.containsKey("fault_max_pressure"))   config.fault_max_pressure   = doc["fault_max_pressure"];
+    if (doc.containsKey("dry_run_seconds"))      config.dry_run_seconds      = doc["dry_run_seconds"];
+    sanitizeFaultLimits();
     if (doc.containsKey("log_interval_minutes")) config.log_interval_minutes = doc["log_interval_minutes"];
     if (doc.containsKey("update_check_hours"))   config.update_check_hours   = constrain(doc["update_check_hours"].as<int>(), 0, 720);
     if (doc.containsKey("leak_alarm_enabled")) config.leak_alarm_enabled = doc["leak_alarm_enabled"];

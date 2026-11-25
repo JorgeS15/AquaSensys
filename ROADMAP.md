@@ -39,6 +39,13 @@ step with them. See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 | 13 | History charts on the dashboard | [#55](https://github.com/JorgeS15/AquaSensys/issues/55) | 🔵 in review — 3.6.16 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
 | 14 | CSV export and configuration backup/restore | [#56](https://github.com/JorgeS15/AquaSensys/issues/56) | 🔵 in review — 3.6.17 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
 
+## Phase 5 — Protection and quality
+
+| # | Item | Issue | Status |
+|---|---|---|---|
+| 15 | Configurable fault limits (pressure, dry run, current) | [#60](https://github.com/JorgeS15/AquaSensys/issues/60) | 🟡 in progress |
+| 16 | Automatic tests in CI | [#61](https://github.com/JorgeS15/AquaSensys/issues/61) | 🟡 in progress |
+
 ## Order and why
 
 Phase 1 first: it is quick and prevents surprises. Then items 6 and 7, which

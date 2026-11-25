@@ -57,6 +57,9 @@ struct Config {
     // Protection thresholds
     float max_current;          // overcurrent trip point (A)
     float max_phase_imbalance;  // max A difference across phases
+    float fault_min_pressure;   // below this (bar) is a pressure fault
+    float fault_max_pressure;   // above this (bar) is a pressure fault
+    int dry_run_seconds;        // motor on with no flow this long is a dry run
 
     // Data logging
     int log_interval_minutes;   // 0 = disabled
@@ -129,6 +132,9 @@ struct Config {
         current_cal_method = 2;
         max_current = 15.0f;
         max_phase_imbalance = 3.0f;
+        fault_min_pressure = 1.0f;
+        fault_max_pressure = 5.0f;
+        dry_run_seconds = 10;
         log_interval_minutes = 5;
         update_check_hours = 12;
         leak_alarm_enabled = true;
@@ -205,6 +211,10 @@ String normalizeTimezone(const String& raw);
 
 // Size of the JSON documents config.json is read and written with
 static const size_t CONFIG_DOC_SIZE = 4096;
+
+// Keeps the fault limits usable: each inside its range, and the maximum
+// pressure above the minimum
+void sanitizeFaultLimits();
 
 // True when this unit drives a motor (device_type "C"); false for Monitor units
 bool isControllerDevice();

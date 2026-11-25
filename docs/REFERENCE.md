@@ -167,10 +167,18 @@ In automatic mode the pump starts at `min_pressure` and stops at `max_pressure`
 
 | Fault | Trips when | Active in manual mode |
 |---|---|---|
-| Pressure out of range | below 1 bar or above 5 bar | no |
-| Dry run | motor on with no flow for 10 s | no |
+| Pressure out of range | below `fault_min_pressure` or above `fault_max_pressure` (defaults 1 and 5 bar) | no |
+| Dry run | motor on with no flow for `dry_run_seconds` (default 10) | no |
 | Overcurrent | total current above `max_current` (default 15 A) | **yes** |
 | Phase imbalance | phases differ by more than `max_phase_imbalance` (default 3 A) | **yes** |
+
+All four limits are in Settings → *Fault limits* (from 3.6.18) and apply at
+once. The pressure limits must stay outside the start/stop band
+(`fault_min_pressure` below `min_pressure`, `fault_max_pressure` above
+`max_pressure`), or the pump would trip on every start; Settings refuses such
+a pair. The firmware keeps each value in a usable range (`fault_min_pressure`
+0–10 bar, `fault_max_pressure` above it and at most 16 bar, `dry_run_seconds`
+3–600). On a Monitor the pressure limits drive its pressure alarm.
 
 Manual mode overrides the pressure logic, not the motor's own protection:
 low pressure and no flow are expected while an operator primes or refills an

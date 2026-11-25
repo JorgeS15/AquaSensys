@@ -9,6 +9,15 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.18 — 2026-11-25
+- The fault limits can be changed: the pressure fault (`fault_min_pressure`,
+  `fault_max_pressure`, default 1 and 5 bar, fixed until now), the dry-run
+  delay (`dry_run_seconds`, default 10 s, fixed until now), and the
+  overcurrent and phase-imbalance limits (until now only in `config.json`).
+  They apply without a restart.
+- **[web UI]** Settings has a Fault limits card. It refuses pressure limits
+  inside the pump's start/stop band, which would trip it on every start.
+
 ## 3.6.17 — 2026-11-25
 - **[web UI]** Settings → *Logs and backup*: download the readings of any
   days as one CSV, the events log and older logs; download a backup of the

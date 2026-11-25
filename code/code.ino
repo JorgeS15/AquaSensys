@@ -36,7 +36,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.17"; //CSV export of the logs; configuration backup and restore
+const char* DEVICE_VERSION = "3.6.18"; //Fault limits in Settings: pressure, dry run, current, phase imbalance
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -230,9 +230,13 @@ bool apModeActive = false;
 unsigned long wifiReconnectInterval = 15000;
 unsigned long lastWifiReconnectAttempt = 0;
 
-// Motor dry-run watchdog
+// Motor dry-run watchdog: config.dry_run_seconds of motor with no flow
 unsigned long motorNoFlowStart = 0;
-const unsigned long NO_FLOW_TIMEOUT_MS = 10000;
+
+// Pressure outside the configured fault limits (default 1-5 bar)
+static bool pressureFault(float p) {
+    return p < config.fault_min_pressure || p > config.fault_max_pressure;
+}
 
 // Motor runtime accumulator
 unsigned long motorRuntimeSeconds = 0;
@@ -615,10 +619,12 @@ static void measure() {
         // Dry-run watchdog: motor on with no flow for > 10 s → error
         if (motor && flow == 0.0f) {
             if (motorNoFlowStart == 0) motorNoFlowStart = millis();
-            else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
+            else if (millis() - motorNoFlowStart > (unsigned long)config.dry_run_seconds * 1000UL) {
                 if (!error) Serial.println("[Error] Motor running with no flow — possible dry run");
                 error = true;
-                faultSet(FAULT_DRY_RUN, "motor on with no flow for 10 s");
+                char detail[48];
+                snprintf(detail, sizeof(detail), "motor on with no flow for %d s", config.dry_run_seconds);
+                faultSet(FAULT_DRY_RUN, detail);
             }
         } else {
             motorNoFlowStart = 0;
@@ -890,7 +896,7 @@ void checkForErrors() {
     // Monitor units only report; nothing is tripped and nothing is switched off,
     // so the flag tracks the live reading instead of latching.
     if (!isControllerDevice()) {
-        error = (pressure < 1.0 || pressure > 5.0);
+        error = pressureFault(pressure);
         if (error) {
             char detail[40];
             snprintf(detail, sizeof(detail), "pressure %.2f bar", pressure);
@@ -924,7 +930,7 @@ void checkForErrors() {
     }
 
     if (!manualOverride) {
-        if (pressure < 1.0 || pressure > 5.0) {
+        if (pressureFault(pressure)) {
             error = true;
             char detail[40];
             snprintf(detail, sizeof(detail), "pressure %.2f bar", pressure);

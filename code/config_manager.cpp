@@ -128,6 +128,8 @@ bool loadConfig() {
     config.wifi_ssid     = doc["wifi_ssid"]     | config.wifi_ssid;
     config.wifi_password = doc["wifi_password"] | config.wifi_password;
 
+    config.admin_password = doc["admin_password"] | config.admin_password;
+
     config.mqtt_server   = doc["mqtt_server"]   | config.mqtt_server;
     config.mqtt_port     = doc["mqtt_port"]     | config.mqtt_port;
     config.mqtt_user     = doc["mqtt_user"]     | config.mqtt_user;
@@ -233,6 +235,7 @@ bool saveConfig() {
 
     doc["wifi_ssid"]     = config.wifi_ssid;
     doc["wifi_password"] = config.wifi_password;
+    doc["admin_password"] = config.admin_password;
 
     doc["mqtt_server"]   = config.mqtt_server;
     doc["mqtt_port"]     = config.mqtt_port;
@@ -314,6 +317,7 @@ void printConfig() {
     Serial.println("=== Current Configuration ===");
     Serial.println("WiFi SSID: " + config.wifi_ssid);
     Serial.println("WiFi Password: " + String(config.wifi_password.length()) + " chars");
+    Serial.println("Admin password: " + String(config.admin_password.length() ? "set" : "none (actions are open)"));
     Serial.println("MQTT Server: " + config.mqtt_server);
     Serial.println("MQTT Port: " + String(config.mqtt_port));
     Serial.println("MQTT User: " + config.mqtt_user);
@@ -358,6 +362,7 @@ String getConfigJson() {
 
     doc["wifi_ssid"]   = config.wifi_ssid;
     // passwords not sent
+    doc["admin_password_set"] = config.admin_password.length() > 0;
     doc["mqtt_server"] = config.mqtt_server;
     doc["mqtt_port"]   = config.mqtt_port;
     doc["mqtt_user"]   = config.mqtt_user;
@@ -429,6 +434,12 @@ bool updateConfigFromJson(const String& jsonStr) {
         config.wifi_ssid = doc["wifi_ssid"].as<String>();
     if (doc.containsKey("wifi_password") && doc["wifi_password"].as<String>().length() > 0)
         config.wifi_password = doc["wifi_password"].as<String>();
+
+    // An empty field leaves the password as it is; removing it is explicit
+    if (doc.containsKey("admin_password") && doc["admin_password"].as<String>().length() > 0)
+        config.admin_password = doc["admin_password"].as<String>().substring(0, 64);
+    if (doc["admin_password_clear"] == true)
+        config.admin_password = "";
 
     if (doc.containsKey("mqtt_server"))
         config.mqtt_server = doc["mqtt_server"].as<String>();

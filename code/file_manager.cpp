@@ -1,4 +1,5 @@
 #include "file_manager.h"
+#include "auth.h"
 
 // External device constants
 extern const char* DEVICE_NAME;
@@ -139,6 +140,7 @@ void handleFileUploadComplete(AsyncWebServerRequest *request) {
 }
 
 void handleFileUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
     if (!index) {
         Serial.printf("Starting upload: %s\n", filename.c_str());
         if (uploadFile) uploadFile.close();   // an earlier upload that never finished
@@ -500,6 +502,7 @@ static bool zipUploadRefused = false;
 
 void handleZipUpload(AsyncWebServerRequest *request, String filename,
                      size_t index, uint8_t *data, size_t len, bool final) {
+    if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
     if (index == 0) {
         zipUploadRefused = !zipClaim(ZIP_OWNER_UPLOAD);
         if (zipUploadRefused) {

@@ -156,8 +156,9 @@ version it had.
 
 ### Settings
 
-WiFi, MQTT, pressure limits, sensors and alarms are all set from the browser.
-Nothing needs reprogramming.
+WiFi, MQTT, pressure limits, sensors, alarms and the time zone are all set
+from the browser. Nothing needs reprogramming. An optional **password**
+protects every change, while the readings stay open to anyone at home.
 
 ![Settings page](site/images/settings.png)
 

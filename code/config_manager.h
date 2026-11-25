@@ -15,6 +15,10 @@ struct Config {
     String wifi_ssid;
     String wifi_password;
     
+    // Password for actions in the web UI and the API (user "admin"); empty =
+    // no password. See auth.h.
+    String admin_password;
+
     // MQTT settings
     String mqtt_server;
     int mqtt_port;
@@ -101,6 +105,7 @@ struct Config {
     Config() {
         wifi_ssid = "";
         wifi_password = "";
+        admin_password = "";
         mqtt_server = "YOUR_MQTT_IP";
         mqtt_port = 1883;
         mqtt_user = "YOUR_MQTT_USER";

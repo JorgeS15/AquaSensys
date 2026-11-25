@@ -18,6 +18,7 @@
 #include "update_manager.h"
 #include "time_log.h"
 #include "alarms.h"
+#include "auth.h"
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
 
@@ -35,7 +36,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.14"; //Pump short-cycling alarm: automatic starts per hour
+const char* DEVICE_VERSION = "3.6.15"; //Optional password for every action in the web UI and the API
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -551,6 +552,7 @@ void setup() {
     
     // Setup web routes
     webRoutes();
+    installAuth(server);   // password for actions, when one is set
     
     // Serve static files from SD card
     server.serveStatic("/", SD, "/");

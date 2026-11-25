@@ -9,6 +9,16 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.15 — 2026-11-25
+- Optional password for actions (`admin_password`, user `admin`). With it
+  set, every change through the web UI or the API (settings, pump, restart,
+  factory reset, calibration, updates, uploads) asks for it; readings stay
+  open. Set it in Settings → Password.
+- `config.json` is no longer served as a file: it holds the WiFi and MQTT
+  passwords, and anyone on the network could download it.
+- **[web UI]** Settings has a Password card, and says when an action needs
+  the password.
+
 ## 3.6.14 — 2026-11-25
 - Pump short-cycling alarm (Controller). The automatic starts in the last hour
   are counted; above 20 (configurable, `short_cycle_max_starts`) the

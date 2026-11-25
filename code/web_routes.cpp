@@ -10,6 +10,7 @@
 #include "ota_handler.h"
 #include "time_log.h"
 #include "alarms.h"
+#include "auth.h"
 #include "file_manager.h"
 #include "update_manager.h"
 #include "MCP3208.h"
@@ -405,6 +406,7 @@ void webRoutes() {
     // API endpoint to update configuration
     server.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
         // updateConfigFromJson() parses into a CONFIG_DOC_SIZE document, so a
         // larger body could not be applied anyway
         const char* body = collectBody(request, data, len, index, total, CONFIG_DOC_SIZE);
@@ -567,6 +569,7 @@ void webRoutes() {
 
     server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
         DynamicJsonDocument doc(128);
         DeserializationError jsonError = deserializeJson(doc, data, len);
 

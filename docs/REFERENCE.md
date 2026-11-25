@@ -305,6 +305,27 @@ leak) and **Continuous Flow Time**, the minutes the water has been running
 without stopping. The dashboard shows the alarm on the flow card, and a
 warning once the water has run for 10 minutes.
 
+## Password
+
+`admin_password` (empty by default) protects every action. When it is set,
+any request that changes something needs HTTP Basic authentication as user
+`admin`: every method but `GET`, `HEAD` and `OPTIONS`, so the settings, the
+pump commands, restart, factory reset, calibration, updates (automatic and
+manual), uploads and `POST /api/water_total`. The browser asks for it the
+first time and remembers it until it is closed. Readings, the pages and the
+live updates stay open, and so does Home Assistant, which uses MQTT and the
+broker's own login.
+
+From the command line: `curl -u admin:<password> -X POST http://<unit>/reboot`.
+
+It is set, changed or removed in Settings → Password (the change itself needs
+the current password). `GET /api/config` only says whether one is set
+(`admin_password_set`). If it is forgotten, take out the SD card and delete
+the `admin_password` line from `config.json`.
+
+`config.json` is never served as a file (it holds the WiFi and MQTT
+passwords): `GET /config.json` answers 403, with or without a password.
+
 ## Time and logs
 
 The unit sets its clock over NTP once it has WiFi, and keeps it in step every

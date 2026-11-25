@@ -7,6 +7,7 @@ const formElements = {
   sensorsForm: document.getElementById('sensorsForm'),
   leakForm: document.getElementById('leakForm'),
   shortCycleForm: document.getElementById('shortCycleForm'),
+  securityForm: document.getElementById('securityForm'),
   
   // Status elements
   wifiStatus: document.getElementById('wifiStatus'),
@@ -128,6 +129,14 @@ function populateFormFields(config) {
   document.getElementById('leakStopPumpGroup').classList.toggle('hidden', config.device_type === 'M');
   updateLeakFields();
 
+  // Password
+  const hasPassword = config.admin_password_set === true;
+  document.getElementById('passwordState').textContent = i18n(hasPassword ? 'passwordIsSet' : 'passwordNotSet');
+  document.getElementById('passwordClearGroup').classList.toggle('hidden', !hasPassword);
+  document.getElementById('admin_password').value = '';
+  document.getElementById('admin_password_confirm').value = '';
+  document.getElementById('admin_password_clear').checked = false;
+
   // Pump short-cycling: a Controller only
   document.getElementById('shortCycleCard').classList.toggle('hidden', config.device_type === 'M');
   document.getElementById('short_cycle_max_starts').value = config.short_cycle_max_starts ?? 20;
@@ -183,9 +192,10 @@ function saveConfiguration(formId, event) {
   // Convert FormData to a plain object
   for (const [key, value] of formData.entries()) {
     // Skip empty password fields
-    if ((key === 'wifi_password' || key === 'mqtt_password') && value === '') {
+    if ((key === 'wifi_password' || key === 'mqtt_password' || key === 'admin_password') && value === '') {
       continue;
     }
+    if (key === 'admin_password_confirm') continue;   // checked before saving
     if (numericKeys.includes(key)) {
       const n = Number(value);
       if (value === '' || Number.isNaN(n)) continue;  // leave the stored value alone
@@ -249,7 +259,8 @@ function saveConfiguration(formId, event) {
   })
   .catch(error => {
     console.error('Error saving configuration:', error);
-    showNotification('saveConfigError', 'error');
+    // 401: a password is set and the browser's sign-in was cancelled or wrong
+    showNotification(String(error).includes('401') ? 'passwordRequired' : 'saveConfigError', 'error');
   });
 }
 
@@ -425,6 +436,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (formElements.shortCycleForm) {
     formElements.shortCycleForm.addEventListener('submit', (e) => saveConfiguration('shortCycleForm', e));
+  }
+
+  if (formElements.securityForm) {
+    formElements.securityForm.addEventListener('submit', (e) => {
+      const pw = document.getElementById('admin_password').value;
+      const again = document.getElementById('admin_password_confirm').value;
+      const clear = document.getElementById('admin_password_clear').checked;
+      if (!clear && pw === '') { e.preventDefault(); showNotification('passwordEmpty', 'error'); return; }
+      if (!clear && pw !== again) { e.preventDefault(); showNotification('passwordMismatch', 'error'); return; }
+      saveConfiguration('securityForm', e);
+    });
   }
 
   if (formElements.sensorsForm) {

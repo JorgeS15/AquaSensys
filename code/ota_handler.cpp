@@ -1,5 +1,6 @@
 #include "ota_handler.h"
 #include "update_manager.h"
+#include "auth.h"
 
 void saveRuntime();   // code.ino: writes /runtime.json if a counter changed
 
@@ -348,6 +349,7 @@ void OTAHandler::begin(AsyncWebServer* server, const String& updatePath) {
             // Response will be sent by upload handlers
         },
         [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
             if (!index) {
                 handleUploadStart(request, filename, index, data, len, final);
             }

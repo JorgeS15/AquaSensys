@@ -326,6 +326,33 @@
         </form>
       </div>
 
+      <div class="settings-card">
+        <h2><i class="fas fa-lock" aria-hidden="true"></i> <span data-i18n="securityTitle">Password</span></h2>
+        <p class="card-desc" data-i18n="securityDesc">With a password, every change (settings, pump, restart, updates, uploads) asks for it. Readings stay open. The user name is admin.</p>
+        <p class="card-desc"><strong id="passwordState">—</strong></p>
+        <form id="securityForm" autocomplete="off">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="admin_password" data-i18n="newPassword">New password</label>
+              <input type="password" id="admin_password" name="admin_password" maxlength="64" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label for="admin_password_confirm" data-i18n="confirmPassword">Repeat it</label>
+              <input type="password" id="admin_password_confirm" name="admin_password_confirm" maxlength="64" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="form-group" id="passwordClearGroup">
+            <label class="check-row" for="admin_password_clear">
+              <input type="checkbox" id="admin_password_clear" name="admin_password_clear">
+              <span><strong data-i18n="removePassword">Remove the password</strong>
+              <small data-i18n="removePasswordHelp">Every action is open again.</small></span>
+            </label>
+          </div>
+          <small class="card-desc" style="display: block" data-i18n="passwordForgotten">Forgotten it? Take out the SD card and delete the admin_password line from config.json.</small>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="savePassword">Save password</button>
+        </form>
+      </div>
+
       <div class="settings-card system-actions">
         <h2><i class="fas fa-tools" aria-hidden="true"></i> <span data-i18n="systemActions">System Actions</span></h2>
         <p class="card-desc" data-i18n="systemActionsDesc">Firmware, files and restart.</p>

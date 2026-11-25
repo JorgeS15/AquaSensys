@@ -63,6 +63,16 @@ float flowKOffset() {
                                          : FLOW_K_OFFSET_THREE_QUARTER;
 }
 
+String normalizeTimezone(const String& raw) {
+    String s = raw;
+    s.trim();
+    // A POSIX TZ string starts with a zone name of 3+ letters or a quoted <...>
+    // one, and has no spaces. Anything else falls back to Portugal's.
+    bool ok = s.length() >= 3 && s.length() <= 64 && s.indexOf(' ') < 0 &&
+              (isalpha((unsigned char)s[0]) || s[0] == '<');
+    return ok ? s : String("WET0WEST,M3.5.0/1,M10.5.0");
+}
+
 bool isControllerDevice() {
     return config.device_type != "M";
 }
@@ -88,13 +98,13 @@ bool loadConfig() {
     }
 
     size_t size = configFile.size();
-    if (size > 2048) {
+    if (size > CONFIG_DOC_SIZE) {
         Serial.println("Config file too large");
         configFile.close();
         return false;
     }
 
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(CONFIG_DOC_SIZE);
     DeserializationError error = deserializeJson(doc, configFile);
     configFile.close();
 
@@ -138,6 +148,9 @@ bool loadConfig() {
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
     config.log_interval_minutes = doc["log_interval_minutes"] | config.log_interval_minutes;
     config.update_check_hours   = constrain((int)(doc["update_check_hours"] | config.update_check_hours), 0, 720);
+    config.timezone   = normalizeTimezone(doc["timezone"]   | config.timezone);
+    config.ntp_server = doc["ntp_server"] | config.ntp_server;
+    config.ntp_server.trim();
 
     // Missing keys keep the constructor defaults: 3/4" connection, Controller unit
     config.connection_size = normalizeConnectionSize(doc["connection_size"] | config.connection_size);
@@ -196,7 +209,7 @@ bool loadConfig() {
 }
 
 bool saveConfig() {
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(CONFIG_DOC_SIZE);
 
     doc["wifi_ssid"]     = config.wifi_ssid;
     doc["wifi_password"] = config.wifi_password;
@@ -230,6 +243,8 @@ bool saveConfig() {
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["update_check_hours"]   = config.update_check_hours;
+    doc["timezone"]             = config.timezone;
+    doc["ntp_server"]           = config.ntp_server;
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
@@ -287,6 +302,7 @@ void printConfig() {
     Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
     Serial.println("Update check: " + (config.update_check_hours > 0
                    ? "every " + String(config.update_check_hours) + " h" : String("manual only")));
+    Serial.println("Time zone: " + config.timezone + ", NTP " + config.ntp_server);
     Serial.println("Connection Size: " + config.connection_size + "\"");
     Serial.println("Flow calibration: F = " + String(flowKFactor(), 2) + " * Q "
                    + (flowKOffset() < 0 ? "- " : "+ ") + String(fabsf(flowKOffset()), 2)
@@ -301,7 +317,7 @@ void printConfig() {
 }
 
 String getConfigJson() {
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(CONFIG_DOC_SIZE);
 
     doc["wifi_ssid"]   = config.wifi_ssid;
     // passwords not sent
@@ -332,6 +348,8 @@ String getConfigJson() {
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["update_check_hours"]   = config.update_check_hours;
+    doc["timezone"]             = config.timezone;
+    doc["ntp_server"]           = config.ntp_server;
 
     doc["connection_size"] = config.connection_size;
     doc["device_type"]     = config.device_type;
@@ -352,7 +370,7 @@ String getConfigJson() {
 }
 
 bool updateConfigFromJson(const String& jsonStr) {
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(CONFIG_DOC_SIZE);
     DeserializationError error = deserializeJson(doc, jsonStr);
 
     if (error) {
@@ -399,6 +417,12 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("max_phase_imbalance"))  config.max_phase_imbalance  = doc["max_phase_imbalance"];
     if (doc.containsKey("log_interval_minutes")) config.log_interval_minutes = doc["log_interval_minutes"];
     if (doc.containsKey("update_check_hours"))   config.update_check_hours   = constrain(doc["update_check_hours"].as<int>(), 0, 720);
+    if (doc.containsKey("timezone"))   config.timezone = normalizeTimezone(doc["timezone"].as<String>());
+    if (doc.containsKey("ntp_server")) {
+        config.ntp_server = doc["ntp_server"].as<String>();
+        config.ntp_server.trim();
+        if (config.ntp_server.length() > 64) config.ntp_server = config.ntp_server.substring(0, 64);
+    }
 
     if (doc.containsKey("connection_size"))
         config.connection_size = normalizeConnectionSize(doc["connection_size"].as<String>());

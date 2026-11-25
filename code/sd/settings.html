@@ -230,6 +230,28 @@
               <small data-i18n="updateCheckHoursHelp">0 checks only when you press "Check for updates". Nothing is installed without you.</small>
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="timezone" data-i18n="timezoneLabel">Time zone:</label>
+              <select id="timezone" name="timezone">
+                <option value="WET0WEST,M3.5.0/1,M10.5.0" data-i18n="tzPortugal">Portugal (Lisbon, Madeira)</option>
+                <option value="&lt;-01&gt;1&lt;+00&gt;,M3.5.0/0,M10.5.0/1" data-i18n="tzAzores">Azores</option>
+                <option value="GMT0BST,M3.5.0/1,M10.5.0" data-i18n="tzUk">United Kingdom, Ireland</option>
+                <option value="CET-1CEST,M3.5.0,M10.5.0/3" data-i18n="tzCentral">Central Europe (Madrid, Paris, Berlin)</option>
+                <option value="EET-2EEST,M3.5.0/3,M10.5.0/4" data-i18n="tzEastern">Eastern Europe (Athens, Helsinki)</option>
+                <option value="&lt;-03&gt;3" data-i18n="tzBrazil">Brazil (São Paulo)</option>
+                <option value="UTC0">UTC</option>
+                <option value="custom" data-i18n="tzCustom">Other (POSIX TZ string)</option>
+              </select>
+              <input type="text" id="timezone_custom" name="timezone_custom" class="hidden" style="margin-top: 8px" placeholder="WET0WEST,M3.5.0/1,M10.5.0" autocomplete="off" spellcheck="false">
+              <small data-i18n="timezoneHelp">For the date and time in the logs and the quiet hours of the leak alarm.</small>
+            </div>
+            <div class="form-group">
+              <label for="ntp_server" data-i18n="ntpServerLabel">Time server (NTP):</label>
+              <input type="text" id="ntp_server" name="ntp_server" placeholder="pool.ntp.org" maxlength="64" autocomplete="off" spellcheck="false">
+              <small data-i18n="ntpServerHelp">A name or an IP address, such as your router's (192.168.1.1). Empty uses pool.ntp.org.</small>
+            </div>
+          </div>
           <button type="submit" class="button save-btn" data-i18n="saveParameters">Save Parameters</button>
         </form>
       </div>

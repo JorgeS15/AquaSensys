@@ -16,6 +16,7 @@
 #include "ACS712_handler.h"
 #include "web_routes.h"
 #include "update_manager.h"
+#include "time_log.h"
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
 
@@ -33,7 +34,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.9"; //Total water volume counter, kept on the SD card, for the Home Assistant Energy dashboard
+const char* DEVICE_VERSION = "3.6.10"; //Real time over NTP; logs in /logs, one file a month, with date and time
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -386,7 +387,6 @@ void readAllSensors() {
 // Forward declarations for functions defined after setup()/loop()
 void loadRuntime();
 void saveRuntime();
-void appendLogEntry();
 void serviceWiFiReconnect();
 void castDNS();
 
@@ -482,6 +482,11 @@ void setup() {
     
     // Setup WiFi
     setupWiFi();
+    // Real time over NTP. Started even when the first connect failed: SNTP
+    // keeps trying and syncs once the link comes up. An access point has no
+    // internet to ask.
+    if (!apModeActive) timeBegin();
+    logEvent("boot", lastResetReason);
 
     // Setup OTA updates
     OTA.begin(&server, "/update");
@@ -621,6 +626,7 @@ void loop() {
         // WiFi reconnection — one non-blocking step per pass, so the pump
         // control and protections below keep running while the network is down
         serviceWiFiReconnect();
+        timeService();   // a time server or zone changed in Settings
 
     }
     
@@ -690,7 +696,8 @@ void loop() {
         if (config.log_interval_minutes > 0 &&
             millis() - lastLogTime >= (unsigned long)config.log_interval_minutes * 60000UL) {
             lastLogTime = millis();
-            appendLogEntry();
+            logReadings(pressureIn, pressureOut, flow, waterTemp,
+                        currentL1, currentL2, currentL3, motor, waterTotalLitres);
         }
 
         // Update clients and signal MQTT task to publish state
@@ -962,17 +969,6 @@ void saveRuntime() {
         }
     }
     xSemaphoreGive(runtimeLock);
-}
-
-void appendLogEntry() {
-    File f = SD.open("/log.csv", FILE_APPEND);
-    if (!f) return;
-    if (f.size() == 0)
-        f.println("uptime_s,pressureIn,pressureOut,flow,currentL1,currentL2,currentL3,motor");
-    f.printf("%lu,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f,%s\n",
-        millis() / 1000, pressureIn, pressureOut, flow,
-        currentL1, currentL2, currentL3, motor ? "ON" : "OFF");
-    f.close();
 }
 
 void initSDCard() {

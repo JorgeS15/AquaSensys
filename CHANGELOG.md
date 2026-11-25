@@ -9,6 +9,21 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.10 — 2026-11-25
+- Real time: the unit sets its clock over NTP. The time zone (default
+  Portugal, with summer time) and the time server (a name or an IP address,
+  e.g. the router's; default `pool.ntp.org`) are in Settings → System
+  Parameters, and apply without a restart. New `config.json` keys `timezone`
+  and `ntp_server`.
+- Logs move to `/logs/YYYY-MM.csv`, one file a month, with the date and time,
+  and now include the water temperature and the water total. Without
+  internet the lines go to `/logs/unsynced.csv` with the uptime only. The old
+  `/log.csv` is left alone.
+- Each start is recorded in `/logs/events.csv` with its reason; the alarms
+  will be recorded there too.
+- `/api/device` reports the unit's time (`time`, `time_synced`).
+- **[web UI]** Settings has the time zone and the time server.
+
 ## 3.6.9 — 2026-11-23
 - Counts the total water through the flow sensor. Home Assistant gets a
   **Water Total** sensor in litres (`water`, `total_increasing`), which the

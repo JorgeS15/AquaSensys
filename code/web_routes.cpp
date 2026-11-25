@@ -8,6 +8,7 @@
 #include "config_manager.h"
 #include "ACS712_handler.h"
 #include "ota_handler.h"
+#include "time_log.h"
 #include "file_manager.h"
 #include "update_manager.h"
 #include "MCP3208.h"
@@ -317,7 +318,7 @@ void webRoutes() {
     // has no other way to know which unit it is talking to. Static, so the UI
     // fetches it once on load rather than carrying it on every SSE update.
     server.on("/api/device", HTTP_GET, [](AsyncWebServerRequest *request) {
-        DynamicJsonDocument doc(448);
+        DynamicJsonDocument doc(640);
         // What the dashboard header shows: "AquaSensys C3" / "AquaSensys M",
         // unless the user gave the unit its own name. Kept separate from
         // DEVICE_NAME so the Home Assistant device names don't change with it.
@@ -330,6 +331,10 @@ void webRoutes() {
         doc["id"]              = DEVICE_ID;
         doc["version"]         = DEVICE_VERSION;
         doc["reset_reason"]    = lastResetReason;
+        char now[24];
+        formatLocalTime(now, sizeof(now));
+        doc["time"]            = now;            // "" until NTP has answered
+        doc["time_synced"]     = now[0] != '\0';
         doc["device_type"]     = config.device_type;
         doc["connection_size"] = config.connection_size;
 
@@ -394,9 +399,9 @@ void webRoutes() {
     // API endpoint to update configuration
     server.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        // updateConfigFromJson() parses into a 2048-byte document, so a larger
-        // body could not be applied anyway
-        const char* body = collectBody(request, data, len, index, total, 2048);
+        // updateConfigFromJson() parses into a CONFIG_DOC_SIZE document, so a
+        // larger body could not be applied anyway
+        const char* body = collectBody(request, data, len, index, total, CONFIG_DOC_SIZE);
         if (!body) return;
         String jsonStr(body);
 
@@ -405,16 +410,21 @@ void webRoutes() {
         String previousDeviceType = config.device_type;
         String previousDeviceId   = config.device_id;
         String previousDeviceName = config.device_name;
+        String previousTimezone   = config.timezone;
+        String previousNtpServer  = config.ntp_server;
 
         if (updateConfigFromJson(jsonStr)) {
             // Only read to see whether WiFi keys were sent. At 256 bytes the device
             // settings form (nine fields) overflowed this, and only gave the right
             // answer because its WiFi keys happen to be absent.
-            DynamicJsonDocument doc(1024);
+            DynamicJsonDocument doc(CONFIG_DOC_SIZE);
             deserializeJson(doc, jsonStr);
             bool wifiChanged = doc.containsKey("wifi_ssid") || doc.containsKey("wifi_password");
             // The identity is resolved once at boot (MQTT topics, discovery,
             // mDNS), so any change to it needs a restart, like device_type.
+            if (config.timezone != previousTimezone || config.ntp_server != previousNtpServer) {
+                timeRequestRestart();   // the loop applies it; no restart needed
+            }
             bool deviceTypeChanged = config.device_type != previousDeviceType
                                   || config.device_id   != previousDeviceId
                                   || config.device_name != previousDeviceName;

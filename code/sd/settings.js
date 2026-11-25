@@ -102,6 +102,8 @@ function populateFormFields(config) {
   document.getElementById('temp_offset').value = config.temp_offset || 0;
   document.getElementById('log_interval_minutes').value = config.log_interval_minutes ?? 5;
   document.getElementById('update_check_hours').value = config.update_check_hours ?? 12;
+  setTimezoneField(config.timezone || 'WET0WEST,M3.5.0/1,M10.5.0');
+  document.getElementById('ntp_server').value = config.ntp_server || '';
 
   // Pressure sensors and the clogged-filter alarm
   const dual = config.dual_pressure_sensors === true;
@@ -111,6 +113,21 @@ function populateFormFields(config) {
   document.getElementById('filter_min_flow_lpm').value = config.filter_min_flow_lpm ?? 5;
   document.getElementById('filter_alarm_delay_s').value = config.filter_alarm_delay_s ?? 30;
   updateSensorFields();
+}
+
+// A listed zone selects its option; anything else shows as "Other" with the
+// POSIX string in the text field
+function setTimezoneField(tz) {
+  const select = document.getElementById('timezone');
+  const listed = [...select.options].some(o => o.value === tz && o.value !== 'custom');
+  select.value = listed ? tz : 'custom';
+  document.getElementById('timezone_custom').value = listed ? '' : tz;
+  updateTimezoneField();
+}
+
+function updateTimezoneField() {
+  const custom = document.getElementById('timezone').value === 'custom';
+  document.getElementById('timezone_custom').classList.toggle('hidden', !custom);
 }
 
 // The alarm settings only apply with two sensors, its values only when it's on
@@ -146,6 +163,12 @@ function saveConfiguration(formId, event) {
       const n = Number(value);
       if (value === '' || Number.isNaN(n)) continue;  // leave the stored value alone
       data[key] = n;
+      continue;
+    }
+    if (key === 'timezone_custom') continue;   // folded into timezone below
+    if (key === 'timezone' && value === 'custom') {
+      const custom = (formData.get('timezone_custom') || '').trim();
+      if (custom) data.timezone = custom;
       continue;
     }
     if (key === 'dual_pressure_sensors') {
@@ -363,6 +386,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (formElements.paramsForm) {
     formElements.paramsForm.addEventListener('submit', (e) => saveConfiguration('paramsForm', e));
   }
+
+  const tzSelect = document.getElementById('timezone');
+  if (tzSelect) tzSelect.addEventListener('change', updateTimezoneField);
 
   if (formElements.sensorsForm) {
     formElements.sensorsForm.addEventListener('submit', (e) => saveConfiguration('sensorsForm', e));

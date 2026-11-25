@@ -58,6 +58,10 @@ struct Config {
     int log_interval_minutes;   // 0 = disabled
     int update_check_hours;     // look for a new release this often; 0 = only when asked
 
+    // Real time (NTP). timezone is a POSIX TZ string; the default is Portugal's.
+    String timezone;
+    String ntp_server;
+
     // Hardware / device profile
     String connection_size;     // "3/4" or "1" (inches) — selects the flow K-factor
     String device_type;         // "M" = Monitor (no motor control), "C" = Controller
@@ -109,6 +113,8 @@ struct Config {
         max_phase_imbalance = 3.0f;
         log_interval_minutes = 5;
         update_check_hours = 12;
+        timezone = "WET0WEST,M3.5.0/1,M10.5.0";
+        ntp_server = "pool.ntp.org";
         connection_size = "3/4";
         device_type = "C";
         device_id = "";
@@ -160,6 +166,12 @@ String normalizeDeviceId(const String& raw);
 // otherwise the default pair for the configured connection size.
 float flowKFactor();
 float flowKOffset();
+
+// A POSIX TZ string, or Portugal's ("WET0WEST,M3.5.0/1,M10.5.0") if unusable
+String normalizeTimezone(const String& raw);
+
+// Size of the JSON documents config.json is read and written with
+static const size_t CONFIG_DOC_SIZE = 4096;
 
 // True when this unit drives a motor (device_type "C"); false for Monitor units
 bool isControllerDevice();

@@ -229,6 +229,35 @@ stay correct.
 
 The dashboard shows the total under the flow rate.
 
+## Time and logs
+
+The unit sets its clock over NTP once it has WiFi, and keeps it in step every
+hour. Without internet (or before the first answer) the time is unknown and
+log lines carry only the uptime.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `timezone` | `"WET0WEST,M3.5.0/1,M10.5.0"` | Time zone, as a POSIX TZ string. The default is Portugal (Lisbon, Madeira), with summer time. Settings offers a list; *Other* takes any POSIX string. |
+| `ntp_server` | `"pool.ntp.org"` | Time server: a name or an IP address, for example the router's. Empty uses `pool.ntp.org`. |
+
+Both apply as soon as they are saved, without a restart. `/api/device` reports
+the unit's time (`time`, empty until the first sync) and `time_synced`.
+
+Readings are written every `log_interval_minutes` (default 5; `0` turns
+logging off) to `/logs/YYYY-MM.csv`, one file a month by local date, or to
+`/logs/unsynced.csv` while the time is unknown. Columns:
+
+```
+time,epoch,uptime_s,pressure_in,pressure_out,flow_lpm,water_temp,current_l1,current_l2,current_l3,motor,water_total_l
+```
+
+`time` is local (`2026-11-25 14:03:12`, empty when unknown), `epoch` is UTC
+seconds (`0` when unknown), `motor` is `1`/`0`, and an empty `water_temp`
+means no reading. Events (each start, and from 3.6.11 the alarms) go to
+`/logs/events.csv` as `time,epoch,uptime_s,event,detail`.
+
+Firmware before 3.6.10 wrote `/log.csv` (uptime only); it is left as it was.
+
 ## Updating a unit
 
 There are two halves: the **firmware**, in the ESP32's flash, and the **web UI**,

@@ -1,6 +1,7 @@
 #include "mqtt_handler.h"
 #include "config_manager.h"
 #include "update_manager.h"
+#include "alarms.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -138,11 +139,13 @@ bool isMqttConfigured() {
 void publishState() {
     if (!mqttClient.connected()) return;
 
-    StaticJsonDocument<640> doc;
+    StaticJsonDocument<768> doc;
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
     doc["water_total"]      = serialized(String(waterTotalLitres, 1));   // litres
+    doc["flow_run_min"]     = flowRunMinutes();
+    if (config.leak_alarm_enabled) doc["leak"] = leakActive() ? "ON" : "OFF";
     if (config.dual_pressure_sensors) {
         doc["pressure_out"] = pressureOut;
         doc["filter_dp"]    = pressureIn - pressureOut;
@@ -162,7 +165,7 @@ void publishState() {
     doc["wifi_rssi"]        = WiFi.RSSI();
     doc["reset_reason"]     = lastResetReason;
 
-    char state[640];
+    char state[768];
     serializeJson(doc, state, sizeof(state));
     mqttClient.publish(mqttTopicState, state, true);
 
@@ -247,6 +250,13 @@ void sendAutoDiscoveryConfigs() {
     // water + total_increasing in litres: the Energy dashboard's "Water
     // consumption" picker lists it, and Home Assistant keeps daily totals.
     createSensorConfig("water_total", "Water Total",  "L",     "water",             "mdi:counter",       deviceDoc, stateTopic, "water_total", "total_increasing");
+    // Leak detection: its own alarm, and how long the water has been running
+    createSensorConfig("flow_run", "Continuous Flow Time", "min", "duration", "mdi:timer-sand", deviceDoc, stateTopic, "flow_run_min", "measurement");
+    if (config.leak_alarm_enabled) {
+        createBinarySensorConfig("leak", "Water Leak", "moisture", "mdi:water-alert", deviceDoc, stateTopic, "leak");
+    } else {
+        removeDiscoveryConfig("binary_sensor", "leak");
+    }
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");

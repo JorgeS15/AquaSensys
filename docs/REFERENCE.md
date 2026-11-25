@@ -229,6 +229,37 @@ stay correct.
 
 The dashboard shows the total under the flow rate.
 
+## Leak alarm
+
+The unit watches the flow for water that doesn't stop. Two rules, each on its
+own:
+
+- **Continuous flow**: the water hasn't stopped for `leak_max_minutes`. Normal
+  use stops now and then; a dripping tap, a running cistern or a burst pipe
+  doesn't. A gap shorter than 30 s (a pulse missed at a very low flow) doesn't
+  count as stopping.
+- **Quiet hours** (optional): between `leak_quiet_start` and
+  `leak_quiet_end`, local time, water has been flowing for
+  `leak_quiet_minutes`. The window may cross midnight. It needs the time
+  (see [Time and logs](#time-and-logs)); without it this rule waits.
+
+The alarm clears once the water has been stopped for 30 s. Each alarm and its
+end are written to `/logs/events.csv`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `leak_alarm_enabled` | `true` | Leak alarm on or off. |
+| `leak_max_minutes` | `60` | Minutes of flow without stopping. `0` turns this rule off. |
+| `leak_quiet_enabled` | `false` | Use the quiet hours rule. |
+| `leak_quiet_start`, `leak_quiet_end` | `"01:00"`, `"06:00"` | The quiet hours, `HH:MM`. |
+| `leak_quiet_minutes` | `5` | Minutes of flow inside the quiet hours. |
+| `leak_stop_pump` | `false` | Controller: a leak alarm also stops the pump, as a latched error, until it is cleared. |
+
+Home Assistant gets a **Water Leak** binary sensor (`moisture`; on means a
+leak) and **Continuous Flow Time**, the minutes the water has been running
+without stopping. The dashboard shows the alarm on the flow card, and a
+warning once the water has run for 10 minutes.
+
 ## Time and logs
 
 The unit sets its clock over NTP once it has WiFi, and keeps it in step every

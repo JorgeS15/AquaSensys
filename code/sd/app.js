@@ -74,6 +74,7 @@ const elements = {
   flow: $('flow'),
   flowBar: $('flowBar'),
   waterTotal: $('waterTotal'),
+  leakChip: $('leakChip'),
 
   uptime: $('uptime'),
   wifiRssi: $('wifiRssi'),
@@ -102,6 +103,9 @@ const state = {
   temperature: null,
   flow: null,
   waterTotal: null,     // litres since the counter started
+  leak: false,          // leak alarm, worked out by the firmware
+  leakReason: '',       // "continuous" | "quiet_hours" | ""
+  flowRunMin: 0,        // minutes the water has run without stopping
   motor: false,
   manualOverride: false,
   mainSwitch: false,
@@ -207,6 +211,9 @@ function updateDashboard(data) {
   if (data.temperature !== undefined) state.temperature = data.temperature;
   if (data.flow !== undefined) state.flow = data.flow;
   if (data.waterTotal !== undefined) state.waterTotal = data.waterTotal;
+  if (data.leak !== undefined) state.leak = data.leak;
+  if (data.leakReason !== undefined) state.leakReason = data.leakReason;
+  if (data.flowRunMin !== undefined) state.flowRunMin = data.flowRunMin;
   if (data.motor !== undefined) state.motor = data.motor;
   if (data.manualOverride !== undefined) state.manualOverride = data.manualOverride;
   if (data.mainSwitch !== undefined) state.mainSwitch = data.mainSwitch;
@@ -392,6 +399,19 @@ function renderFlow() {
     ? Math.min(100, Math.max(0, (f / config.flow.max) * 100)) + '%'
     : '0%';
   elements.waterTotal.textContent = formatVolume(state.waterTotal);
+
+  // Leak chip: only while the alarm is on, or while water has been running
+  // for a while (so it's visible before it becomes an alarm)
+  const chip = elements.leakChip;
+  if (state.leak) {
+    chip.className = 'chip danger';
+    chip.textContent = i18n(state.leakReason === 'quiet_hours' ? 'leakQuietHours' : 'leakContinuous');
+  } else if (state.flowRunMin >= 10) {
+    chip.className = 'chip warn';
+    chip.textContent = i18n('flowRunning').replace('{min}', state.flowRunMin);
+  } else {
+    chip.className = 'chip hidden';
+  }
 }
 
 // Litres below 1000, cubic metres (as on a water meter) from there

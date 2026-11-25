@@ -58,6 +58,15 @@ struct Config {
     int log_interval_minutes;   // 0 = disabled
     int update_check_hours;     // look for a new release this often; 0 = only when asked
 
+    // Leak detection — see alarms.h
+    bool leak_alarm_enabled;
+    int leak_max_minutes;       // water that hasn't stopped for this long; 0 = rule off
+    bool leak_quiet_enabled;    // any flow in the quiet hours counts
+    String leak_quiet_start;    // "HH:MM", local time
+    String leak_quiet_end;
+    int leak_quiet_minutes;     // flow this long inside the quiet hours
+    bool leak_stop_pump;        // Controller: a leak alarm also stops the pump (latched error)
+
     // Real time (NTP). timezone is a POSIX TZ string; the default is Portugal's.
     String timezone;
     String ntp_server;
@@ -113,6 +122,13 @@ struct Config {
         max_phase_imbalance = 3.0f;
         log_interval_minutes = 5;
         update_check_hours = 12;
+        leak_alarm_enabled = true;
+        leak_max_minutes = 60;
+        leak_quiet_enabled = false;
+        leak_quiet_start = "01:00";
+        leak_quiet_end = "06:00";
+        leak_quiet_minutes = 5;
+        leak_stop_pump = false;
         timezone = "WET0WEST,M3.5.0/1,M10.5.0";
         ntp_server = "pool.ntp.org";
         connection_size = "3/4";
@@ -166,6 +182,9 @@ String normalizeDeviceId(const String& raw);
 // otherwise the default pair for the configured connection size.
 float flowKFactor();
 float flowKOffset();
+
+// "HH:MM" with a valid hour and minute, or `fallback`
+String normalizeHhMm(const String& raw, const char* fallback);
 
 // A POSIX TZ string, or Portugal's ("WET0WEST,M3.5.0/1,M10.5.0") if unusable
 String normalizeTimezone(const String& raw);

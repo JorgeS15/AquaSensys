@@ -9,6 +9,7 @@
 #include "ACS712_handler.h"
 #include "ota_handler.h"
 #include "time_log.h"
+#include "alarms.h"
 #include "file_manager.h"
 #include "update_manager.h"
 #include "MCP3208.h"
@@ -89,8 +90,8 @@ void notifyClients() {
     // In AP mode the network is up, so SSE sends are safe
     if (!events.count()) return;
     if (!apModeActive && !wifiConnected) return;
-    // 448 B: up to 14 members plus the device_type / connection_size string values
-    StaticJsonDocument<448> doc;
+    // 512 B: up to 17 members plus the device_type / connection_size string values
+    StaticJsonDocument<512> doc;
     doc["pressure"] = pressure;
     doc["dualPressure"] = config.dual_pressure_sensors;
     if (config.dual_pressure_sensors) {
@@ -102,6 +103,9 @@ void notifyClients() {
     doc["ambientTemp"] = ambientTemp;
     doc["flow"] = flow;
     doc["waterTotal"] = serialized(String(waterTotalLitres, 1));   // litres
+    doc["leak"] = leakActive();
+    doc["leakReason"] = leakReason();   // "continuous" / "quiet_hours" / ""
+    doc["flowRunMin"] = flowRunMinutes();
     doc["deviceType"] = config.device_type;
     doc["connectionSize"] = config.connection_size;
     doc["error"] = error;

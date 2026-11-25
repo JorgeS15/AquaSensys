@@ -195,6 +195,56 @@
       </div>
 
       <div class="settings-card">
+        <h2><i class="fas fa-tint-slash" aria-hidden="true"></i> <span data-i18n="leakTitle">Leak alarm</span></h2>
+        <p class="card-desc" data-i18n="leakDesc">Water that never stops usually means a dripping tap, a running cistern or a burst pipe.</p>
+        <form id="leakForm">
+          <div class="form-group">
+            <label class="check-row" for="leak_alarm_enabled">
+              <input type="checkbox" id="leak_alarm_enabled" name="leak_alarm_enabled">
+              <span><strong data-i18n="leakEnabledLabel">Leak alarm</strong>
+              <small data-i18n="leakEnabledHelp">Shown on the dashboard and as "Water Leak" in Home Assistant.</small></span>
+            </label>
+          </div>
+          <div id="leakFields">
+            <div class="form-group">
+              <label for="leak_max_minutes" data-i18n="leakMaxMinutesLabel">Alarm when water hasn't stopped for (min)</label>
+              <input type="number" id="leak_max_minutes" name="leak_max_minutes" min="0" max="1440" step="5">
+              <small data-i18n="leakMaxMinutesHelp">Normal use stops now and then; a leak doesn't. 0 turns this rule off. Raise it if you water the garden for longer.</small>
+            </div>
+            <div class="form-group">
+              <label class="check-row" for="leak_quiet_enabled">
+                <input type="checkbox" id="leak_quiet_enabled" name="leak_quiet_enabled">
+                <span><strong data-i18n="leakQuietLabel">Quiet hours</strong>
+                <small data-i18n="leakQuietHelp">When nobody uses water (at night, say), any flow that lasts a few minutes raises the alarm. Needs the time from the time server.</small></span>
+              </label>
+            </div>
+            <div class="form-row" id="leakQuietFields">
+              <div class="form-group">
+                <label for="leak_quiet_start" data-i18n="leakQuietStart">From</label>
+                <input type="time" id="leak_quiet_start" name="leak_quiet_start">
+              </div>
+              <div class="form-group">
+                <label for="leak_quiet_end" data-i18n="leakQuietEnd">To</label>
+                <input type="time" id="leak_quiet_end" name="leak_quiet_end">
+              </div>
+              <div class="form-group">
+                <label for="leak_quiet_minutes" data-i18n="leakQuietMinutes">Flow for (min)</label>
+                <input type="number" id="leak_quiet_minutes" name="leak_quiet_minutes" min="1" max="600" step="1">
+              </div>
+            </div>
+            <div class="form-group" id="leakStopPumpGroup">
+              <label class="check-row" for="leak_stop_pump">
+                <input type="checkbox" id="leak_stop_pump" name="leak_stop_pump">
+                <span><strong data-i18n="leakStopPumpLabel">Stop the pump on a leak</strong>
+                <small data-i18n="leakStopPumpHelp">The pump stays off until the error is cleared (main switch off and on, or from Home Assistant).</small></span>
+              </label>
+            </div>
+          </div>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="saveLeak">Save leak alarm</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
         <h2><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="systemParameters">System Parameters</span></h2>
         <p class="card-desc" data-i18n="paramsDesc">The pump starts below the minimum and stops above the maximum.</p>
         <form id="paramsForm">

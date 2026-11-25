@@ -17,6 +17,7 @@
 #include "web_routes.h"
 #include "update_manager.h"
 #include "time_log.h"
+#include "alarms.h"
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
 
@@ -34,7 +35,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.10"; //Real time over NTP; logs in /logs, one file a month, with date and time
+const char* DEVICE_VERSION = "3.6.11"; //Leak detection: continuous flow, and flow in the quiet hours
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -660,6 +661,7 @@ void loop() {
         // Read all sensors (temperatures, pressures, currents)
         readAllSensors();
         updateFilterState(pressureIn, pressureOut, flow);
+        updateLeakState(flow);
 
         // Motor-related bookkeeping only exists on Controller units
         if (isControllerDevice()) {
@@ -892,6 +894,11 @@ void checkForErrors() {
 
     if (!manualOverride) {
         if (pressure < 1.0 || pressure > 5.0) {
+            error = true;
+        }
+        // Optional: a leak also stops the pump, until someone clears the error
+        if (config.leak_stop_pump && leakActive()) {
+            if (!error) Serial.println("[Error] Leak alarm: stopping the pump");
             error = true;
         }
     } else {

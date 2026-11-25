@@ -174,9 +174,12 @@
       </article>
 
       <article class="card flow-card">
-          <div style="display: flex; align-items: center; gap: 12px">
-            <span class="icon-tile cool" aria-hidden="true"><i class="fas fa-water"></i></span>
-            <h2 style="margin: 0" data-i18n="flowRate">Flow Rate</h2>
+          <div class="card-head">
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span class="icon-tile cool" aria-hidden="true"><i class="fas fa-water"></i></span>
+              <h2 style="margin: 0" data-i18n="flowRate">Flow Rate</h2>
+            </div>
+            <span class="chip hidden" id="leakChip" role="status">—</span>
           </div>
           <div class="big-value">
             <span class="num" id="flow">0</span>

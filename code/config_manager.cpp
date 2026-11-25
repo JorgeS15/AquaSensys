@@ -63,6 +63,17 @@ float flowKOffset() {
                                          : FLOW_K_OFFSET_THREE_QUARTER;
 }
 
+String normalizeHhMm(const String& raw, const char* fallback) {
+    int colon = raw.indexOf(':');
+    if (colon < 1) return fallback;
+    int h = raw.substring(0, colon).toInt();
+    int m = raw.substring(colon + 1, colon + 3).toInt();
+    if (h < 0 || h > 23 || m < 0 || m > 59) return fallback;
+    char buf[6];
+    snprintf(buf, sizeof(buf), "%02d:%02d", h, m);
+    return buf;
+}
+
 String normalizeTimezone(const String& raw) {
     String s = raw;
     s.trim();
@@ -148,6 +159,13 @@ bool loadConfig() {
     config.max_phase_imbalance  = doc["max_phase_imbalance"]  | config.max_phase_imbalance;
     config.log_interval_minutes = doc["log_interval_minutes"] | config.log_interval_minutes;
     config.update_check_hours   = constrain((int)(doc["update_check_hours"] | config.update_check_hours), 0, 720);
+    config.leak_alarm_enabled = doc["leak_alarm_enabled"] | config.leak_alarm_enabled;
+    config.leak_max_minutes   = constrain((int)(doc["leak_max_minutes"] | config.leak_max_minutes), 0, 1440);
+    config.leak_quiet_enabled = doc["leak_quiet_enabled"] | config.leak_quiet_enabled;
+    config.leak_quiet_start   = normalizeHhMm(doc["leak_quiet_start"] | config.leak_quiet_start, "01:00");
+    config.leak_quiet_end     = normalizeHhMm(doc["leak_quiet_end"]   | config.leak_quiet_end,   "06:00");
+    config.leak_quiet_minutes = constrain((int)(doc["leak_quiet_minutes"] | config.leak_quiet_minutes), 1, 600);
+    config.leak_stop_pump     = doc["leak_stop_pump"] | config.leak_stop_pump;
     config.timezone   = normalizeTimezone(doc["timezone"]   | config.timezone);
     config.ntp_server = doc["ntp_server"] | config.ntp_server;
     config.ntp_server.trim();
@@ -243,6 +261,13 @@ bool saveConfig() {
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["update_check_hours"]   = config.update_check_hours;
+    doc["leak_alarm_enabled"]   = config.leak_alarm_enabled;
+    doc["leak_max_minutes"]     = config.leak_max_minutes;
+    doc["leak_quiet_enabled"]   = config.leak_quiet_enabled;
+    doc["leak_quiet_start"]     = config.leak_quiet_start;
+    doc["leak_quiet_end"]       = config.leak_quiet_end;
+    doc["leak_quiet_minutes"]   = config.leak_quiet_minutes;
+    doc["leak_stop_pump"]       = config.leak_stop_pump;
     doc["timezone"]             = config.timezone;
     doc["ntp_server"]           = config.ntp_server;
 
@@ -302,6 +327,11 @@ void printConfig() {
     Serial.println("Log Interval: " + String(config.log_interval_minutes) + " min");
     Serial.println("Update check: " + (config.update_check_hours > 0
                    ? "every " + String(config.update_check_hours) + " h" : String("manual only")));
+    Serial.println("Leak alarm: " + String(config.leak_alarm_enabled ? "on" : "off")
+                   + ", after " + String(config.leak_max_minutes) + " min of flow"
+                   + (config.leak_quiet_enabled ? ", quiet " + config.leak_quiet_start + "-" + config.leak_quiet_end
+                      + " after " + String(config.leak_quiet_minutes) + " min" : String(""))
+                   + (config.leak_stop_pump ? ", stops the pump" : ""));
     Serial.println("Time zone: " + config.timezone + ", NTP " + config.ntp_server);
     Serial.println("Connection Size: " + config.connection_size + "\"");
     Serial.println("Flow calibration: F = " + String(flowKFactor(), 2) + " * Q "
@@ -348,6 +378,13 @@ String getConfigJson() {
     doc["max_phase_imbalance"]  = config.max_phase_imbalance;
     doc["log_interval_minutes"] = config.log_interval_minutes;
     doc["update_check_hours"]   = config.update_check_hours;
+    doc["leak_alarm_enabled"]   = config.leak_alarm_enabled;
+    doc["leak_max_minutes"]     = config.leak_max_minutes;
+    doc["leak_quiet_enabled"]   = config.leak_quiet_enabled;
+    doc["leak_quiet_start"]     = config.leak_quiet_start;
+    doc["leak_quiet_end"]       = config.leak_quiet_end;
+    doc["leak_quiet_minutes"]   = config.leak_quiet_minutes;
+    doc["leak_stop_pump"]       = config.leak_stop_pump;
     doc["timezone"]             = config.timezone;
     doc["ntp_server"]           = config.ntp_server;
 
@@ -417,6 +454,13 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("max_phase_imbalance"))  config.max_phase_imbalance  = doc["max_phase_imbalance"];
     if (doc.containsKey("log_interval_minutes")) config.log_interval_minutes = doc["log_interval_minutes"];
     if (doc.containsKey("update_check_hours"))   config.update_check_hours   = constrain(doc["update_check_hours"].as<int>(), 0, 720);
+    if (doc.containsKey("leak_alarm_enabled")) config.leak_alarm_enabled = doc["leak_alarm_enabled"];
+    if (doc.containsKey("leak_max_minutes"))   config.leak_max_minutes   = constrain(doc["leak_max_minutes"].as<int>(), 0, 1440);
+    if (doc.containsKey("leak_quiet_enabled")) config.leak_quiet_enabled = doc["leak_quiet_enabled"];
+    if (doc.containsKey("leak_quiet_start"))   config.leak_quiet_start   = normalizeHhMm(doc["leak_quiet_start"].as<String>(), "01:00");
+    if (doc.containsKey("leak_quiet_end"))     config.leak_quiet_end     = normalizeHhMm(doc["leak_quiet_end"].as<String>(), "06:00");
+    if (doc.containsKey("leak_quiet_minutes")) config.leak_quiet_minutes = constrain(doc["leak_quiet_minutes"].as<int>(), 1, 600);
+    if (doc.containsKey("leak_stop_pump"))     config.leak_stop_pump     = doc["leak_stop_pump"];
     if (doc.containsKey("timezone"))   config.timezone = normalizeTimezone(doc["timezone"].as<String>());
     if (doc.containsKey("ntp_server")) {
         config.ntp_server = doc["ntp_server"].as<String>();

@@ -76,6 +76,14 @@ rises. Past the limit you set (0.5 bar by default) the dashboard and Home
 Assistant raise an alarm. It is only judged while water is flowing, and must
 last a while before it fires, so pressure spikes don't cause false alarms.
 
+### Leak alarm
+
+A dripping tap, a running cistern or a burst pipe never let the water stop.
+AquaSensys raises a **leak alarm** when the water hasn't stopped for an hour,
+or, if you like, when water runs for a few minutes during the night. On a
+Controller it can also stop the pump. The alarm shows on the dashboard and in
+Home Assistant, and clears by itself once the water stops.
+
 ### On your phone, day or night
 
 Every page works on a phone, and comes in **English and Portuguese** with a
@@ -118,7 +126,7 @@ broker and every entity appears on its own, with nothing to set up in YAML:
 - **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate, total water,
   water temperature, WiFi signal and uptime.
 - **Switches** (Controller): pump, main switch, manual mode.
-- **Alarms**: system fault and clogged filter.
+- **Alarms**: system fault, clogged filter and water leak.
 - **Energy dashboard**: the total water used goes straight into *Water
   consumption*, and the flow rate can be shown as the water flow, both with
   long-term statistics. The total is counted by the unit and kept on its SD

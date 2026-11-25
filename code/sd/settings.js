@@ -5,6 +5,7 @@ const formElements = {
   deviceForm: document.getElementById('deviceForm'),
   paramsForm: document.getElementById('paramsForm'),
   sensorsForm: document.getElementById('sensorsForm'),
+  leakForm: document.getElementById('leakForm'),
   
   // Status elements
   wifiStatus: document.getElementById('wifiStatus'),
@@ -113,6 +114,25 @@ function populateFormFields(config) {
   document.getElementById('filter_min_flow_lpm').value = config.filter_min_flow_lpm ?? 5;
   document.getElementById('filter_alarm_delay_s').value = config.filter_alarm_delay_s ?? 30;
   updateSensorFields();
+
+  // Leak alarm
+  document.getElementById('leak_alarm_enabled').checked = config.leak_alarm_enabled !== false;
+  document.getElementById('leak_max_minutes').value = config.leak_max_minutes ?? 60;
+  document.getElementById('leak_quiet_enabled').checked = config.leak_quiet_enabled === true;
+  document.getElementById('leak_quiet_start').value = config.leak_quiet_start || '01:00';
+  document.getElementById('leak_quiet_end').value = config.leak_quiet_end || '06:00';
+  document.getElementById('leak_quiet_minutes').value = config.leak_quiet_minutes ?? 5;
+  document.getElementById('leak_stop_pump').checked = config.leak_stop_pump === true;
+  // Only a Controller has a pump to stop
+  document.getElementById('leakStopPumpGroup').classList.toggle('hidden', config.device_type === 'M');
+  updateLeakFields();
+}
+
+function updateLeakFields() {
+  const on = document.getElementById('leak_alarm_enabled').checked;
+  const quiet = document.getElementById('leak_quiet_enabled').checked;
+  document.getElementById('leakFields').classList.toggle('hidden', !on);
+  document.getElementById('leakQuietFields').classList.toggle('hidden', !quiet);
 }
 
 // A listed zone selects its option; anything else shows as "Other" with the
@@ -150,7 +170,8 @@ function saveConfiguration(formId, event) {
     'mqtt_port', 'min_pressure', 'max_pressure', 'pressure_offset', 'temp_offset',
     'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm',
     'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s',
-    'log_interval_minutes', 'update_check_hours'
+    'log_interval_minutes', 'update_check_hours',
+    'leak_max_minutes', 'leak_quiet_minutes'
   ];
 
   // Convert FormData to a plain object
@@ -165,6 +186,7 @@ function saveConfiguration(formId, event) {
       data[key] = n;
       continue;
     }
+    if (form.querySelector(`input[type="checkbox"][name="${key}"]`)) continue;   // read below
     if (key === 'timezone_custom') continue;   // folded into timezone below
     if (key === 'timezone' && value === 'custom') {
       const custom = (formData.get('timezone_custom') || '').trim();
@@ -178,9 +200,8 @@ function saveConfiguration(formId, event) {
     data[key] = value;
   }
 
-  // An unticked checkbox is left out of FormData, so read it directly
-  const alarmBox = form.querySelector('#filter_alarm_enabled');
-  if (alarmBox) data.filter_alarm_enabled = alarmBox.checked;
+  // An unticked checkbox is left out of FormData, so read them directly
+  form.querySelectorAll('input[type="checkbox"][name]').forEach(box => { data[box.name] = box.checked; });
   
   console.log('Sending configuration:', data);
   
@@ -389,6 +410,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const tzSelect = document.getElementById('timezone');
   if (tzSelect) tzSelect.addEventListener('change', updateTimezoneField);
+
+  if (formElements.leakForm) {
+    formElements.leakForm.addEventListener('submit', (e) => saveConfiguration('leakForm', e));
+    formElements.leakForm.querySelectorAll('#leak_alarm_enabled, #leak_quiet_enabled')
+      .forEach(input => input.addEventListener('change', updateLeakFields));
+  }
 
   if (formElements.sensorsForm) {
     formElements.sensorsForm.addEventListener('submit', (e) => saveConfiguration('sensorsForm', e));

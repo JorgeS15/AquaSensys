@@ -9,6 +9,18 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.11 — 2026-11-25
+- Leak alarm. It goes off when the water hasn't stopped for an hour (a
+  dripping tap, a running cistern or a burst pipe never let it stop), or,
+  optionally, when water runs for 5 minutes during quiet hours (01:00–06:00 by
+  default). It clears once the water stops. All of it is set in Settings →
+  Leak alarm; new `config.json` keys `leak_*`.
+- On a Controller, the leak alarm can also stop the pump (off by default).
+- Home Assistant: **Water Leak** binary sensor and **Continuous Flow Time**
+  sensor. Alarms and their end go to `/logs/events.csv`.
+- **[web UI]** The flow card shows the leak alarm, and a warning when the
+  water has been running for 10 minutes. Settings has a Leak alarm card.
+
 ## 3.6.10 — 2026-11-25
 - Real time: the unit sets its clock over NTP. The time zone (default
   Portugal, with summer time) and the time server (a name or an IP address,

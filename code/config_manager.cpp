@@ -420,6 +420,24 @@ String getConfigJson() {
     return output;
 }
 
+String getConfigBackupJson(bool withSecrets) {
+    DynamicJsonDocument doc(CONFIG_DOC_SIZE);
+    File f = SD.open(CONFIG_FILE);
+    if (!f || deserializeJson(doc, f) != DeserializationError::Ok) {
+        if (f) f.close();
+        return String();
+    }
+    f.close();
+    if (!withSecrets) {
+        doc.remove("wifi_password");
+        doc.remove("mqtt_password");
+        doc.remove("admin_password");
+    }
+    String out;
+    serializeJsonPretty(doc, out);
+    return out;
+}
+
 bool updateConfigFromJson(const String& jsonStr) {
     DynamicJsonDocument doc(CONFIG_DOC_SIZE);
     DeserializationError error = deserializeJson(doc, jsonStr);

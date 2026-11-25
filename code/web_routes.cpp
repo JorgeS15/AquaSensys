@@ -403,6 +403,62 @@ void webRoutes() {
         request->send(200, "application/json", getConfigJson());
     });
 
+    // Configuration backup: config.json as a download. The passwords (WiFi,
+    // MQTT, admin) are only in it when an admin password is set and given,
+    // so an open unit never hands them out. Restoring is a POST /api/config
+    // of the same file.
+    server.on("/api/config/backup", HTTP_GET, [](AsyncWebServerRequest *request) {
+        bool protectedUnit = config.admin_password.length() > 0;
+        if (protectedUnit && !isAuthorized(request)) {
+            request->requestAuthentication(AsyncAuthType::AUTH_BASIC, "AquaSensys", "Password required");
+            return;
+        }
+        String json = getConfigBackupJson(protectedUnit);
+        if (json.isEmpty()) {
+            request->send(500, "application/json", "{\"error\":\"config.json could not be read\"}");
+            return;
+        }
+        AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+        response->addHeader("Content-Disposition",
+                            String("attachment; filename=\"aquasensys-") + DEVICE_ID + "-config.json\"");
+        response->addHeader("X-Includes-Passwords", protectedUnit ? "yes" : "no");
+        request->send(response);
+    });
+
+    // The log files outside the daily ones: events, readings logged before the
+    // time was known, and the pre-3.6.10 /log.csv; plus which years have days
+    server.on("/api/logs", HTTP_GET, [](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(1024);
+        JsonArray files = doc.createNestedArray("files");
+        JsonArray years = doc.createNestedArray("years");
+        if (SD.exists("/log.csv")) {
+            File f = SD.open("/log.csv");
+            JsonObject o = files.createNestedObject();
+            o["path"] = "/log.csv";
+            o["size"] = f ? (uint32_t)f.size() : 0;
+            if (f) f.close();
+        }
+        File dir = SD.open("/logs");
+        if (dir && dir.isDirectory()) {
+            for (File e = dir.openNextFile(); e; e = dir.openNextFile()) {
+                String name = String(e.name());
+                if (name.indexOf('/') >= 0) name = name.substring(name.lastIndexOf('/') + 1);
+                if (e.isDirectory()) {
+                    years.add(name);
+                } else if (files.size() < 16) {
+                    JsonObject o = files.createNestedObject();
+                    o["path"] = "/logs/" + name;
+                    o["size"] = (uint32_t)e.size();
+                }
+                e.close();
+            }
+        }
+        if (dir) dir.close();
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
     // API endpoint to update configuration
     server.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {

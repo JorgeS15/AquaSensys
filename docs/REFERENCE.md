@@ -326,6 +326,23 @@ the `admin_password` line from `config.json`.
 `config.json` is never served as a file (it holds the WiFi and MQTT
 passwords): `GET /config.json` answers 403, with or without a password.
 
+## Backup and export
+
+Settings → *Logs and backup*:
+
+- **Readings (CSV)**: choose the days and download one CSV of them (the day
+  files joined under one header). Also links to `/logs/events.csv`,
+  `/logs/unsynced.csv` and the old `/log.csv` when they exist
+  (`GET /api/logs` lists them, and the years that have day files).
+- **Download backup**: `GET /api/config/backup` returns `config.json`. It
+  includes the WiFi, MQTT and admin passwords only when an admin password is
+  set (and then needs it); otherwise they are left out.
+- **Restore from a backup**: sends the file as `POST /api/config`. By default
+  the unit keeps its own name, ID and sensor calibration, so a backup from
+  another unit doesn't give two units the same ID. A backup without the WiFi
+  password keeps this unit's WiFi network. If the WiFi or the device type
+  changes, the unit restarts.
+
 ## Time and logs
 
 The unit sets its clock over NTP once it has WiFi, and keeps it in step every

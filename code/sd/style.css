@@ -704,6 +704,13 @@ body.monitor .motor-only { display: none !important; }
   color: var(--ink);
 }
 
+/* Settings: logs and backup */
+.sub-head { margin: 20px 0 10px; font-size: 0.95rem; font-weight: 700; color: var(--ink); }
+.inline-status { display: inline-block; margin-left: 12px; font-size: 0.85rem; color: var(--muted); }
+.file-links { margin: 12px 0 0; padding-left: 18px; font-size: 0.875rem; color: var(--muted); }
+.file-links li { margin: 4px 0; }
+.file-links a { color: var(--accent-ink); }
+
 /* History chart */
 .history-card { padding-bottom: 18px; }
 
@@ -1075,6 +1082,8 @@ body.monitor .motor-only { display: none !important; }
 .form-group input[type="text"],
 .form-group input[type="password"],
 .form-group input[type="number"],
+.form-group input[type="time"],
+.form-group input[type="date"],
 .form-group select {
   width: 100%;
   min-height: 46px;
@@ -1088,7 +1097,9 @@ body.monitor .motor-only { display: none !important; }
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.form-group input[type="number"] { font-family: var(--mono); }
+.form-group input[type="number"],
+.form-group input[type="time"],
+.form-group input[type="date"] { font-family: var(--mono); }
 
 .form-group input:focus,
 .form-group select:focus {

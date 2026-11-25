@@ -131,6 +131,7 @@ function populateFormFields(config) {
 
   // Password
   const hasPassword = config.admin_password_set === true;
+  document.getElementById('backupNote').textContent = i18n(hasPassword ? 'backupWithPassword' : 'backupNoPassword');
   document.getElementById('passwordState').textContent = i18n(hasPassword ? 'passwordIsSet' : 'passwordNotSet');
   document.getElementById('passwordClearGroup').classList.toggle('hidden', !hasPassword);
   document.getElementById('admin_password').value = '';
@@ -262,6 +263,131 @@ function saveConfiguration(formId, event) {
     // 401: a password is set and the browser's sign-in was cancelled or wrong
     showNotification(String(error).includes('401') ? 'passwordRequired' : 'saveConfigError', 'error');
   });
+}
+
+// ---- Logs and backup ----
+
+const pad2 = n => String(n).padStart(2, '0');
+const isoDay = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function setupDataCard() {
+  const from = document.getElementById('exportFrom');
+  const to = document.getElementById('exportTo');
+  if (!from) return;
+  const today = new Date();
+  to.value = isoDay(today);
+  from.value = isoDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6));
+  document.getElementById('exportBtn').addEventListener('click', exportCsv);
+  document.getElementById('restoreFile').addEventListener('change', restoreBackup);
+  listOtherLogs();
+}
+
+// One CSV for the chosen days, from the unit's day files (one header)
+async function exportCsv() {
+  const status = document.getElementById('exportStatus');
+  const from = document.getElementById('exportFrom').value;
+  const to = document.getElementById('exportTo').value;
+  if (!from || !to || from > to) { status.textContent = i18n('exportBadRange'); return; }
+  const start = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  if ((end - start) / 86400000 > 366) { status.textContent = i18n('exportTooLong'); return; }
+
+  let header = null;
+  const body = [];
+  let found = 0;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = isoDay(d);
+    status.textContent = i18n('exportReading').replace('{day}', key);
+    try {
+      const response = await fetch(`/logs/${key.slice(0, 4)}/${key}.csv`, { cache: 'no-store' });
+      if (!response.ok) continue;
+      const lines = (await response.text()).trim().split('\n');
+      if (lines.length < 2) continue;
+      if (!header) header = lines[0];
+      body.push(...lines.slice(1));
+      found++;
+    } catch (err) { /* a missing day is not an error */ }
+  }
+  if (!header) { status.textContent = i18n('exportNothing'); return; }
+
+  const blob = new Blob([header + '\n' + body.join('\n') + '\n'], { type: 'text/csv' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `aquasensys-${from}_${to}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  status.textContent = i18n('exportDone').replace('{n}', body.length).replace('{days}', found);
+}
+
+// Events, readings from before the clock was set, and the pre-3.6.10 log
+function listOtherLogs() {
+  fetch('/api/logs')
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(data => {
+      const list = document.getElementById('otherLogs');
+      list.textContent = '';
+      const names = { '/logs/events.csv': 'logEvents', '/logs/unsynced.csv': 'logUnsynced', '/log.csv': 'logLegacy' };
+      for (const f of data.files || []) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = f.path;
+        a.download = 'aquasensys-' + f.path.split('/').pop();
+        a.textContent = names[f.path] ? i18n(names[f.path]) : f.path;
+        const size = document.createElement('span');
+        size.textContent = ` (${Math.max(1, Math.round(f.size / 1024))} KB)`;
+        li.append(a, size);
+        list.appendChild(li);
+      }
+    })
+    .catch(() => {});
+}
+
+// Keys that belong to one unit, not to a setup: who it is and how its sensors read
+const UNIT_KEYS = ['device_id', 'device_name', 'current_offset_l1', 'current_offset_l2', 'current_offset_l3',
+  'current_calibrated', 'current_cal_method', 'pressure_in_offset', 'pressure_out_offset',
+  'pressure_calibrated', 'pressure_offset', 'temp_offset'];
+// Written by the firmware itself
+const INTERNAL_KEYS = ['config_version', 'flow_k_factor_effective', 'flow_k_offset_effective', 'admin_password_set'];
+
+function restoreBackup(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); } catch (err) { data = null; }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      showNotification('restoreBadFile', 'error');
+      return;
+    }
+    INTERNAL_KEYS.forEach(k => delete data[k]);
+    if (document.getElementById('restoreKeepIdentity').checked) UNIT_KEYS.forEach(k => delete data[k]);
+    // Without its password a WiFi network can't be joined: keep this unit's
+    if (!data.wifi_password) delete data.wifi_ssid;
+    if (!confirm(i18n('restoreConfirm'))) return;
+
+    fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+      .then(response => {
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        return response.json();
+      })
+      .then(result => {
+        showNotification('restoreDone', 'success');
+        if (result.wifi_changed || result.device_type_changed) showNotification('restoreRestarting', 'info');
+        setTimeout(loadConfiguration, 1000);
+      })
+      .catch(error => {
+        showNotification(String(error).includes('401') ? 'passwordRequired' : 'saveConfigError', 'error');
+      });
+  };
+  reader.readAsText(file);
 }
 
 function factoryReset() {
@@ -406,6 +532,7 @@ function loadDeviceName() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadDeviceName();
+  setupDataCard();
   connectSSE();
   
   // Add event listeners for forms

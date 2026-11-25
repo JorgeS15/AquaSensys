@@ -36,7 +36,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.16"; //History charts on the dashboard; logs one file a day
+const char* DEVICE_VERSION = "3.6.17"; //CSV export of the logs; configuration backup and restore
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);

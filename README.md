@@ -164,7 +164,9 @@ version it had.
 
 WiFi, MQTT, pressure limits, sensors, alarms and the time zone are all set
 from the browser. Nothing needs reprogramming. An optional **password**
-protects every change, while the readings stay open to anyone at home.
+protects every change, while the readings stay open to anyone at home. Logs
+download as CSV, and the settings can be backed up and restored, here or on
+a new unit.
 
 ![Settings page](site/images/settings.png)
 

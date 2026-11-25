@@ -9,6 +9,16 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.17 — 2026-11-25
+- **[web UI]** Settings → *Logs and backup*: download the readings of any
+  days as one CSV, the events log and older logs; download a backup of the
+  settings and restore it, here or on a new unit (keeping that unit's name,
+  ID and calibration by default).
+- `GET /api/config/backup` (with the passwords only when an admin password is
+  set and given) and `GET /api/logs`.
+- **[web UI]** Date and time fields in Settings get the same style as the
+  others.
+
 ## 3.6.16 — 2026-11-25
 - **[web UI]** History charts on the dashboard: pressure, flow, water
   temperature and, on a Controller, the phase currents, over the last 24 hours

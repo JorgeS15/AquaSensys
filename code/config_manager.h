@@ -179,6 +179,9 @@ bool loadConfig();
 bool saveConfig();
 void printConfig();
 String getConfigJson();
+// config.json as saved, for a backup. Without `withSecrets` the WiFi, MQTT
+// and admin passwords are left out.
+String getConfigBackupJson(bool withSecrets);
 bool updateConfigFromJson(const String& jsonStr);
 
 // Normalisers — accept loose user input, return a canonical value

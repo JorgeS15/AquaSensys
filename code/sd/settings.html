@@ -353,6 +353,47 @@
         </form>
       </div>
 
+      <div class="settings-card" id="dataCard">
+        <h2><i class="fas fa-file-export" aria-hidden="true"></i> <span data-i18n="dataTitle">Logs and backup</span></h2>
+        <p class="card-desc" data-i18n="dataDesc">Download the readings logged on the SD card, or keep a copy of the settings to restore here or on a new unit.</p>
+
+        <h3 class="sub-head" data-i18n="exportTitle">Readings (CSV)</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="exportFrom" data-i18n="exportFrom">From</label>
+            <input type="date" id="exportFrom">
+          </div>
+          <div class="form-group">
+            <label for="exportTo" data-i18n="exportTo">To</label>
+            <input type="date" id="exportTo">
+          </div>
+        </div>
+        <button type="button" class="button outline" id="exportBtn">
+          <i class="fas fa-download" aria-hidden="true"></i> <span data-i18n="exportButton">Download CSV</span>
+        </button>
+        <span class="inline-status" id="exportStatus" role="status"></span>
+        <ul class="file-links" id="otherLogs"></ul>
+
+        <h3 class="sub-head" data-i18n="backupTitle">Settings</h3>
+        <p class="card-desc" id="backupNote">The backup leaves out the WiFi and MQTT passwords unless a password is set (Password, above).</p>
+        <div class="action-buttons" style="justify-content: flex-start">
+          <a class="button outline" id="backupBtn" href="/api/config/backup" download>
+            <i class="fas fa-save" aria-hidden="true"></i> <span data-i18n="backupButton">Download backup</span>
+          </a>
+          <label class="button outline" for="restoreFile" style="cursor: pointer">
+            <i class="fas fa-upload" aria-hidden="true"></i> <span data-i18n="restoreButton">Restore from a backup…</span>
+          </label>
+          <input type="file" id="restoreFile" accept=".json,application/json" class="hidden">
+        </div>
+        <div class="form-group" style="margin-top: 12px">
+          <label class="check-row" for="restoreKeepIdentity">
+            <input type="checkbox" id="restoreKeepIdentity" checked>
+            <span><strong data-i18n="restoreKeepLabel">Keep this unit's name, ID and calibration</strong>
+            <small data-i18n="restoreKeepHelp">Leave this on when the backup is from another unit: two units with the same ID knock each other off Home Assistant.</small></span>
+          </label>
+        </div>
+      </div>
+
       <div class="settings-card system-actions">
         <h2><i class="fas fa-tools" aria-hidden="true"></i> <span data-i18n="systemActions">System Actions</span></h2>
         <p class="card-desc" data-i18n="systemActionsDesc">Firmware, files and restart.</p>

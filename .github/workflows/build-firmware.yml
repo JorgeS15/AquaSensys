@@ -26,6 +26,11 @@ jobs:
         with:
           fetch-depth: 0  # full history needed for changelog
 
+      # Firmware logic that needs no ESP32 (alarms, flow maths), built with
+      # the runner's g++. A failure stops the build before anything compiles.
+      - name: Host tests
+        run: bash tests/host/run.sh
+
       - name: Install arduino-cli
         run: |
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \

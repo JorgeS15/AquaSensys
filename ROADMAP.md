@@ -43,8 +43,8 @@ step with them. See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
 | # | Item | Issue | Status |
 |---|---|---|---|
-| 15 | Configurable fault limits (pressure, dry run, current) | [#60](https://github.com/JorgeS15/AquaSensys/issues/60) | 🟡 in progress |
-| 16 | Automatic tests in CI | [#61](https://github.com/JorgeS15/AquaSensys/issues/61) | 🟡 in progress |
+| 15 | Configurable fault limits (pressure, dry run, current) | [#60](https://github.com/JorgeS15/AquaSensys/issues/60) | 🔵 in review — 3.6.18 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 16 | Automatic tests in CI | [#61](https://github.com/JorgeS15/AquaSensys/issues/61) | 🔵 in review — 3.6.19 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
 
 ## Order and why
 

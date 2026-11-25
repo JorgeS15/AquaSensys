@@ -26,6 +26,11 @@ step with the web UI.
   (no release), and the build is kept as a workflow artifact for testing. A PR
   that changes only docs still produces a release once merged, with the same
   version and a new build number.
+- **Host tests** live in `tests/host/` and run in CI before the firmware build
+  (`bash tests/host/run.sh`, plain g++). Logic that needs no hardware (alarms,
+  flow maths) belongs in a file they can include, with a test next to the
+  others; extend the stubs in `tests/host/stubs/` when it reads a new config
+  field. Run them before pushing.
 - **The roadmap is `ROADMAP.md`**, one GitHub issue per item. Update its status
   column when an item is started or done.
 - **One firmware binary runs on every unit.** Anything that must differ between

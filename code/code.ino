@@ -19,6 +19,7 @@
 #include "time_log.h"
 #include "alarms.h"
 #include "auth.h"
+#include "flow_math.h"
 #include <esp_timer.h>
 #include <esp_rom_sys.h>
 
@@ -36,7 +37,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.18"; //Fault limits in Settings: pressure, dry run, current, phase imbalance
+const char* DEVICE_VERSION = "3.6.19"; //Flow maths in flow_math.h for the automatic tests; no change in behaviour
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -311,12 +312,7 @@ void IRAM_ATTR pulseCounter() {
  * config.json override over the default for config.connection_size.
  */
 float computeFlowLpm(uint32_t pulses, unsigned long elapsedMs) {
-    if (elapsedMs == 0 || pulses == 0) return 0.0f;
-    float pulsesPerSecond = (pulses * 1000.0f) / (float)elapsedMs;
-    float lpm = (pulsesPerSecond - flowKOffset()) / flowKFactor();
-    // The offset makes the line cross zero at a small positive frequency, so a
-    // single stray pulse must not come out as negative flow.
-    return lpm > 0.0f ? lpm : 0.0f;
+    return flowLpmFromPulses(pulses, elapsedMs, flowKFactor(), flowKOffset());
 }
 
 // ============================================================
@@ -640,8 +636,8 @@ static void measure() {
         waterTotalSetPending = false;
         waterTotalSaveNow = true;
         Serial.printf("[Water] Total set to %.1f L\n", waterTotalLitres);
-    } else if (flow > 0.0f) {
-        waterTotalLitres += (double)flow * (double)elapsedMs / 60000.0;
+    } else {
+        waterTotalLitres += litresInWindow(flow, elapsedMs);
     }
 }
 

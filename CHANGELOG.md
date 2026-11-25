@@ -9,6 +9,13 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.19 — 2026-11-25
+- The flow maths moved to `flow_math.h`, so automatic tests can check it. No
+  change in behaviour.
+- CI runs automatic tests on every build, before compiling: leak detection,
+  short-cycling, fault causes and the flow maths (`tests/host/`). A failing
+  test fails the build.
+
 ## 3.6.18 — 2026-11-25
 - The fault limits can be changed: the pressure fault (`fault_min_pressure`,
   `fault_max_pressure`, default 1 and 5 bar, fixed until now), the dry-run

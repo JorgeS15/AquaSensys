@@ -6,6 +6,7 @@ const formElements = {
   paramsForm: document.getElementById('paramsForm'),
   sensorsForm: document.getElementById('sensorsForm'),
   leakForm: document.getElementById('leakForm'),
+  shortCycleForm: document.getElementById('shortCycleForm'),
   
   // Status elements
   wifiStatus: document.getElementById('wifiStatus'),
@@ -126,6 +127,11 @@ function populateFormFields(config) {
   // Only a Controller has a pump to stop
   document.getElementById('leakStopPumpGroup').classList.toggle('hidden', config.device_type === 'M');
   updateLeakFields();
+
+  // Pump short-cycling: a Controller only
+  document.getElementById('shortCycleCard').classList.toggle('hidden', config.device_type === 'M');
+  document.getElementById('short_cycle_max_starts').value = config.short_cycle_max_starts ?? 20;
+  document.getElementById('short_cycle_stop_pump').checked = config.short_cycle_stop_pump === true;
 }
 
 function updateLeakFields() {
@@ -171,7 +177,7 @@ function saveConfiguration(formId, event) {
     'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm',
     'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s',
     'log_interval_minutes', 'update_check_hours',
-    'leak_max_minutes', 'leak_quiet_minutes'
+    'leak_max_minutes', 'leak_quiet_minutes', 'short_cycle_max_starts'
   ];
 
   // Convert FormData to a plain object
@@ -415,6 +421,10 @@ document.addEventListener('DOMContentLoaded', () => {
     formElements.leakForm.addEventListener('submit', (e) => saveConfiguration('leakForm', e));
     formElements.leakForm.querySelectorAll('#leak_alarm_enabled, #leak_quiet_enabled')
       .forEach(input => input.addEventListener('change', updateLeakFields));
+  }
+
+  if (formElements.shortCycleForm) {
+    formElements.shortCycleForm.addEventListener('submit', (e) => saveConfiguration('shortCycleForm', e));
   }
 
   if (formElements.sensorsForm) {

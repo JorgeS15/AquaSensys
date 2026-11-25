@@ -35,7 +35,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.13"; //FreeRTOS tasks: sensors, control and LEDs no longer wait on each other or the network
+const char* DEVICE_VERSION = "3.6.14"; //Pump short-cycling alarm: automatic starts per hour
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -654,6 +654,7 @@ static void controlTask(void*) {
         controlHeartbeat = millis();
         checkForErrors();
         controlMotor();
+        if (isControllerDevice()) updateShortCycle(motor, !manualOverride);
         vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS));
     }
 }
@@ -926,6 +927,11 @@ void checkForErrors() {
             char detail[40];
             snprintf(detail, sizeof(detail), "pressure %.2f bar", pressure);
             faultSet(FAULT_PRESSURE, detail);
+        }
+        // Optional: short-cycling stops the pump, until someone clears the error
+        if (config.short_cycle_stop_pump && shortCycleAlarm()) {
+            if (!error) Serial.println("[Error] Short-cycling: stopping the pump");
+            error = true;
         }
         // Optional: a leak also stops the pump, until someone clears the error
         if (config.leak_stop_pump && leakActive()) {

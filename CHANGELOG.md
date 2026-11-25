@@ -9,6 +9,15 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.14 — 2026-11-25
+- Pump short-cycling alarm (Controller). The automatic starts in the last hour
+  are counted; above 20 (configurable, `short_cycle_max_starts`) the
+  **Short Cycling** alarm is raised, as a warning by default or, with
+  `short_cycle_stop_pump`, as an error that stops the pump.
+- Home Assistant: **Pump Starts (last hour)** and **Short Cycling**.
+- **[web UI]** The dashboard shows the starts in the last hour, and
+  *System status* shows warnings in amber. Settings has a Pump starts card.
+
 ## 3.6.13 — 2026-11-25
 - The firmware is split into FreeRTOS tasks: control and protections (every
   20 ms, highest priority), the status LED (every 10 ms), the sensors (every

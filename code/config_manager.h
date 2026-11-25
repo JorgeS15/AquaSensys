@@ -67,6 +67,10 @@ struct Config {
     int leak_quiet_minutes;     // flow this long inside the quiet hours
     bool leak_stop_pump;        // Controller: a leak alarm also stops the pump (latched error)
 
+    // Pump short-cycling (Controller) — see alarms.h
+    int short_cycle_max_starts; // automatic starts an hour before the alarm; 0 = off
+    bool short_cycle_stop_pump; // the alarm also stops the pump (latched error)
+
     // Real time (NTP). timezone is a POSIX TZ string; the default is Portugal's.
     String timezone;
     String ntp_server;
@@ -129,6 +133,8 @@ struct Config {
         leak_quiet_end = "06:00";
         leak_quiet_minutes = 5;
         leak_stop_pump = false;
+        short_cycle_max_starts = 20;
+        short_cycle_stop_pump = false;
         timezone = "WET0WEST,M3.5.0/1,M10.5.0";
         ntp_server = "pool.ntp.org";
         connection_size = "3/4";

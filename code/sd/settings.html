@@ -244,6 +244,26 @@
         </form>
       </div>
 
+      <div class="settings-card" id="shortCycleCard">
+        <h2><i class="fas fa-sync-alt" aria-hidden="true"></i> <span data-i18n="shortCycleTitle">Pump starts</span></h2>
+        <p class="card-desc" data-i18n="shortCycleDesc">A pump that starts many times an hour usually means a pressure tank that has lost its air, or a leak. It wears the motor and the relay.</p>
+        <form id="shortCycleForm">
+          <div class="form-group">
+            <label for="short_cycle_max_starts" data-i18n="shortCycleMaxLabel">Alarm above (automatic starts an hour)</label>
+            <input type="number" id="short_cycle_max_starts" name="short_cycle_max_starts" min="0" max="120" step="1">
+            <small data-i18n="shortCycleMaxHelp">0 turns the alarm off. Starts in manual mode don't count.</small>
+          </div>
+          <div class="form-group">
+            <label class="check-row" for="short_cycle_stop_pump">
+              <input type="checkbox" id="short_cycle_stop_pump" name="short_cycle_stop_pump">
+              <span><strong data-i18n="shortCycleStopLabel">Stop the pump when it short-cycles</strong>
+              <small data-i18n="shortCycleStopHelp">Without this it is only a warning, which goes once the rate drops. With it, the pump stays off until the error is cleared.</small></span>
+            </label>
+          </div>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="saveShortCycle">Save pump starts</button>
+        </form>
+      </div>
+
       <div class="settings-card">
         <h2><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="systemParameters">System Parameters</span></h2>
         <p class="card-desc" data-i18n="paramsDesc">The pump starts below the minimum and stops above the maximum.</p>

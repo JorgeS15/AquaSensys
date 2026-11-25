@@ -105,8 +105,66 @@ void faultClear(uint32_t bits) {
     __atomic_fetch_and(&faults, ~bits, __ATOMIC_SEQ_CST);
 }
 
+static volatile bool shortCycleResetPending = false;
+
 void faultClearAll() {
     if (__atomic_exchange_n(&faults, 0u, __ATOMIC_SEQ_CST)) logEvent("fault_clear", "error cleared");
+    // The starts that tripped the alarm would trip it again at once
+    shortCycleResetPending = true;
+}
+
+// Start times (millis) of the automatic starts in the last hour, oldest first
+static const size_t MAX_STARTS = 128;
+static uint32_t starts[MAX_STARTS];
+static size_t startHead = 0, startCount = 0;
+static volatile uint32_t startsHour = 0;
+static volatile bool shortCycle = false;
+static bool lastMotor = false;
+static const uint32_t HOUR_MS = 3600000UL;
+
+void updateShortCycle(bool motorOn, bool automatic) {
+    uint32_t now = millis();
+    if (shortCycleResetPending) {
+        shortCycleResetPending = false;
+        startHead = startCount = 0;
+        shortCycle = false;
+    }
+    if (motorOn && !lastMotor && automatic) {
+        if (startCount == MAX_STARTS) {            // full: drop the oldest
+            startHead = (startHead + 1) % MAX_STARTS;
+            startCount--;
+        }
+        starts[(startHead + startCount) % MAX_STARTS] = now;
+        startCount++;
+    }
+    lastMotor = motorOn;
+    // Forget starts older than an hour
+    while (startCount && (uint32_t)(now - starts[startHead]) >= HOUR_MS) {
+        startHead = (startHead + 1) % MAX_STARTS;
+        startCount--;
+    }
+    startsHour = startCount;
+
+    int limit = config.short_cycle_max_starts;
+    bool over = limit > 0 && startCount > (size_t)limit;
+    if (over && !shortCycle) {
+        char detail[48];
+        snprintf(detail, sizeof(detail), "%u starts in the last hour (limit %d)", (unsigned)startCount, limit);
+        faultSet(FAULT_SHORT_CYCLE, detail);
+    }
+    if (!over && shortCycle && !config.short_cycle_stop_pump) {
+        faultClear(FAULT_SHORT_CYCLE);   // a warning only: it goes as the rate drops
+    }
+    // Latched with the error when it stops the pump; faultClearAll() ends it
+    shortCycle = over || (shortCycle && config.short_cycle_stop_pump && faultActive(FAULT_SHORT_CYCLE));
+}
+
+uint32_t startsLastHour() {
+    return startsHour;
+}
+
+bool shortCycleAlarm() {
+    return shortCycle;
 }
 
 bool faultActive(uint32_t bit) {

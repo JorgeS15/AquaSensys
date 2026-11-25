@@ -24,6 +24,19 @@ uint32_t flowRunMinutes();
 
 static const uint32_t LEAK_GAP_S = 30;
 
+// ---- Pump short-cycling (Controller) ----
+// A pump that starts many times an hour usually means a pressure tank that has
+// lost its air charge, or a leak; it wears the motor and the relay. Starts
+// made by the automatic control are counted over the last hour; above
+// short_cycle_max_starts the FAULT_SHORT_CYCLE alarm is set. Without
+// short_cycle_stop_pump it is a warning that clears once the rate drops; with
+// it, it latches the error (and stops the pump) until the error is cleared,
+// which also forgets the starts counted so far.
+// Called by the control task on every pass, with the motor state it decided.
+void updateShortCycle(bool motorOn, bool automatic);
+uint32_t startsLastHour();
+bool shortCycleAlarm();
+
 // ---- Fault causes ----
 // "System Error" (the `error` flag) says that something is wrong; these say
 // what. A Controller latches them, like the error: they stay set until the

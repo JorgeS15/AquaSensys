@@ -80,6 +80,7 @@ const elements = {
   wifiRssi: $('wifiRssi'),
   freeHeap: $('freeHeap'),
   motorRuntime: $('motorRuntime'),
+  startsPerHour: $('startsPerHour'),
 
   updateBanner: $('updateBanner'),
   updateTitle: $('updateTitle'),
@@ -216,6 +217,7 @@ function updateDashboard(data) {
   if (data.leakReason !== undefined) state.leakReason = data.leakReason;
   if (data.flowRunMin !== undefined) state.flowRunMin = data.flowRunMin;
   if (data.faults !== undefined) state.faults = data.faults;
+  if (data.startsPerHour !== undefined) elements.startsPerHour.textContent = data.startsPerHour;
   if (data.motor !== undefined) state.motor = data.motor;
   if (data.manualOverride !== undefined) state.manualOverride = data.manualOverride;
   if (data.mainSwitch !== undefined) state.mainSwitch = data.mainSwitch;
@@ -284,10 +286,14 @@ function renderPump() {
     elements.mainSwitchText.textContent = i18n(s.mainSwitch ? 'switchOn' : 'switchOff');
   }
 
+  // A cause without the error is a warning (short-cycling that doesn't stop
+  // the pump, say)
+  const warn = !s.error && s.faults !== 0;
   elements.systemStatus.classList.toggle('error', s.error);
+  elements.systemStatus.classList.toggle('warn', warn);
   elements.systemStatus.querySelector('i').className =
-    s.error ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
-  elements.systemStatusText.textContent = s.error ? faultText(s.faults) : i18n('allOk');
+    s.error || warn ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
+  elements.systemStatusText.textContent = s.error || warn ? faultText(s.faults) : i18n('allOk');
 }
 
 // The firmware's FaultBit values (alarms.h) and their names

@@ -204,6 +204,28 @@ control and protections are stopped. The reason for the last start
 `crash`, `brownout`, …) is published as **Last Reset Reason**, in
 `/api/device` (`reset_reason`), and in `/logs/events.csv`.
 
+### Pump short-cycling
+
+A pump that starts many times an hour usually means a pressure tank that has
+lost its air charge, or a leak, and it wears the motor and the relay. The
+Controller counts the starts made by the automatic control (not in manual
+mode) over the last hour. Above `short_cycle_max_starts` it raises the
+**Short Cycling** alarm:
+
+- by default as a warning: the dashboard shows it in *System status*, and it
+  goes once the rate drops;
+- with `short_cycle_stop_pump`, as a latched error that stops the pump until
+  the error is cleared. Clearing it also forgets the starts counted so far.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `short_cycle_max_starts` | `20` | Automatic starts in an hour before the alarm, `1`–`120`. `0` turns it off. |
+| `short_cycle_stop_pump` | `false` | The alarm also stops the pump. |
+
+Home Assistant gets **Pump Starts (last hour)** and the **Short Cycling**
+alarm; the dashboard shows the starts in the last hour next to the motor
+runtime.
+
 ## Home Assistant (MQTT)
 
 Each unit publishes its entities through MQTT discovery under its `device_id`,
@@ -222,7 +244,8 @@ Energy dashboard lists under **Water consumption**. With two pressure sensors, t
 
 Faults have one `problem` binary sensor per cause, so notifications and
 automations can tell them apart: **Pressure Out of Range** on every unit, and
-on a Controller **Dry Run**, **Overcurrent** and **Phase Imbalance**.
+on a Controller **Dry Run**, **Overcurrent**, **Phase Imbalance** and
+**Short Cycling**.
 **System Error** stays as the summary of all of them. On a Controller the
 causes latch with the error and clear with it; on a Monitor the pressure alarm
 follows the reading. Each cause, and the error being cleared, is written to

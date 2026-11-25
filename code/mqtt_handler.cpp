@@ -168,6 +168,8 @@ void publishState() {
         doc["fault_dry_run"]     = faultActive(FAULT_DRY_RUN) ? "ON" : "OFF";
         doc["fault_overcurrent"] = faultActive(FAULT_OVERCURRENT) ? "ON" : "OFF";
         doc["fault_phase"]       = faultActive(FAULT_PHASE_IMBALANCE) ? "ON" : "OFF";
+        doc["fault_short_cycle"] = faultActive(FAULT_SHORT_CYCLE) ? "ON" : "OFF";
+        doc["starts_per_hour"]   = startsLastHour();
     }
     doc["reboot_requested"] = rebootRequested;
     doc["uptime"]           = millis() / 1000;
@@ -307,10 +309,16 @@ void sendAutoDiscoveryConfigs() {
                                  deviceDoc, stateTopic, "fault_overcurrent");
         createBinarySensorConfig("fault_phase",       "Phase Imbalance", "problem", "mdi:sine-wave",
                                  deviceDoc, stateTopic, "fault_phase");
+        createBinarySensorConfig("fault_short_cycle", "Short Cycling",   "problem", "mdi:sync-alert",
+                                 deviceDoc, stateTopic, "fault_short_cycle");
+        createSensorConfig("starts_per_hour", "Pump Starts (last hour)", nullptr, nullptr, "mdi:counter",
+                           deviceDoc, stateTopic, "starts_per_hour", "measurement");
     } else {
         removeDiscoveryConfig("binary_sensor", "fault_dry_run");
         removeDiscoveryConfig("binary_sensor", "fault_overcurrent");
         removeDiscoveryConfig("binary_sensor", "fault_phase");
+        removeDiscoveryConfig("binary_sensor", "fault_short_cycle");
+        removeDiscoveryConfig("sensor", "starts_per_hour");
     }
 
     createButtonConfig("reboot", "Reboot Device", "mdi:restart", deviceDoc, mqttTopicReboot);

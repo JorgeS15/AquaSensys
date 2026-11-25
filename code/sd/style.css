@@ -593,6 +593,7 @@ body.monitor .motor-only { display: none !important; }
 
 .sys-state i { color: #4ADE80; font-size: 1.3rem; }
 .sys-state.error i { color: #FCA5A5; }
+.sys-state.warn i { color: #FCD34D; }
 
 /* ---------- Dashboard: readings ---------- */
 .gauge-wrap { display: flex; justify-content: center; }

@@ -110,6 +110,11 @@ until someone checks the system:
 The electrical faults stay active even in manual mode. Whoever is running
 the pump, the motor stays protected.
 
+Each fault is its own alarm in Home Assistant, so a notification can say
+exactly what happened. AquaSensys also counts the pump's starts: a pump that
+**short-cycles** (starts too often, usually a pressure tank that has lost its
+air) raises a warning, or, if you choose, stops the pump.
+
 ### Diagnostics
 
 The current in each of the three motor phases, both temperatures (water and
@@ -127,7 +132,8 @@ broker and every entity appears on its own, with nothing to set up in YAML:
   water temperature, WiFi signal and uptime.
 - **Switches** (Controller): pump, main switch, manual mode.
 - **Alarms**: one per cause (dry run, overcurrent, phase imbalance, pressure
-  out of range), clogged filter and water leak, plus an overall system fault.
+  out of range, short cycling), clogged filter and water leak, plus an overall
+  system fault.
 - **Energy dashboard**: the total water used goes straight into *Water
   consumption*, and the flow rate can be shown as the water flow, both with
   long-term statistics. The total is counted by the unit and kept on its SD

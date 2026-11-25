@@ -107,6 +107,7 @@ void notifyClients() {
     doc["leakReason"] = leakReason();   // "continuous" / "quiet_hours" / ""
     doc["flowRunMin"] = flowRunMinutes();
     doc["faults"] = faultBits();        // FaultBit mask: what the error is about
+    if (isControllerDevice()) doc["startsPerHour"] = startsLastHour();
     doc["deviceType"] = config.device_type;
     doc["connectionSize"] = config.connection_size;
     doc["error"] = error;

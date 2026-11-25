@@ -166,6 +166,8 @@ bool loadConfig() {
     config.leak_quiet_end     = normalizeHhMm(doc["leak_quiet_end"]   | config.leak_quiet_end,   "06:00");
     config.leak_quiet_minutes = constrain((int)(doc["leak_quiet_minutes"] | config.leak_quiet_minutes), 1, 600);
     config.leak_stop_pump     = doc["leak_stop_pump"] | config.leak_stop_pump;
+    config.short_cycle_max_starts = constrain((int)(doc["short_cycle_max_starts"] | config.short_cycle_max_starts), 0, 120);
+    config.short_cycle_stop_pump  = doc["short_cycle_stop_pump"] | config.short_cycle_stop_pump;
     config.timezone   = normalizeTimezone(doc["timezone"]   | config.timezone);
     config.ntp_server = doc["ntp_server"] | config.ntp_server;
     config.ntp_server.trim();
@@ -268,6 +270,8 @@ bool saveConfig() {
     doc["leak_quiet_end"]       = config.leak_quiet_end;
     doc["leak_quiet_minutes"]   = config.leak_quiet_minutes;
     doc["leak_stop_pump"]       = config.leak_stop_pump;
+    doc["short_cycle_max_starts"] = config.short_cycle_max_starts;
+    doc["short_cycle_stop_pump"]  = config.short_cycle_stop_pump;
     doc["timezone"]             = config.timezone;
     doc["ntp_server"]           = config.ntp_server;
 
@@ -332,6 +336,9 @@ void printConfig() {
                    + (config.leak_quiet_enabled ? ", quiet " + config.leak_quiet_start + "-" + config.leak_quiet_end
                       + " after " + String(config.leak_quiet_minutes) + " min" : String(""))
                    + (config.leak_stop_pump ? ", stops the pump" : ""));
+    Serial.println("Short-cycling alarm: " + (config.short_cycle_max_starts > 0
+                   ? "above " + String(config.short_cycle_max_starts) + " starts/h" : String("off"))
+                   + (config.short_cycle_stop_pump ? ", stops the pump" : ""));
     Serial.println("Time zone: " + config.timezone + ", NTP " + config.ntp_server);
     Serial.println("Connection Size: " + config.connection_size + "\"");
     Serial.println("Flow calibration: F = " + String(flowKFactor(), 2) + " * Q "
@@ -385,6 +392,8 @@ String getConfigJson() {
     doc["leak_quiet_end"]       = config.leak_quiet_end;
     doc["leak_quiet_minutes"]   = config.leak_quiet_minutes;
     doc["leak_stop_pump"]       = config.leak_stop_pump;
+    doc["short_cycle_max_starts"] = config.short_cycle_max_starts;
+    doc["short_cycle_stop_pump"]  = config.short_cycle_stop_pump;
     doc["timezone"]             = config.timezone;
     doc["ntp_server"]           = config.ntp_server;
 
@@ -461,6 +470,8 @@ bool updateConfigFromJson(const String& jsonStr) {
     if (doc.containsKey("leak_quiet_end"))     config.leak_quiet_end     = normalizeHhMm(doc["leak_quiet_end"].as<String>(), "06:00");
     if (doc.containsKey("leak_quiet_minutes")) config.leak_quiet_minutes = constrain(doc["leak_quiet_minutes"].as<int>(), 1, 600);
     if (doc.containsKey("leak_stop_pump"))     config.leak_stop_pump     = doc["leak_stop_pump"];
+    if (doc.containsKey("short_cycle_max_starts")) config.short_cycle_max_starts = constrain(doc["short_cycle_max_starts"].as<int>(), 0, 120);
+    if (doc.containsKey("short_cycle_stop_pump"))  config.short_cycle_stop_pump  = doc["short_cycle_stop_pump"];
     if (doc.containsKey("timezone"))   config.timezone = normalizeTimezone(doc["timezone"].as<String>());
     if (doc.containsKey("ntp_server")) {
         config.ntp_server = doc["ntp_server"].as<String>();

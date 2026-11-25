@@ -174,9 +174,12 @@
       </article>
 
       <article class="card flow-card">
-          <div style="display: flex; align-items: center; gap: 12px">
-            <span class="icon-tile cool" aria-hidden="true"><i class="fas fa-water"></i></span>
-            <h2 style="margin: 0" data-i18n="flowRate">Flow Rate</h2>
+          <div class="card-head">
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span class="icon-tile cool" aria-hidden="true"><i class="fas fa-water"></i></span>
+              <h2 style="margin: 0" data-i18n="flowRate">Flow Rate</h2>
+            </div>
+            <span class="chip hidden" id="leakChip" role="status">—</span>
           </div>
           <div class="big-value">
             <span class="num" id="flow">0</span>
@@ -186,7 +189,41 @@
             <div class="meter-fill flow" id="flowBar"></div>
           </div>
           <div class="meter-scale"><span>0</span><span>40 L/min</span></div>
+          <div class="flow-total">
+            <span data-i18n="waterTotal">Total water</span>
+            <span class="val" id="waterTotal">—</span>
+          </div>
       </article>
+    </section>
+
+    <!-- History, from the logs on the SD card (history.js) -->
+    <section class="card history-card" id="historyCard" aria-labelledby="historyTitle">
+      <div class="card-head">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span class="icon-tile" aria-hidden="true"><i class="fas fa-chart-line"></i></span>
+          <h2 id="historyTitle" data-i18n="historyTitle">History</h2>
+        </div>
+        <div class="hist-tabs" role="group" data-i18n-aria="historyRange" aria-label="Period">
+          <button type="button" data-range="24" aria-pressed="true" data-i18n="range24h">24 h</button>
+          <button type="button" data-range="168" aria-pressed="false" data-i18n="range7d">7 days</button>
+        </div>
+      </div>
+      <div class="hist-tabs hist-metrics" role="group" data-i18n-aria="historyMetric" aria-label="Reading">
+        <button type="button" data-metric="pressure" aria-pressed="true" data-i18n="pressure">Pressure</button>
+        <button type="button" data-metric="flow" aria-pressed="false" data-i18n="flowRate">Flow Rate</button>
+        <button type="button" data-metric="temp" aria-pressed="false" data-i18n="temperature">Temperature</button>
+        <button type="button" data-metric="current" aria-pressed="false" class="motor-only" data-i18n="currentLabel">Current</button>
+      </div>
+      <div class="hist-legend" id="histLegend"></div>
+      <div class="hist-plot" id="histPlot">
+        <svg id="histSvg" role="img" aria-labelledby="historyTitle"></svg>
+        <div class="hist-tip hidden" id="histTip" role="status"></div>
+        <p class="hist-empty hidden" id="histEmpty"></p>
+      </div>
+      <div class="hist-foot">
+        <span id="histNote"></span>
+        <a id="histCsv" href="#" download data-i18n="downloadCsv">Download today's CSV</a>
+      </div>
     </section>
 
     <!-- Device info -->
@@ -203,11 +240,13 @@
       <div><div class="label" data-i18n="wifiSignal">WiFi Signal</div><div class="val"><span id="wifiRssi">—</span> dBm</div></div>
       <div><div class="label" data-i18n="freeMemory">Free Memory</div><div class="val"><span id="freeHeap">—</span> KB</div></div>
       <div class="motor-only"><div class="label" data-i18n="motorRuntime">Motor runtime</div><div class="val" id="motorRuntime">—</div></div>
+      <div class="motor-only"><div class="label" data-i18n="startsPerHour">Pump starts (last hour)</div><div class="val" id="startsPerHour">—</div></div>
     </section>
   </main>
 
   <script src="translations.js"></script>
   <script src="language.js"></script>
   <script src="app.js"></script>
+  <script src="history.js"></script>
 </body>
 </html>

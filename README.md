@@ -68,6 +68,12 @@ On a **Monitor**, the motor controls are gone and the readings come first:
 
 ![Monitor dashboard](site/images/monitor.png)
 
+### History
+
+The dashboard charts the pressure, flow, water temperature and motor current
+over the last day or week, straight from the logs on the unit's SD card: no
+Home Assistant or internet needed. Point at any moment to see its values.
+
 ### Clogged-filter alarm
 
 With a second pressure sensor after the filter, AquaSensys shows the pressure
@@ -75,6 +81,14 @@ on both sides and the **drop across the filter**. As the filter clogs, the drop
 rises. Past the limit you set (0.5 bar by default) the dashboard and Home
 Assistant raise an alarm. It is only judged while water is flowing, and must
 last a while before it fires, so pressure spikes don't cause false alarms.
+
+### Leak alarm
+
+A dripping tap, a running cistern or a burst pipe never let the water stop.
+AquaSensys raises a **leak alarm** when the water hasn't stopped for an hour,
+or, if you like, when water runs for a few minutes during the night. On a
+Controller it can also stop the pump. The alarm shows on the dashboard and in
+Home Assistant, and clears by itself once the water stops.
 
 ### On your phone, day or night
 
@@ -99,8 +113,15 @@ until someone checks the system:
 | **Phase imbalance** | The three phases differ by more than 3 A |
 | **Pressure out of range** | Below 1 bar or above 5 bar |
 
+The limits shown are the defaults; each one can be changed in Settings.
+
 The electrical faults stay active even in manual mode. Whoever is running
 the pump, the motor stays protected.
+
+Each fault is its own alarm in Home Assistant, so a notification can say
+exactly what happened. AquaSensys also counts the pump's starts: a pump that
+**short-cycles** (starts too often, usually a pressure tank that has lost its
+air) raises a warning, or, if you choose, stops the pump.
 
 ### Diagnostics
 
@@ -115,12 +136,16 @@ calibrate the current and pressure sensors from here with one click.
 AquaSensys announces itself to Home Assistant through MQTT. Point it at your
 broker and every entity appears on its own, with nothing to set up in YAML:
 
-- **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate,
+- **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate, total water,
   water temperature, WiFi signal and uptime.
 - **Switches** (Controller): pump, main switch, manual mode.
-- **Alarms**: system fault and clogged filter.
-- **Energy dashboard**: the flow rate can be used as the water source, with
-  long-term statistics.
+- **Alarms**: one per cause (dry run, overcurrent, phase imbalance, pressure
+  out of range, short cycling), clogged filter and water leak, plus an overall
+  system fault.
+- **Energy dashboard**: the total water used goes straight into *Water
+  consumption*, and the flow rate can be shown as the water flow, both with
+  long-term statistics. The total is counted by the unit and kept on its SD
+  card, so it survives restarts and Home Assistant being down.
 - **Updates**: new firmware shows up under *Settings → Updates*, ready to
   install from Home Assistant.
 
@@ -139,8 +164,11 @@ version it had.
 
 ### Settings
 
-WiFi, MQTT, pressure limits, sensors and alarms are all set from the browser.
-Nothing needs reprogramming.
+WiFi, MQTT, pressure limits, sensors, alarms and the time zone are all set
+from the browser. Nothing needs reprogramming. An optional **password**
+protects every change, while the readings stay open to anyone at home. Logs
+download as CSV, and the settings can be backed up and restored, here or on
+a new unit.
 
 ![Settings page](site/images/settings.png)
 

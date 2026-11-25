@@ -15,6 +15,10 @@ struct Config {
     String wifi_ssid;
     String wifi_password;
     
+    // Password for actions in the web UI and the API (user "admin"); empty =
+    // no password. See auth.h.
+    String admin_password;
+
     // MQTT settings
     String mqtt_server;
     int mqtt_port;
@@ -53,10 +57,30 @@ struct Config {
     // Protection thresholds
     float max_current;          // overcurrent trip point (A)
     float max_phase_imbalance;  // max A difference across phases
+    float fault_min_pressure;   // below this (bar) is a pressure fault
+    float fault_max_pressure;   // above this (bar) is a pressure fault
+    int dry_run_seconds;        // motor on with no flow this long is a dry run
 
     // Data logging
     int log_interval_minutes;   // 0 = disabled
     int update_check_hours;     // look for a new release this often; 0 = only when asked
+
+    // Leak detection — see alarms.h
+    bool leak_alarm_enabled;
+    int leak_max_minutes;       // water that hasn't stopped for this long; 0 = rule off
+    bool leak_quiet_enabled;    // any flow in the quiet hours counts
+    String leak_quiet_start;    // "HH:MM", local time
+    String leak_quiet_end;
+    int leak_quiet_minutes;     // flow this long inside the quiet hours
+    bool leak_stop_pump;        // Controller: a leak alarm also stops the pump (latched error)
+
+    // Pump short-cycling (Controller) — see alarms.h
+    int short_cycle_max_starts; // automatic starts an hour before the alarm; 0 = off
+    bool short_cycle_stop_pump; // the alarm also stops the pump (latched error)
+
+    // Real time (NTP). timezone is a POSIX TZ string; the default is Portugal's.
+    String timezone;
+    String ntp_server;
 
     // Hardware / device profile
     String connection_size;     // "3/4" or "1" (inches) — selects the flow K-factor
@@ -84,6 +108,7 @@ struct Config {
     Config() {
         wifi_ssid = "";
         wifi_password = "";
+        admin_password = "";
         mqtt_server = "YOUR_MQTT_IP";
         mqtt_port = 1883;
         mqtt_user = "YOUR_MQTT_USER";
@@ -107,8 +132,22 @@ struct Config {
         current_cal_method = 2;
         max_current = 15.0f;
         max_phase_imbalance = 3.0f;
+        fault_min_pressure = 1.0f;
+        fault_max_pressure = 5.0f;
+        dry_run_seconds = 10;
         log_interval_minutes = 5;
         update_check_hours = 12;
+        leak_alarm_enabled = true;
+        leak_max_minutes = 60;
+        leak_quiet_enabled = false;
+        leak_quiet_start = "01:00";
+        leak_quiet_end = "06:00";
+        leak_quiet_minutes = 5;
+        leak_stop_pump = false;
+        short_cycle_max_starts = 20;
+        short_cycle_stop_pump = false;
+        timezone = "WET0WEST,M3.5.0/1,M10.5.0";
+        ntp_server = "pool.ntp.org";
         connection_size = "3/4";
         device_type = "C";
         device_id = "";
@@ -146,6 +185,9 @@ bool loadConfig();
 bool saveConfig();
 void printConfig();
 String getConfigJson();
+// config.json as saved, for a backup. Without `withSecrets` the WiFi, MQTT
+// and admin passwords are left out.
+String getConfigBackupJson(bool withSecrets);
 bool updateConfigFromJson(const String& jsonStr);
 
 // Normalisers — accept loose user input, return a canonical value
@@ -160,6 +202,19 @@ String normalizeDeviceId(const String& raw);
 // otherwise the default pair for the configured connection size.
 float flowKFactor();
 float flowKOffset();
+
+// "HH:MM" with a valid hour and minute, or `fallback`
+String normalizeHhMm(const String& raw, const char* fallback);
+
+// A POSIX TZ string, or Portugal's ("WET0WEST,M3.5.0/1,M10.5.0") if unusable
+String normalizeTimezone(const String& raw);
+
+// Size of the JSON documents config.json is read and written with
+static const size_t CONFIG_DOC_SIZE = 4096;
+
+// Keeps the fault limits usable: each inside its range, and the maximum
+// pressure above the minimum
+void sanitizeFaultLimits();
 
 // True when this unit drives a motor (device_type "C"); false for Monitor units
 bool isControllerDevice();

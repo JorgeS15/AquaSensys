@@ -73,11 +73,14 @@ const elements = {
   tempBar: $('tempBar'),
   flow: $('flow'),
   flowBar: $('flowBar'),
+  waterTotal: $('waterTotal'),
+  leakChip: $('leakChip'),
 
   uptime: $('uptime'),
   wifiRssi: $('wifiRssi'),
   freeHeap: $('freeHeap'),
   motorRuntime: $('motorRuntime'),
+  startsPerHour: $('startsPerHour'),
 
   updateBanner: $('updateBanner'),
   updateTitle: $('updateTitle'),
@@ -100,6 +103,11 @@ const state = {
   filterStatus: null,   // "off" | "no_flow" | "no_reading" | "ok" | "clogged"
   temperature: null,
   flow: null,
+  waterTotal: null,     // litres since the counter started
+  leak: false,          // leak alarm, worked out by the firmware
+  leakReason: '',       // "continuous" | "quiet_hours" | ""
+  flowRunMin: 0,        // minutes the water has run without stopping
+  faults: 0,            // what the error is about: FAULTS bits below
   motor: false,
   manualOverride: false,
   mainSwitch: false,
@@ -204,6 +212,12 @@ function updateDashboard(data) {
   if (data.filterStatus !== undefined) state.filterStatus = data.filterStatus;
   if (data.temperature !== undefined) state.temperature = data.temperature;
   if (data.flow !== undefined) state.flow = data.flow;
+  if (data.waterTotal !== undefined) state.waterTotal = data.waterTotal;
+  if (data.leak !== undefined) state.leak = data.leak;
+  if (data.leakReason !== undefined) state.leakReason = data.leakReason;
+  if (data.flowRunMin !== undefined) state.flowRunMin = data.flowRunMin;
+  if (data.faults !== undefined) state.faults = data.faults;
+  if (data.startsPerHour !== undefined) elements.startsPerHour.textContent = data.startsPerHour;
   if (data.motor !== undefined) state.motor = data.motor;
   if (data.manualOverride !== undefined) state.manualOverride = data.manualOverride;
   if (data.mainSwitch !== undefined) state.mainSwitch = data.mainSwitch;
@@ -272,10 +286,30 @@ function renderPump() {
     elements.mainSwitchText.textContent = i18n(s.mainSwitch ? 'switchOn' : 'switchOff');
   }
 
+  // A cause without the error is a warning (short-cycling that doesn't stop
+  // the pump, say)
+  const warn = !s.error && s.faults !== 0;
   elements.systemStatus.classList.toggle('error', s.error);
+  elements.systemStatus.classList.toggle('warn', warn);
   elements.systemStatus.querySelector('i').className =
-    s.error ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
-  elements.systemStatusText.textContent = i18n(s.error ? 'statusError' : 'allOk');
+    s.error || warn ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
+  elements.systemStatusText.textContent = s.error || warn ? faultText(s.faults) : i18n('allOk');
+}
+
+// The firmware's FaultBit values (alarms.h) and their names
+const FAULTS = [
+  [1, 'faultDryRun'],
+  [2, 'faultOvercurrent'],
+  [4, 'faultPhase'],
+  [8, 'faultPressure'],
+  [16, 'faultShortCycle']
+];
+
+// "Dry run" / "Dry run, Overcurrent", or the generic "Fault" when the error
+// was set without a known cause (from Home Assistant, say)
+function faultText(bits) {
+  const names = FAULTS.filter(([bit]) => bits & bit).map(([, key]) => i18n(key));
+  return names.length ? names.join(', ') : i18n('statusError');
 }
 
 function renderPressure() {
@@ -388,6 +422,28 @@ function renderFlow() {
   elements.flowBar.style.width = isReading(f)
     ? Math.min(100, Math.max(0, (f / config.flow.max) * 100)) + '%'
     : '0%';
+  elements.waterTotal.textContent = formatVolume(state.waterTotal);
+
+  // Leak chip: only while the alarm is on, or while water has been running
+  // for a while (so it's visible before it becomes an alarm)
+  const chip = elements.leakChip;
+  if (state.leak) {
+    chip.className = 'chip danger';
+    chip.textContent = i18n(state.leakReason === 'quiet_hours' ? 'leakQuietHours' : 'leakContinuous');
+  } else if (state.flowRunMin >= 10) {
+    chip.className = 'chip warn';
+    chip.textContent = i18n('flowRunning').replace('{min}', state.flowRunMin);
+  } else {
+    chip.className = 'chip hidden';
+  }
+}
+
+// Litres below 1000, cubic metres (as on a water meter) from there
+function formatVolume(litres) {
+  if (!isReading(litres)) return '—';
+  return litres < 1000
+    ? litres.toFixed(1) + ' L'
+    : (litres / 1000).toFixed(3) + ' m³';
 }
 
 function updateInfoStrip(data) {

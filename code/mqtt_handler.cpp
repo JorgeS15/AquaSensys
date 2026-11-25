@@ -1,6 +1,7 @@
 #include "mqtt_handler.h"
 #include "config_manager.h"
 #include "update_manager.h"
+#include "alarms.h"
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -83,7 +84,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         Serial.printf("Main switch: %s\n", mainSwitch ? "ON" : "OFF");
     } else if (controller && strcmp(topic, mqttTopicError) == 0) {
         error = (strcmp(message, "ON") == 0);
-        if (!error) motorFault = false;   // clearing the error clears a latched electrical fault
+        if (!error) {
+            motorFault = false;   // clearing the error clears a latched electrical fault
+            faultClearAll();      // and every cause
+        }
         Serial.printf("Error state: %s\n", error ? "ON" : "OFF");
     } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
         Serial.println("Reboot requested via MQTT");
@@ -138,10 +142,13 @@ bool isMqttConfigured() {
 void publishState() {
     if (!mqttClient.connected()) return;
 
-    StaticJsonDocument<640> doc;
+    StaticJsonDocument<768> doc;
     doc["pressure"]         = pressure;
     doc["temperature"]      = temperature;
     doc["flow"]             = flow;
+    doc["water_total"]      = serialized(String(waterTotalLitres, 1));   // litres
+    doc["flow_run_min"]     = flowRunMinutes();
+    if (config.leak_alarm_enabled) doc["leak"] = leakActive() ? "ON" : "OFF";
     if (config.dual_pressure_sensors) {
         doc["pressure_out"] = pressureOut;
         doc["filter_dp"]    = pressureIn - pressureOut;
@@ -155,13 +162,22 @@ void publishState() {
         doc["main"]         = mainSwitch ? "ON" : "OFF";
     }
     doc["error"]            = error ? "ON" : "OFF";
+    // One alarm per cause; "error" above stays the summary
+    doc["fault_pressure"]   = faultActive(FAULT_PRESSURE) ? "ON" : "OFF";
+    if (isControllerDevice()) {
+        doc["fault_dry_run"]     = faultActive(FAULT_DRY_RUN) ? "ON" : "OFF";
+        doc["fault_overcurrent"] = faultActive(FAULT_OVERCURRENT) ? "ON" : "OFF";
+        doc["fault_phase"]       = faultActive(FAULT_PHASE_IMBALANCE) ? "ON" : "OFF";
+        doc["fault_short_cycle"] = faultActive(FAULT_SHORT_CYCLE) ? "ON" : "OFF";
+        doc["starts_per_hour"]   = startsLastHour();
+    }
     doc["reboot_requested"] = rebootRequested;
     doc["uptime"]           = millis() / 1000;
     doc["free_heap"]        = ESP.getFreeHeap();
     doc["wifi_rssi"]        = WiFi.RSSI();
     doc["reset_reason"]     = lastResetReason;
 
-    char state[640];
+    char state[768];
     serializeJson(doc, state, sizeof(state));
     mqttClient.publish(mqttTopicState, state, true);
 
@@ -243,6 +259,16 @@ void sendAutoDiscoveryConfigs() {
     // statistics for it, which is what the Energy dashboard's "Water flow rate"
     // picker lists. Without a device class it was invisible there.
     createSensorConfig("flow",        "Flow Rate",     "L/min", "volume_flow_rate",  "mdi:water",         deviceDoc, stateTopic, "flow", "measurement");
+    // water + total_increasing in litres: the Energy dashboard's "Water
+    // consumption" picker lists it, and Home Assistant keeps daily totals.
+    createSensorConfig("water_total", "Water Total",  "L",     "water",             "mdi:counter",       deviceDoc, stateTopic, "water_total", "total_increasing");
+    // Leak detection: its own alarm, and how long the water has been running
+    createSensorConfig("flow_run", "Continuous Flow Time", "min", "duration", "mdi:timer-sand", deviceDoc, stateTopic, "flow_run_min", "measurement");
+    if (config.leak_alarm_enabled) {
+        createBinarySensorConfig("leak", "Water Leak", "moisture", "mdi:water-alert", deviceDoc, stateTopic, "leak");
+    } else {
+        removeDiscoveryConfig("binary_sensor", "leak");
+    }
     createSensorConfig("uptime",      "Uptime",        "s",     "duration",          "mdi:clock-outline", deviceDoc, stateTopic, "uptime");
     createSensorConfig("heap",        "Free Memory",   "bytes", nullptr,             "mdi:memory",        deviceDoc, stateTopic, "free_heap");
     createSensorConfig("wifi_strength","WiFi Signal",  "dBm",   "signal_strength",   "mdi:wifi",          deviceDoc, stateTopic, "wifi_rssi");
@@ -270,6 +296,29 @@ void sendAutoDiscoveryConfigs() {
         removeDiscoveryConfig("switch", "main");
         removeDiscoveryConfig("switch", "override");
         removeDiscoveryConfig("switch", "error");
+    }
+
+    // One alarm per fault cause, so notifications and automations can tell
+    // them apart. "System Error" stays as the summary of all of them.
+    createBinarySensorConfig("fault_pressure", "Pressure Out of Range", "problem", "mdi:gauge-low",
+                             deviceDoc, stateTopic, "fault_pressure");
+    if (isControllerDevice()) {
+        createBinarySensorConfig("fault_dry_run",     "Dry Run",         "problem", "mdi:water-off",
+                                 deviceDoc, stateTopic, "fault_dry_run");
+        createBinarySensorConfig("fault_overcurrent", "Overcurrent",     "problem", "mdi:current-ac",
+                                 deviceDoc, stateTopic, "fault_overcurrent");
+        createBinarySensorConfig("fault_phase",       "Phase Imbalance", "problem", "mdi:sine-wave",
+                                 deviceDoc, stateTopic, "fault_phase");
+        createBinarySensorConfig("fault_short_cycle", "Short Cycling",   "problem", "mdi:sync-alert",
+                                 deviceDoc, stateTopic, "fault_short_cycle");
+        createSensorConfig("starts_per_hour", "Pump Starts (last hour)", nullptr, nullptr, "mdi:counter",
+                           deviceDoc, stateTopic, "starts_per_hour", "measurement");
+    } else {
+        removeDiscoveryConfig("binary_sensor", "fault_dry_run");
+        removeDiscoveryConfig("binary_sensor", "fault_overcurrent");
+        removeDiscoveryConfig("binary_sensor", "fault_phase");
+        removeDiscoveryConfig("binary_sensor", "fault_short_cycle");
+        removeDiscoveryConfig("sensor", "starts_per_hour");
     }
 
     createButtonConfig("reboot", "Reboot Device", "mdi:restart", deviceDoc, mqttTopicReboot);

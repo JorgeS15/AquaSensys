@@ -18,6 +18,7 @@ extern float pressureIn;
 extern float pressureOut;
 extern float temperature;
 extern float flow;
+extern double waterTotalLitres;   // litres, kept in /runtime.json
 extern volatile bool motor;
 extern volatile bool manualOverride;
 extern volatile bool manualMotorState;

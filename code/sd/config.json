@@ -22,5 +22,21 @@
   "flow_k_offset": 0.0,
   "flow_debounce_us": 500,
   "max_flow_lpm": 150.0,
-  "update_check_hours": 12
+  "update_check_hours": 12,
+  "leak_alarm_enabled": true,
+  "leak_max_minutes": 60,
+  "leak_quiet_enabled": false,
+  "leak_quiet_start": "01:00",
+  "leak_quiet_end": "06:00",
+  "leak_quiet_minutes": 5,
+  "leak_stop_pump": false,
+  "fault_min_pressure": 1.0,
+  "fault_max_pressure": 5.0,
+  "dry_run_seconds": 10,
+  "max_current": 15.0,
+  "max_phase_imbalance": 3.0,
+  "short_cycle_max_starts": 20,
+  "short_cycle_stop_pump": false,
+  "timezone": "WET0WEST,M3.5.0/1,M10.5.0",
+  "ntp_server": "pool.ntp.org"
 }

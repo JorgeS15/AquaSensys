@@ -9,6 +9,123 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.19 — 2026-11-25
+- The flow maths moved to `flow_math.h`, so automatic tests can check it. No
+  change in behaviour.
+- CI runs automatic tests on every build, before compiling: leak detection,
+  short-cycling, fault causes and the flow maths (`tests/host/`). A failing
+  test fails the build.
+
+## 3.6.18 — 2026-11-25
+- The fault limits can be changed: the pressure fault (`fault_min_pressure`,
+  `fault_max_pressure`, default 1 and 5 bar, fixed until now), the dry-run
+  delay (`dry_run_seconds`, default 10 s, fixed until now), and the
+  overcurrent and phase-imbalance limits (until now only in `config.json`).
+  They apply without a restart.
+- **[web UI]** Settings has a Fault limits card. It refuses pressure limits
+  inside the pump's start/stop band, which would trip it on every start.
+
+## 3.6.17 — 2026-11-25
+- **[web UI]** Settings → *Logs and backup*: download the readings of any
+  days as one CSV, the events log and older logs; download a backup of the
+  settings and restore it, here or on a new unit (keeping that unit's name,
+  ID and calibration by default).
+- `GET /api/config/backup` (with the passwords only when an admin password is
+  set and given) and `GET /api/logs`.
+- **[web UI]** Date and time fields in Settings get the same style as the
+  others.
+
+## 3.6.16 — 2026-11-25
+- **[web UI]** History charts on the dashboard: pressure, flow, water
+  temperature and, on a Controller, the phase currents, over the last 24 hours
+  or 7 days, from the logs on the SD card. Hover (or touch) shows the values
+  at any time; a link downloads today's CSV.
+- Logs are now one file a day, `/logs/YYYY/YYYY-MM-DD.csv` (about 25 KB), so
+  the charts load only the days they show.
+
+## 3.6.15 — 2026-11-25
+- Optional password for actions (`admin_password`, user `admin`). With it
+  set, every change through the web UI or the API (settings, pump, restart,
+  factory reset, calibration, updates, uploads) asks for it; readings stay
+  open. Set it in Settings → Password.
+- `config.json` is no longer served as a file: it holds the WiFi and MQTT
+  passwords, and anyone on the network could download it.
+- **[web UI]** Settings has a Password card, and says when an action needs
+  the password.
+
+## 3.6.14 — 2026-11-25
+- Pump short-cycling alarm (Controller). The automatic starts in the last hour
+  are counted; above 20 (configurable, `short_cycle_max_starts`) the
+  **Short Cycling** alarm is raised, as a warning by default or, with
+  `short_cycle_stop_pump`, as an error that stops the pump.
+- Home Assistant: **Pump Starts (last hour)** and **Short Cycling**.
+- **[web UI]** The dashboard shows the starts in the last hour, and
+  *System status* shows warnings in amber. Settings has a Pump starts card.
+
+## 3.6.13 — 2026-11-25
+- The firmware is split into FreeRTOS tasks: control and protections (every
+  20 ms, highest priority), the status LED (every 10 ms), the sensors (every
+  second) and the network and logging (the main loop). The protections no
+  longer wait for sensor reads, WiFi or the SD card, and commands from the
+  web UI or Home Assistant take effect within 20 ms.
+- Fixes the green heartbeat LED that stopped blinking after a while: its 50 ms
+  blink no longer has to fall between two sensor reads.
+- The watchdog watches every task (control 10 s, sensors and main loop
+  30 s). New reset reasons `control_stall` and `sensor_stall`.
+- Fixes a rare false restart of the watchdog itself: a heartbeat stamped just
+  after the check read the clock looked 49 days old.
+- Log writes and fault flags are safe from several tasks at once.
+
+## 3.6.12 — 2026-11-25
+- Home Assistant gets one alarm per fault cause: **Pressure Out of Range**,
+  and on a Controller **Dry Run**, **Overcurrent** and **Phase Imbalance**.
+  **System Error** stays as the summary. Each cause is recorded in
+  `/logs/events.csv` with its reading.
+- **[web UI]** *System status* on the dashboard names the cause instead of
+  just "Error".
+
+## 3.6.11 — 2026-11-25
+- Leak alarm. It goes off when the water hasn't stopped for an hour (a
+  dripping tap, a running cistern or a burst pipe never let it stop), or,
+  optionally, when water runs for 5 minutes during quiet hours (01:00–06:00 by
+  default). It clears once the water stops. All of it is set in Settings →
+  Leak alarm; new `config.json` keys `leak_*`.
+- On a Controller, the leak alarm can also stop the pump (off by default).
+- Home Assistant: **Water Leak** binary sensor and **Continuous Flow Time**
+  sensor. Alarms and their end go to `/logs/events.csv`.
+- **[web UI]** The flow card shows the leak alarm, and a warning when the
+  water has been running for 10 minutes. Settings has a Leak alarm card.
+
+## 3.6.10 — 2026-11-25
+- Real time: the unit sets its clock over NTP. The time zone (default
+  Portugal, with summer time) and the time server (a name or an IP address,
+  e.g. the router's; default `pool.ntp.org`) are in Settings → System
+  Parameters, and apply without a restart. New `config.json` keys `timezone`
+  and `ntp_server`.
+- Logs move to `/logs/YYYY-MM.csv`, one file a month, with the date and time,
+  and now include the water temperature and the water total. Without
+  internet the lines go to `/logs/unsynced.csv` with the uptime only. The old
+  `/log.csv` is left alone.
+- Each start is recorded in `/logs/events.csv` with its reason; the alarms
+  will be recorded there too.
+- `/api/device` reports the unit's time (`time`, `time_synced`).
+- **[web UI]** Settings has the time zone and the time server.
+
+## 3.6.9 — 2026-11-23
+- Counts the total water through the flow sensor. Home Assistant gets a
+  **Water Total** sensor in litres (`water`, `total_increasing`), which the
+  Energy dashboard lists under **Water consumption**, with daily, weekly and
+  monthly totals.
+- The total is kept on the SD card in `/runtime.json` (with the motor
+  runtime), saved every minute while water flows and before any clean
+  restart (reboot, update). A power cut loses at most a minute of counting.
+  `runtime.json` is now written to a temporary file and renamed, so a power
+  cut while writing it no longer loses the counters.
+- `POST /api/water_total` with `litres=<value>` sets the total, to match the
+  house meter or to start again from 0.
+- **[web UI]** The dashboard shows the total under the flow rate, in litres
+  up to 1000 L and in m³ from there.
+
 ## 3.6.8 — 2026-11-23
 - Fixes an automatic update failing with "Firmware download failed: HTTP
   error: read Timeout". The firmware download used the core's default of 8 s

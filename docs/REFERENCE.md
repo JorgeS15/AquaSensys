@@ -167,10 +167,18 @@ In automatic mode the pump starts at `min_pressure` and stops at `max_pressure`
 
 | Fault | Trips when | Active in manual mode |
 |---|---|---|
-| Pressure out of range | below 1 bar or above 5 bar | no |
-| Dry run | motor on with no flow for 10 s | no |
+| Pressure out of range | below `fault_min_pressure` or above `fault_max_pressure` (defaults 1 and 5 bar) | no |
+| Dry run | motor on with no flow for `dry_run_seconds` (default 10) | no |
 | Overcurrent | total current above `max_current` (default 15 A) | **yes** |
 | Phase imbalance | phases differ by more than `max_phase_imbalance` (default 3 A) | **yes** |
+
+All four limits are in Settings → *Fault limits* (from 3.6.18) and apply at
+once. The pressure limits must stay outside the start/stop band
+(`fault_min_pressure` below `min_pressure`, `fault_max_pressure` above
+`max_pressure`), or the pump would trip on every start; Settings refuses such
+a pair. The firmware keeps each value in a usable range (`fault_min_pressure`
+0–10 bar, `fault_max_pressure` above it and at most 16 bar, `dry_run_seconds`
+3–600). On a Monitor the pressure limits drive its pressure alarm.
 
 Manual mode overrides the pressure logic, not the motor's own protection:
 low pressure and no flow are expected while an operator primes or refills an
@@ -181,14 +189,50 @@ the error off from Home Assistant. If the cause is still there, it trips again.
 
 On boot the motor output is held off from reset, and no fault is judged and no
 control decision is made until the sensors have produced a first real reading.
-A WiFi outage does not slow the control loop: reconnection runs in the
-background, one short step per loop pass.
 
-A watchdog checks the control loop every second. If it stops for 30 s, the
-unit restarts, rather than leaving the web UI and MQTT answering with frozen
-readings while the pump control and protections are stopped. The reason for
-the last start (`power_on`, `restart`, `loop_stall`, `crash`, `brownout`, …)
-is published as **Last Reset Reason** and in `/api/device` (`reset_reason`).
+The firmware runs as separate FreeRTOS tasks, so none of them waits on another
+(from 3.6.13):
+
+| Task | Priority | Runs | Does |
+|---|---|---|---|
+| control | 4 (highest) | every 20 ms | protections and the motor output; nothing else drives the motor |
+| leds | 3 | every 10 ms | the status LED |
+| sensors | 2 | every second | flow and ADC readings, filter, leak, water total, dry run, runtime |
+| loop | 1 | continuously | WiFi, time, logging, web UI and MQTT updates |
+
+A WiFi outage, a slow SD card or a busy web page does not delay the
+protections, and the LED's heartbeat blink no longer drops out while the
+sensors are read.
+
+A watchdog checks the tasks every second. If the control task stops for 10 s,
+or the sensor task or the main loop for 30 s, the unit restarts, rather than
+leaving the web UI and MQTT answering with frozen readings while the pump
+control and protections are stopped. The reason for the last start
+(`power_on`, `restart`, `control_stall`, `sensor_stall`, `loop_stall`,
+`crash`, `brownout`, …) is published as **Last Reset Reason**, in
+`/api/device` (`reset_reason`), and in `/logs/events.csv`.
+
+### Pump short-cycling
+
+A pump that starts many times an hour usually means a pressure tank that has
+lost its air charge, or a leak, and it wears the motor and the relay. The
+Controller counts the starts made by the automatic control (not in manual
+mode) over the last hour. Above `short_cycle_max_starts` it raises the
+**Short Cycling** alarm:
+
+- by default as a warning: the dashboard shows it in *System status*, and it
+  goes once the rate drops;
+- with `short_cycle_stop_pump`, as a latched error that stops the pump until
+  the error is cleared. Clearing it also forgets the starts counted so far.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `short_cycle_max_starts` | `20` | Automatic starts in an hour before the alarm, `1`–`120`. `0` turns it off. |
+| `short_cycle_stop_pump` | `false` | The alarm also stops the pump. |
+
+Home Assistant gets **Pump Starts (last hour)** and the **Short Cycling**
+alarm; the dashboard shows the starts in the last hour next to the motor
+runtime.
 
 ## Home Assistant (MQTT)
 
@@ -201,14 +245,147 @@ Assistant shows a dead unit as unavailable rather than frozen on its last state.
 Flow is published as a volume flow rate in L/min with long-term statistics,
 so it can be chosen as the **Water flow rate** of a water source in the Energy
 dashboard. Pressure, temperature and the filter pressure drop also keep
-long-term statistics. With two pressure sensors, they appear as **Pressure In**
+long-term statistics. **Water Total** is the volume through the flow sensor in
+litres (`device_class: water`, `state_class: total_increasing`), which the
+Energy dashboard lists under **Water consumption**. With two pressure sensors, they appear as **Pressure In**
 (before the filter) and **Pressure Out** (after it); with one, as **Pressure**.
+
+Faults have one `problem` binary sensor per cause, so notifications and
+automations can tell them apart: **Pressure Out of Range** on every unit, and
+on a Controller **Dry Run**, **Overcurrent**, **Phase Imbalance** and
+**Short Cycling**.
+**System Error** stays as the summary of all of them. On a Controller the
+causes latch with the error and clear with it; on a Monitor the pressure alarm
+follows the reading. Each cause, and the error being cleared, is written to
+`/logs/events.csv`, and the dashboard names the cause in *System status*.
 
 Each unit also has a **Firmware** update entity (state on
 `homeassistant/<id>/update/state`), which appears under **Settings → Updates**
 when a newer release is out; **Install** there runs the update described under
 [Updating a unit](#updating-a-unit). The **Check for Firmware Update** button
 checks GitHub straight away.
+
+## Water total
+
+The unit adds up the water through the flow sensor from the flow rate it
+measures every second, so the total matches the flow it shows. It is kept on
+the SD card in `/runtime.json` (`water_total_l`, with the Controller's
+`motor_runtime_s`), saved every minute while either changes and before a clean
+restart (a reboot, an update). A power cut loses at most the last minute. The
+file is written to `/runtime.tmp` and renamed, and the unit reads the `.tmp`
+copy if a power cut came between the two.
+
+`POST /api/water_total` with `litres=<value>` (form field or query string)
+sets the total, for example to match the house water meter or to start again
+from 0. Home Assistant treats a lower value as a new meter, so its statistics
+stay correct.
+
+The dashboard shows the total under the flow rate.
+
+## Leak alarm
+
+The unit watches the flow for water that doesn't stop. Two rules, each on its
+own:
+
+- **Continuous flow**: the water hasn't stopped for `leak_max_minutes`. Normal
+  use stops now and then; a dripping tap, a running cistern or a burst pipe
+  doesn't. A gap shorter than 30 s (a pulse missed at a very low flow) doesn't
+  count as stopping.
+- **Quiet hours** (optional): between `leak_quiet_start` and
+  `leak_quiet_end`, local time, water has been flowing for
+  `leak_quiet_minutes`. The window may cross midnight. It needs the time
+  (see [Time and logs](#time-and-logs)); without it this rule waits.
+
+The alarm clears once the water has been stopped for 30 s. Each alarm and its
+end are written to `/logs/events.csv`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `leak_alarm_enabled` | `true` | Leak alarm on or off. |
+| `leak_max_minutes` | `60` | Minutes of flow without stopping. `0` turns this rule off. |
+| `leak_quiet_enabled` | `false` | Use the quiet hours rule. |
+| `leak_quiet_start`, `leak_quiet_end` | `"01:00"`, `"06:00"` | The quiet hours, `HH:MM`. |
+| `leak_quiet_minutes` | `5` | Minutes of flow inside the quiet hours. |
+| `leak_stop_pump` | `false` | Controller: a leak alarm also stops the pump, as a latched error, until it is cleared. |
+
+Home Assistant gets a **Water Leak** binary sensor (`moisture`; on means a
+leak) and **Continuous Flow Time**, the minutes the water has been running
+without stopping. The dashboard shows the alarm on the flow card, and a
+warning once the water has run for 10 minutes.
+
+## Password
+
+`admin_password` (empty by default) protects every action. When it is set,
+any request that changes something needs HTTP Basic authentication as user
+`admin`: every method but `GET`, `HEAD` and `OPTIONS`, so the settings, the
+pump commands, restart, factory reset, calibration, updates (automatic and
+manual), uploads and `POST /api/water_total`. The browser asks for it the
+first time and remembers it until it is closed. Readings, the pages and the
+live updates stay open, and so does Home Assistant, which uses MQTT and the
+broker's own login.
+
+From the command line: `curl -u admin:<password> -X POST http://<unit>/reboot`.
+
+It is set, changed or removed in Settings → Password (the change itself needs
+the current password). `GET /api/config` only says whether one is set
+(`admin_password_set`). If it is forgotten, take out the SD card and delete
+the `admin_password` line from `config.json`.
+
+`config.json` is never served as a file (it holds the WiFi and MQTT
+passwords): `GET /config.json` answers 403, with or without a password.
+
+## Backup and export
+
+Settings → *Logs and backup*:
+
+- **Readings (CSV)**: choose the days and download one CSV of them (the day
+  files joined under one header). Also links to `/logs/events.csv`,
+  `/logs/unsynced.csv` and the old `/log.csv` when they exist
+  (`GET /api/logs` lists them, and the years that have day files).
+- **Download backup**: `GET /api/config/backup` returns `config.json`. It
+  includes the WiFi, MQTT and admin passwords only when an admin password is
+  set (and then needs it); otherwise they are left out.
+- **Restore from a backup**: sends the file as `POST /api/config`. By default
+  the unit keeps its own name, ID and sensor calibration, so a backup from
+  another unit doesn't give two units the same ID. A backup without the WiFi
+  password keeps this unit's WiFi network. If the WiFi or the device type
+  changes, the unit restarts.
+
+## Time and logs
+
+The unit sets its clock over NTP once it has WiFi, and keeps it in step every
+hour. Without internet (or before the first answer) the time is unknown and
+log lines carry only the uptime.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `timezone` | `"WET0WEST,M3.5.0/1,M10.5.0"` | Time zone, as a POSIX TZ string. The default is Portugal (Lisbon, Madeira), with summer time. Settings offers a list; *Other* takes any POSIX string. |
+| `ntp_server` | `"pool.ntp.org"` | Time server: a name or an IP address, for example the router's. Empty uses `pool.ntp.org`. |
+
+Both apply as soon as they are saved, without a restart. `/api/device` reports
+the unit's time (`time`, empty until the first sync) and `time_synced`.
+
+Readings are written every `log_interval_minutes` (default 5; `0` turns
+logging off) to `/logs/YYYY/YYYY-MM-DD.csv`, one file a day by local date (a
+month in one file from 3.6.10 to 3.6.15), or to `/logs/unsynced.csv` while
+the time is unknown. A day is about 25 KB at the default interval. Columns:
+
+```
+time,epoch,uptime_s,pressure_in,pressure_out,flow_lpm,water_temp,current_l1,current_l2,current_l3,motor,water_total_l
+```
+
+`time` is local (`2026-11-25 14:03:12`, empty when unknown), `epoch` is UTC
+seconds (`0` when unknown), `motor` is `1`/`0`, and an empty `water_temp`
+means no reading. Events (each start, and from 3.6.11 the alarms) go to
+`/logs/events.csv` as `time,epoch,uptime_s,event,detail`.
+
+Firmware before 3.6.10 wrote `/log.csv` (uptime only); it is left as it was.
+
+The dashboard's **History** card draws these files: pressure (both sensors),
+flow, water temperature and, on a Controller, the three phase currents, over
+the last 24 hours or 7 days, with the value at any point on hover. It needs
+nothing but the unit (no Home Assistant, no internet), and only shows
+readings logged once the time was known.
 
 ## Updating a unit
 

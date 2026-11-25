@@ -1,5 +1,8 @@
 #include "ota_handler.h"
 #include "update_manager.h"
+#include "auth.h"
+
+void saveRuntime();   // code.ino: writes /runtime.json if a counter changed
 
 // Global OTA instance
 OTAHandler OTA;
@@ -346,6 +349,7 @@ void OTAHandler::begin(AsyncWebServer* server, const String& updatePath) {
             // Response will be sent by upload handlers
         },
         [this](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+            if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
             if (!index) {
                 handleUploadStart(request, filename, index, data, len, final);
             }
@@ -531,6 +535,7 @@ void OTAHandler::handleUploadEnd(AsyncWebServerRequest *request, String filename
         
         // Schedule restart with a flag in NVS or just restart
         Serial.println("OTA: Restarting device...");
+        saveRuntime();   // keep the counters (motor runtime, water total)
         delay(500);
         ESP.restart();
     } else {
@@ -685,6 +690,7 @@ bool OTAHandler::updateFromFile(const String& filepath) {
         
         // Remove update file after successful update
         SD.remove(filepath);
+        saveRuntime();   // keep the counters (motor runtime, water total)
         
         delay(1000);
         ESP.restart();

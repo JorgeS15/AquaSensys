@@ -8,6 +8,9 @@
 #include "config_manager.h"
 #include "ACS712_handler.h"
 #include "ota_handler.h"
+#include "time_log.h"
+#include "alarms.h"
+#include "auth.h"
 #include "file_manager.h"
 #include "update_manager.h"
 #include "MCP3208.h"
@@ -18,6 +21,9 @@ extern AsyncEventSource events;
 extern bool wifiConnected;
 extern bool apModeActive;
 extern unsigned long motorRuntimeSeconds;
+extern double waterTotalLitres;
+extern double waterTotalSetValue;
+extern volatile bool waterTotalSetPending;
 extern unsigned long lastMqttReconnectAttempt;
 extern PubSubClient mqttClient;
 extern MCP3208 adc;
@@ -85,8 +91,8 @@ void notifyClients() {
     // In AP mode the network is up, so SSE sends are safe
     if (!events.count()) return;
     if (!apModeActive && !wifiConnected) return;
-    // 448 B: up to 13 members plus the device_type / connection_size string values
-    StaticJsonDocument<448> doc;
+    // 512 B: up to 17 members plus the device_type / connection_size string values
+    StaticJsonDocument<512> doc;
     doc["pressure"] = pressure;
     doc["dualPressure"] = config.dual_pressure_sensors;
     if (config.dual_pressure_sensors) {
@@ -97,6 +103,12 @@ void notifyClients() {
     doc["temperature"] = temperature;
     doc["ambientTemp"] = ambientTemp;
     doc["flow"] = flow;
+    doc["waterTotal"] = serialized(String(waterTotalLitres, 1));   // litres
+    doc["leak"] = leakActive();
+    doc["leakReason"] = leakReason();   // "continuous" / "quiet_hours" / ""
+    doc["flowRunMin"] = flowRunMinutes();
+    doc["faults"] = faultBits();        // FaultBit mask: what the error is about
+    if (isControllerDevice()) doc["startsPerHour"] = startsLastHour();
     doc["deviceType"] = config.device_type;
     doc["connectionSize"] = config.connection_size;
     doc["error"] = error;
@@ -313,7 +325,7 @@ void webRoutes() {
     // has no other way to know which unit it is talking to. Static, so the UI
     // fetches it once on load rather than carrying it on every SSE update.
     server.on("/api/device", HTTP_GET, [](AsyncWebServerRequest *request) {
-        DynamicJsonDocument doc(448);
+        DynamicJsonDocument doc(640);
         // What the dashboard header shows: "AquaSensys C3" / "AquaSensys M",
         // unless the user gave the unit its own name. Kept separate from
         // DEVICE_NAME so the Home Assistant device names don't change with it.
@@ -326,6 +338,10 @@ void webRoutes() {
         doc["id"]              = DEVICE_ID;
         doc["version"]         = DEVICE_VERSION;
         doc["reset_reason"]    = lastResetReason;
+        char now[24];
+        formatLocalTime(now, sizeof(now));
+        doc["time"]            = now;            // "" until NTP has answered
+        doc["time_synced"]     = now[0] != '\0';
         doc["device_type"]     = config.device_type;
         doc["connection_size"] = config.connection_size;
 
@@ -362,16 +378,94 @@ void webRoutes() {
     });
 
     // API endpoint to get current configuration
+    // Set the water total, to match the house meter or to start again from 0:
+    // POST /api/water_total with litres=<value> (form field or query string)
+    server.on("/api/water_total", HTTP_POST, [](AsyncWebServerRequest *request) {
+        bool inBody = request->hasParam("litres", true);
+        if (!inBody && !request->hasParam("litres")) {
+            request->send(400, "application/json", "{\"error\":\"litres is required\"}");
+            return;
+        }
+        String raw = request->getParam("litres", inBody)->value();
+        char* end = nullptr;
+        double litres = strtod(raw.c_str(), &end);
+        if (raw.length() == 0 || *end != '\0' || !(litres >= 0) || litres > 1e9) {
+            request->send(400, "application/json", "{\"error\":\"litres must be a number from 0 to 1000000000\"}");
+            return;
+        }
+        waterTotalSetValue = litres;
+        waterTotalSetPending = true;   // the loop applies it within a second and saves it
+        request->send(200, "application/json",
+                      String("{\"status\":\"ok\",\"water_total_l\":") + String(litres, 1) + "}");
+    });
+
     server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", getConfigJson());
+    });
+
+    // Configuration backup: config.json as a download. The passwords (WiFi,
+    // MQTT, admin) are only in it when an admin password is set and given,
+    // so an open unit never hands them out. Restoring is a POST /api/config
+    // of the same file.
+    server.on("/api/config/backup", HTTP_GET, [](AsyncWebServerRequest *request) {
+        bool protectedUnit = config.admin_password.length() > 0;
+        if (protectedUnit && !isAuthorized(request)) {
+            request->requestAuthentication(AsyncAuthType::AUTH_BASIC, "AquaSensys", "Password required");
+            return;
+        }
+        String json = getConfigBackupJson(protectedUnit);
+        if (json.isEmpty()) {
+            request->send(500, "application/json", "{\"error\":\"config.json could not be read\"}");
+            return;
+        }
+        AsyncWebServerResponse* response = request->beginResponse(200, "application/json", json);
+        response->addHeader("Content-Disposition",
+                            String("attachment; filename=\"aquasensys-") + DEVICE_ID + "-config.json\"");
+        response->addHeader("X-Includes-Passwords", protectedUnit ? "yes" : "no");
+        request->send(response);
+    });
+
+    // The log files outside the daily ones: events, readings logged before the
+    // time was known, and the pre-3.6.10 /log.csv; plus which years have days
+    server.on("/api/logs", HTTP_GET, [](AsyncWebServerRequest *request) {
+        DynamicJsonDocument doc(1024);
+        JsonArray files = doc.createNestedArray("files");
+        JsonArray years = doc.createNestedArray("years");
+        if (SD.exists("/log.csv")) {
+            File f = SD.open("/log.csv");
+            JsonObject o = files.createNestedObject();
+            o["path"] = "/log.csv";
+            o["size"] = f ? (uint32_t)f.size() : 0;
+            if (f) f.close();
+        }
+        File dir = SD.open("/logs");
+        if (dir && dir.isDirectory()) {
+            for (File e = dir.openNextFile(); e; e = dir.openNextFile()) {
+                String name = String(e.name());
+                if (name.indexOf('/') >= 0) name = name.substring(name.lastIndexOf('/') + 1);
+                if (e.isDirectory()) {
+                    years.add(name);
+                } else if (files.size() < 16) {
+                    JsonObject o = files.createNestedObject();
+                    o["path"] = "/logs/" + name;
+                    o["size"] = (uint32_t)e.size();
+                }
+                e.close();
+            }
+        }
+        if (dir) dir.close();
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
     });
 
     // API endpoint to update configuration
     server.on("/api/config", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-        // updateConfigFromJson() parses into a 2048-byte document, so a larger
-        // body could not be applied anyway
-        const char* body = collectBody(request, data, len, index, total, 2048);
+        if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
+        // updateConfigFromJson() parses into a CONFIG_DOC_SIZE document, so a
+        // larger body could not be applied anyway
+        const char* body = collectBody(request, data, len, index, total, CONFIG_DOC_SIZE);
         if (!body) return;
         String jsonStr(body);
 
@@ -380,16 +474,21 @@ void webRoutes() {
         String previousDeviceType = config.device_type;
         String previousDeviceId   = config.device_id;
         String previousDeviceName = config.device_name;
+        String previousTimezone   = config.timezone;
+        String previousNtpServer  = config.ntp_server;
 
         if (updateConfigFromJson(jsonStr)) {
             // Only read to see whether WiFi keys were sent. At 256 bytes the device
             // settings form (nine fields) overflowed this, and only gave the right
             // answer because its WiFi keys happen to be absent.
-            DynamicJsonDocument doc(1024);
+            DynamicJsonDocument doc(CONFIG_DOC_SIZE);
             deserializeJson(doc, jsonStr);
             bool wifiChanged = doc.containsKey("wifi_ssid") || doc.containsKey("wifi_password");
             // The identity is resolved once at boot (MQTT topics, discovery,
             // mDNS), so any change to it needs a restart, like device_type.
+            if (config.timezone != previousTimezone || config.ntp_server != previousNtpServer) {
+                timeRequestRestart();   // the loop applies it; no restart needed
+            }
             bool deviceTypeChanged = config.device_type != previousDeviceType
                                   || config.device_id   != previousDeviceId
                                   || config.device_name != previousDeviceName;
@@ -526,6 +625,7 @@ void webRoutes() {
 
     server.on("/command", HTTP_POST, [](AsyncWebServerRequest *request) {
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+        if (!isAuthorized(request)) return;   // the auth check answers 401 at the end
         DynamicJsonDocument doc(128);
         DeserializationError jsonError = deserializeJson(doc, data, len);
 
@@ -551,6 +651,7 @@ void webRoutes() {
                     if (mainSwitch) {
                         error = false;
                         motorFault = false;   // the reset also clears a latched electrical fault
+                        faultClearAll();      // and every cause
                     }
                 }
 

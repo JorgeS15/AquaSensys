@@ -195,6 +195,112 @@
       </div>
 
       <div class="settings-card">
+        <h2><i class="fas fa-tint-slash" aria-hidden="true"></i> <span data-i18n="leakTitle">Leak alarm</span></h2>
+        <p class="card-desc" data-i18n="leakDesc">Water that never stops usually means a dripping tap, a running cistern or a burst pipe.</p>
+        <form id="leakForm">
+          <div class="form-group">
+            <label class="check-row" for="leak_alarm_enabled">
+              <input type="checkbox" id="leak_alarm_enabled" name="leak_alarm_enabled">
+              <span><strong data-i18n="leakEnabledLabel">Leak alarm</strong>
+              <small data-i18n="leakEnabledHelp">Shown on the dashboard and as "Water Leak" in Home Assistant.</small></span>
+            </label>
+          </div>
+          <div id="leakFields">
+            <div class="form-group">
+              <label for="leak_max_minutes" data-i18n="leakMaxMinutesLabel">Alarm when water hasn't stopped for (min)</label>
+              <input type="number" id="leak_max_minutes" name="leak_max_minutes" min="0" max="1440" step="5">
+              <small data-i18n="leakMaxMinutesHelp">Normal use stops now and then; a leak doesn't. 0 turns this rule off. Raise it if you water the garden for longer.</small>
+            </div>
+            <div class="form-group">
+              <label class="check-row" for="leak_quiet_enabled">
+                <input type="checkbox" id="leak_quiet_enabled" name="leak_quiet_enabled">
+                <span><strong data-i18n="leakQuietLabel">Quiet hours</strong>
+                <small data-i18n="leakQuietHelp">When nobody uses water (at night, say), any flow that lasts a few minutes raises the alarm. Needs the time from the time server.</small></span>
+              </label>
+            </div>
+            <div class="form-row" id="leakQuietFields">
+              <div class="form-group">
+                <label for="leak_quiet_start" data-i18n="leakQuietStart">From</label>
+                <input type="time" id="leak_quiet_start" name="leak_quiet_start">
+              </div>
+              <div class="form-group">
+                <label for="leak_quiet_end" data-i18n="leakQuietEnd">To</label>
+                <input type="time" id="leak_quiet_end" name="leak_quiet_end">
+              </div>
+              <div class="form-group">
+                <label for="leak_quiet_minutes" data-i18n="leakQuietMinutes">Flow for (min)</label>
+                <input type="number" id="leak_quiet_minutes" name="leak_quiet_minutes" min="1" max="600" step="1">
+              </div>
+            </div>
+            <div class="form-group" id="leakStopPumpGroup">
+              <label class="check-row" for="leak_stop_pump">
+                <input type="checkbox" id="leak_stop_pump" name="leak_stop_pump">
+                <span><strong data-i18n="leakStopPumpLabel">Stop the pump on a leak</strong>
+                <small data-i18n="leakStopPumpHelp">The pump stays off until the error is cleared (main switch off and on, or from Home Assistant).</small></span>
+              </label>
+            </div>
+          </div>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="saveLeak">Save leak alarm</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <h2><i class="fas fa-shield-alt" aria-hidden="true"></i> <span data-i18n="protectionTitle">Fault limits</span></h2>
+        <p class="card-desc" data-i18n="protectionDesc">Past these limits the unit raises a fault; on a Controller it also stops the pump until the error is cleared.</p>
+        <form id="protectionForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="fault_min_pressure" data-i18n="faultMinPressureLabel">Pressure fault below (bar)</label>
+              <input type="number" id="fault_min_pressure" name="fault_min_pressure" min="0" max="10" step="0.1">
+            </div>
+            <div class="form-group">
+              <label for="fault_max_pressure" data-i18n="faultMaxPressureLabel">Pressure fault above (bar)</label>
+              <input type="number" id="fault_max_pressure" name="fault_max_pressure" min="0.5" max="16" step="0.1">
+            </div>
+          </div>
+          <small class="card-desc" style="display: block; margin-top: -10px" data-i18n="faultPressureHelp">Keep them outside the pump's start and stop pressures (System Parameters), or the pump trips on every start.</small>
+          <div id="motorProtectionFields">
+            <div class="form-row" style="margin-top: 14px">
+              <div class="form-group">
+                <label for="dry_run_seconds" data-i18n="dryRunLabel">Dry run after (s with no flow)</label>
+                <input type="number" id="dry_run_seconds" name="dry_run_seconds" min="3" max="600" step="1">
+              </div>
+              <div class="form-group">
+                <label for="max_current" data-i18n="maxCurrentLabel">Overcurrent above (A, total)</label>
+                <input type="number" id="max_current" name="max_current" min="0.5" max="100" step="0.5">
+              </div>
+              <div class="form-group">
+                <label for="max_phase_imbalance" data-i18n="maxImbalanceLabel">Phase imbalance above (A)</label>
+                <input type="number" id="max_phase_imbalance" name="max_phase_imbalance" min="0.1" max="50" step="0.1">
+              </div>
+            </div>
+            <small class="card-desc" style="display: block; margin-top: -10px" data-i18n="dryRunHelp">Raise the dry-run time for a pump that takes long to prime.</small>
+          </div>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="saveProtection">Save fault limits</button>
+        </form>
+      </div>
+
+      <div class="settings-card" id="shortCycleCard">
+        <h2><i class="fas fa-sync-alt" aria-hidden="true"></i> <span data-i18n="shortCycleTitle">Pump starts</span></h2>
+        <p class="card-desc" data-i18n="shortCycleDesc">A pump that starts many times an hour usually means a pressure tank that has lost its air, or a leak. It wears the motor and the relay.</p>
+        <form id="shortCycleForm">
+          <div class="form-group">
+            <label for="short_cycle_max_starts" data-i18n="shortCycleMaxLabel">Alarm above (automatic starts an hour)</label>
+            <input type="number" id="short_cycle_max_starts" name="short_cycle_max_starts" min="0" max="120" step="1">
+            <small data-i18n="shortCycleMaxHelp">0 turns the alarm off. Starts in manual mode don't count.</small>
+          </div>
+          <div class="form-group">
+            <label class="check-row" for="short_cycle_stop_pump">
+              <input type="checkbox" id="short_cycle_stop_pump" name="short_cycle_stop_pump">
+              <span><strong data-i18n="shortCycleStopLabel">Stop the pump when it short-cycles</strong>
+              <small data-i18n="shortCycleStopHelp">Without this it is only a warning, which goes once the rate drops. With it, the pump stays off until the error is cleared.</small></span>
+            </label>
+          </div>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="saveShortCycle">Save pump starts</button>
+        </form>
+      </div>
+
+      <div class="settings-card">
         <h2><i class="fas fa-sliders-h" aria-hidden="true"></i> <span data-i18n="systemParameters">System Parameters</span></h2>
         <p class="card-desc" data-i18n="paramsDesc">The pump starts below the minimum and stops above the maximum.</p>
         <form id="paramsForm">
@@ -230,8 +336,98 @@
               <small data-i18n="updateCheckHoursHelp">0 checks only when you press "Check for updates". Nothing is installed without you.</small>
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="timezone" data-i18n="timezoneLabel">Time zone:</label>
+              <select id="timezone" name="timezone">
+                <option value="WET0WEST,M3.5.0/1,M10.5.0" data-i18n="tzPortugal">Portugal (Lisbon, Madeira)</option>
+                <option value="&lt;-01&gt;1&lt;+00&gt;,M3.5.0/0,M10.5.0/1" data-i18n="tzAzores">Azores</option>
+                <option value="GMT0BST,M3.5.0/1,M10.5.0" data-i18n="tzUk">United Kingdom, Ireland</option>
+                <option value="CET-1CEST,M3.5.0,M10.5.0/3" data-i18n="tzCentral">Central Europe (Madrid, Paris, Berlin)</option>
+                <option value="EET-2EEST,M3.5.0/3,M10.5.0/4" data-i18n="tzEastern">Eastern Europe (Athens, Helsinki)</option>
+                <option value="&lt;-03&gt;3" data-i18n="tzBrazil">Brazil (São Paulo)</option>
+                <option value="UTC0">UTC</option>
+                <option value="custom" data-i18n="tzCustom">Other (POSIX TZ string)</option>
+              </select>
+              <input type="text" id="timezone_custom" name="timezone_custom" class="hidden" style="margin-top: 8px" placeholder="WET0WEST,M3.5.0/1,M10.5.0" autocomplete="off" spellcheck="false">
+              <small data-i18n="timezoneHelp">For the date and time in the logs and the quiet hours of the leak alarm.</small>
+            </div>
+            <div class="form-group">
+              <label for="ntp_server" data-i18n="ntpServerLabel">Time server (NTP):</label>
+              <input type="text" id="ntp_server" name="ntp_server" placeholder="pool.ntp.org" maxlength="64" autocomplete="off" spellcheck="false">
+              <small data-i18n="ntpServerHelp">A name or an IP address, such as your router's (192.168.1.1). Empty uses pool.ntp.org.</small>
+            </div>
+          </div>
           <button type="submit" class="button save-btn" data-i18n="saveParameters">Save Parameters</button>
         </form>
+      </div>
+
+      <div class="settings-card">
+        <h2><i class="fas fa-lock" aria-hidden="true"></i> <span data-i18n="securityTitle">Password</span></h2>
+        <p class="card-desc" data-i18n="securityDesc">With a password, every change (settings, pump, restart, updates, uploads) asks for it. Readings stay open. The user name is admin.</p>
+        <p class="card-desc"><strong id="passwordState">—</strong></p>
+        <form id="securityForm" autocomplete="off">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="admin_password" data-i18n="newPassword">New password</label>
+              <input type="password" id="admin_password" name="admin_password" maxlength="64" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label for="admin_password_confirm" data-i18n="confirmPassword">Repeat it</label>
+              <input type="password" id="admin_password_confirm" name="admin_password_confirm" maxlength="64" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="form-group" id="passwordClearGroup">
+            <label class="check-row" for="admin_password_clear">
+              <input type="checkbox" id="admin_password_clear" name="admin_password_clear">
+              <span><strong data-i18n="removePassword">Remove the password</strong>
+              <small data-i18n="removePasswordHelp">Every action is open again.</small></span>
+            </label>
+          </div>
+          <small class="card-desc" style="display: block" data-i18n="passwordForgotten">Forgotten it? Take out the SD card and delete the admin_password line from config.json.</small>
+          <button type="submit" class="button save-btn" style="margin-top: 18px" data-i18n="savePassword">Save password</button>
+        </form>
+      </div>
+
+      <div class="settings-card" id="dataCard">
+        <h2><i class="fas fa-file-export" aria-hidden="true"></i> <span data-i18n="dataTitle">Logs and backup</span></h2>
+        <p class="card-desc" data-i18n="dataDesc">Download the readings logged on the SD card, or keep a copy of the settings to restore here or on a new unit.</p>
+
+        <h3 class="sub-head" data-i18n="exportTitle">Readings (CSV)</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="exportFrom" data-i18n="exportFrom">From</label>
+            <input type="date" id="exportFrom">
+          </div>
+          <div class="form-group">
+            <label for="exportTo" data-i18n="exportTo">To</label>
+            <input type="date" id="exportTo">
+          </div>
+        </div>
+        <button type="button" class="button outline" id="exportBtn">
+          <i class="fas fa-download" aria-hidden="true"></i> <span data-i18n="exportButton">Download CSV</span>
+        </button>
+        <span class="inline-status" id="exportStatus" role="status"></span>
+        <ul class="file-links" id="otherLogs"></ul>
+
+        <h3 class="sub-head" data-i18n="backupTitle">Settings</h3>
+        <p class="card-desc" id="backupNote">The backup leaves out the WiFi and MQTT passwords unless a password is set (Password, above).</p>
+        <div class="action-buttons" style="justify-content: flex-start">
+          <a class="button outline" id="backupBtn" href="/api/config/backup" download>
+            <i class="fas fa-save" aria-hidden="true"></i> <span data-i18n="backupButton">Download backup</span>
+          </a>
+          <label class="button outline" for="restoreFile" style="cursor: pointer">
+            <i class="fas fa-upload" aria-hidden="true"></i> <span data-i18n="restoreButton">Restore from a backup…</span>
+          </label>
+          <input type="file" id="restoreFile" accept=".json,application/json" class="hidden">
+        </div>
+        <div class="form-group" style="margin-top: 12px">
+          <label class="check-row" for="restoreKeepIdentity">
+            <input type="checkbox" id="restoreKeepIdentity" checked>
+            <span><strong data-i18n="restoreKeepLabel">Keep this unit's name, ID and calibration</strong>
+            <small data-i18n="restoreKeepHelp">Leave this on when the backup is from another unit: two units with the same ID knock each other off Home Assistant.</small></span>
+          </label>
+        </div>
       </div>
 
       <div class="settings-card system-actions">

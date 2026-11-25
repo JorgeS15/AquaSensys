@@ -5,6 +5,10 @@ const formElements = {
   deviceForm: document.getElementById('deviceForm'),
   paramsForm: document.getElementById('paramsForm'),
   sensorsForm: document.getElementById('sensorsForm'),
+  leakForm: document.getElementById('leakForm'),
+  shortCycleForm: document.getElementById('shortCycleForm'),
+  protectionForm: document.getElementById('protectionForm'),
+  securityForm: document.getElementById('securityForm'),
   
   // Status elements
   wifiStatus: document.getElementById('wifiStatus'),
@@ -102,6 +106,8 @@ function populateFormFields(config) {
   document.getElementById('temp_offset').value = config.temp_offset || 0;
   document.getElementById('log_interval_minutes').value = config.log_interval_minutes ?? 5;
   document.getElementById('update_check_hours').value = config.update_check_hours ?? 12;
+  setTimezoneField(config.timezone || 'WET0WEST,M3.5.0/1,M10.5.0');
+  document.getElementById('ntp_server').value = config.ntp_server || '';
 
   // Pressure sensors and the clogged-filter alarm
   const dual = config.dual_pressure_sensors === true;
@@ -111,6 +117,63 @@ function populateFormFields(config) {
   document.getElementById('filter_min_flow_lpm').value = config.filter_min_flow_lpm ?? 5;
   document.getElementById('filter_alarm_delay_s').value = config.filter_alarm_delay_s ?? 30;
   updateSensorFields();
+
+  // Leak alarm
+  document.getElementById('leak_alarm_enabled').checked = config.leak_alarm_enabled !== false;
+  document.getElementById('leak_max_minutes').value = config.leak_max_minutes ?? 60;
+  document.getElementById('leak_quiet_enabled').checked = config.leak_quiet_enabled === true;
+  document.getElementById('leak_quiet_start').value = config.leak_quiet_start || '01:00';
+  document.getElementById('leak_quiet_end').value = config.leak_quiet_end || '06:00';
+  document.getElementById('leak_quiet_minutes').value = config.leak_quiet_minutes ?? 5;
+  document.getElementById('leak_stop_pump').checked = config.leak_stop_pump === true;
+  // Only a Controller has a pump to stop
+  document.getElementById('leakStopPumpGroup').classList.toggle('hidden', config.device_type === 'M');
+  updateLeakFields();
+
+  // Password
+  const hasPassword = config.admin_password_set === true;
+  document.getElementById('backupNote').textContent = i18n(hasPassword ? 'backupWithPassword' : 'backupNoPassword');
+  document.getElementById('passwordState').textContent = i18n(hasPassword ? 'passwordIsSet' : 'passwordNotSet');
+  document.getElementById('passwordClearGroup').classList.toggle('hidden', !hasPassword);
+  document.getElementById('admin_password').value = '';
+  document.getElementById('admin_password_confirm').value = '';
+  document.getElementById('admin_password_clear').checked = false;
+
+  // Fault limits; the motor ones only on a Controller
+  lastConfig = config;
+  document.getElementById('fault_min_pressure').value = config.fault_min_pressure ?? 1;
+  document.getElementById('fault_max_pressure').value = config.fault_max_pressure ?? 5;
+  document.getElementById('dry_run_seconds').value = config.dry_run_seconds ?? 10;
+  document.getElementById('max_current').value = config.max_current ?? 15;
+  document.getElementById('max_phase_imbalance').value = config.max_phase_imbalance ?? 3;
+  document.getElementById('motorProtectionFields').classList.toggle('hidden', config.device_type === 'M');
+
+  // Pump short-cycling: a Controller only
+  document.getElementById('shortCycleCard').classList.toggle('hidden', config.device_type === 'M');
+  document.getElementById('short_cycle_max_starts').value = config.short_cycle_max_starts ?? 20;
+  document.getElementById('short_cycle_stop_pump').checked = config.short_cycle_stop_pump === true;
+}
+
+function updateLeakFields() {
+  const on = document.getElementById('leak_alarm_enabled').checked;
+  const quiet = document.getElementById('leak_quiet_enabled').checked;
+  document.getElementById('leakFields').classList.toggle('hidden', !on);
+  document.getElementById('leakQuietFields').classList.toggle('hidden', !quiet);
+}
+
+// A listed zone selects its option; anything else shows as "Other" with the
+// POSIX string in the text field
+function setTimezoneField(tz) {
+  const select = document.getElementById('timezone');
+  const listed = [...select.options].some(o => o.value === tz && o.value !== 'custom');
+  select.value = listed ? tz : 'custom';
+  document.getElementById('timezone_custom').value = listed ? '' : tz;
+  updateTimezoneField();
+}
+
+function updateTimezoneField() {
+  const custom = document.getElementById('timezone').value === 'custom';
+  document.getElementById('timezone_custom').classList.toggle('hidden', !custom);
 }
 
 // The alarm settings only apply with two sensors, its values only when it's on
@@ -121,8 +184,32 @@ function updateSensorFields() {
   document.getElementById('filterAlarmFields').classList.toggle('hidden', !alarmOn);
 }
 
+// The settings as last loaded, to check one form against another
+let lastConfig = {};
+
+// A pressure fault inside the pump's start/stop band would trip it on every
+// start (or stop): refuse it, whichever of the two forms is being saved
+function pressureLimitsProblem(formId) {
+  const num = id => Number(document.getElementById(id).value);
+  const fromForm = (id, key) => (formId === 'paramsForm' || formId === 'protectionForm') && document.getElementById(id).form.id === formId
+    ? num(id) : Number(lastConfig[key]);
+  const start = fromForm('min_pressure', 'min_pressure');
+  const stop = fromForm('max_pressure', 'max_pressure');
+  const lo = fromForm('fault_min_pressure', 'fault_min_pressure');
+  const hi = fromForm('fault_max_pressure', 'fault_max_pressure');
+  if ([start, stop, lo, hi].some(v => !Number.isFinite(v))) return null;
+  if (hi <= lo) return 'faultRangeInverted';
+  if (lo >= start) return 'faultMinTooHigh';
+  if (hi <= stop) return 'faultMaxTooLow';
+  return null;
+}
+
 function saveConfiguration(formId, event) {
   event.preventDefault();
+  if (formId === 'paramsForm' || formId === 'protectionForm') {
+    const problem = pressureLimitsProblem(formId);
+    if (problem) { showNotification(problem, 'error'); return; }
+  }
   
   const form = document.getElementById(formId);
   const formData = new FormData(form);
@@ -133,19 +220,29 @@ function saveConfiguration(formId, event) {
     'mqtt_port', 'min_pressure', 'max_pressure', 'pressure_offset', 'temp_offset',
     'flow_k_factor', 'flow_k_offset', 'flow_debounce_us', 'max_flow_lpm',
     'filter_dp_warning', 'filter_min_flow_lpm', 'filter_alarm_delay_s',
-    'log_interval_minutes', 'update_check_hours'
+    'log_interval_minutes', 'update_check_hours',
+    'leak_max_minutes', 'leak_quiet_minutes', 'short_cycle_max_starts',
+    'fault_min_pressure', 'fault_max_pressure', 'dry_run_seconds', 'max_current', 'max_phase_imbalance'
   ];
 
   // Convert FormData to a plain object
   for (const [key, value] of formData.entries()) {
     // Skip empty password fields
-    if ((key === 'wifi_password' || key === 'mqtt_password') && value === '') {
+    if ((key === 'wifi_password' || key === 'mqtt_password' || key === 'admin_password') && value === '') {
       continue;
     }
+    if (key === 'admin_password_confirm') continue;   // checked before saving
     if (numericKeys.includes(key)) {
       const n = Number(value);
       if (value === '' || Number.isNaN(n)) continue;  // leave the stored value alone
       data[key] = n;
+      continue;
+    }
+    if (form.querySelector(`input[type="checkbox"][name="${key}"]`)) continue;   // read below
+    if (key === 'timezone_custom') continue;   // folded into timezone below
+    if (key === 'timezone' && value === 'custom') {
+      const custom = (formData.get('timezone_custom') || '').trim();
+      if (custom) data.timezone = custom;
       continue;
     }
     if (key === 'dual_pressure_sensors') {
@@ -155,9 +252,8 @@ function saveConfiguration(formId, event) {
     data[key] = value;
   }
 
-  // An unticked checkbox is left out of FormData, so read it directly
-  const alarmBox = form.querySelector('#filter_alarm_enabled');
-  if (alarmBox) data.filter_alarm_enabled = alarmBox.checked;
+  // An unticked checkbox is left out of FormData, so read them directly
+  form.querySelectorAll('input[type="checkbox"][name]').forEach(box => { data[box.name] = box.checked; });
   
   console.log('Sending configuration:', data);
   
@@ -199,8 +295,134 @@ function saveConfiguration(formId, event) {
   })
   .catch(error => {
     console.error('Error saving configuration:', error);
-    showNotification('saveConfigError', 'error');
+    // 401: a password is set and the browser's sign-in was cancelled or wrong
+    showNotification(String(error).includes('401') ? 'passwordRequired' : 'saveConfigError', 'error');
   });
+}
+
+// ---- Logs and backup ----
+
+const pad2 = n => String(n).padStart(2, '0');
+const isoDay = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function setupDataCard() {
+  const from = document.getElementById('exportFrom');
+  const to = document.getElementById('exportTo');
+  if (!from) return;
+  const today = new Date();
+  to.value = isoDay(today);
+  from.value = isoDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6));
+  document.getElementById('exportBtn').addEventListener('click', exportCsv);
+  document.getElementById('restoreFile').addEventListener('change', restoreBackup);
+  listOtherLogs();
+}
+
+// One CSV for the chosen days, from the unit's day files (one header)
+async function exportCsv() {
+  const status = document.getElementById('exportStatus');
+  const from = document.getElementById('exportFrom').value;
+  const to = document.getElementById('exportTo').value;
+  if (!from || !to || from > to) { status.textContent = i18n('exportBadRange'); return; }
+  const start = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  if ((end - start) / 86400000 > 366) { status.textContent = i18n('exportTooLong'); return; }
+
+  let header = null;
+  const body = [];
+  let found = 0;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const key = isoDay(d);
+    status.textContent = i18n('exportReading').replace('{day}', key);
+    try {
+      const response = await fetch(`/logs/${key.slice(0, 4)}/${key}.csv`, { cache: 'no-store' });
+      if (!response.ok) continue;
+      const lines = (await response.text()).trim().split('\n');
+      if (lines.length < 2) continue;
+      if (!header) header = lines[0];
+      body.push(...lines.slice(1));
+      found++;
+    } catch (err) { /* a missing day is not an error */ }
+  }
+  if (!header) { status.textContent = i18n('exportNothing'); return; }
+
+  const blob = new Blob([header + '\n' + body.join('\n') + '\n'], { type: 'text/csv' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `aquasensys-${from}_${to}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  status.textContent = i18n('exportDone').replace('{n}', body.length).replace('{days}', found);
+}
+
+// Events, readings from before the clock was set, and the pre-3.6.10 log
+function listOtherLogs() {
+  fetch('/api/logs')
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(data => {
+      const list = document.getElementById('otherLogs');
+      list.textContent = '';
+      const names = { '/logs/events.csv': 'logEvents', '/logs/unsynced.csv': 'logUnsynced', '/log.csv': 'logLegacy' };
+      for (const f of data.files || []) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = f.path;
+        a.download = 'aquasensys-' + f.path.split('/').pop();
+        a.textContent = names[f.path] ? i18n(names[f.path]) : f.path;
+        const size = document.createElement('span');
+        size.textContent = ` (${Math.max(1, Math.round(f.size / 1024))} KB)`;
+        li.append(a, size);
+        list.appendChild(li);
+      }
+    })
+    .catch(() => {});
+}
+
+// Keys that belong to one unit, not to a setup: who it is and how its sensors read
+const UNIT_KEYS = ['device_id', 'device_name', 'current_offset_l1', 'current_offset_l2', 'current_offset_l3',
+  'current_calibrated', 'current_cal_method', 'pressure_in_offset', 'pressure_out_offset',
+  'pressure_calibrated', 'pressure_offset', 'temp_offset'];
+// Written by the firmware itself
+const INTERNAL_KEYS = ['config_version', 'flow_k_factor_effective', 'flow_k_offset_effective', 'admin_password_set'];
+
+function restoreBackup(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); } catch (err) { data = null; }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      showNotification('restoreBadFile', 'error');
+      return;
+    }
+    INTERNAL_KEYS.forEach(k => delete data[k]);
+    if (document.getElementById('restoreKeepIdentity').checked) UNIT_KEYS.forEach(k => delete data[k]);
+    // Without its password a WiFi network can't be joined: keep this unit's
+    if (!data.wifi_password) delete data.wifi_ssid;
+    if (!confirm(i18n('restoreConfirm'))) return;
+
+    fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+      .then(response => {
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        return response.json();
+      })
+      .then(result => {
+        showNotification('restoreDone', 'success');
+        if (result.wifi_changed || result.device_type_changed) showNotification('restoreRestarting', 'info');
+        setTimeout(loadConfiguration, 1000);
+      })
+      .catch(error => {
+        showNotification(String(error).includes('401') ? 'passwordRequired' : 'saveConfigError', 'error');
+      });
+  };
+  reader.readAsText(file);
 }
 
 function factoryReset() {
@@ -345,6 +567,7 @@ function loadDeviceName() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadDeviceName();
+  setupDataCard();
   connectSSE();
   
   // Add event listeners for forms
@@ -362,6 +585,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (formElements.paramsForm) {
     formElements.paramsForm.addEventListener('submit', (e) => saveConfiguration('paramsForm', e));
+  }
+
+  const tzSelect = document.getElementById('timezone');
+  if (tzSelect) tzSelect.addEventListener('change', updateTimezoneField);
+
+  if (formElements.leakForm) {
+    formElements.leakForm.addEventListener('submit', (e) => saveConfiguration('leakForm', e));
+    formElements.leakForm.querySelectorAll('#leak_alarm_enabled, #leak_quiet_enabled')
+      .forEach(input => input.addEventListener('change', updateLeakFields));
+  }
+
+  if (formElements.protectionForm) {
+    formElements.protectionForm.addEventListener('submit', (e) => saveConfiguration('protectionForm', e));
+  }
+
+  if (formElements.shortCycleForm) {
+    formElements.shortCycleForm.addEventListener('submit', (e) => saveConfiguration('shortCycleForm', e));
+  }
+
+  if (formElements.securityForm) {
+    formElements.securityForm.addEventListener('submit', (e) => {
+      const pw = document.getElementById('admin_password').value;
+      const again = document.getElementById('admin_password_confirm').value;
+      const clear = document.getElementById('admin_password_clear').checked;
+      if (!clear && pw === '') { e.preventDefault(); showNotification('passwordEmpty', 'error'); return; }
+      if (!clear && pw !== again) { e.preventDefault(); showNotification('passwordMismatch', 'error'); return; }
+      saveConfiguration('securityForm', e);
+    });
   }
 
   if (formElements.sensorsForm) {

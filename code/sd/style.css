@@ -27,6 +27,10 @@
   --danger: #B42318;
   --danger-soft: #FFF4F0;
   --flow: #2563EB;
+  /* Chart series, in this order (validated for colour-blind separation) */
+  --series-1: #257DE0;
+  --series-2: #F47230;
+  --series-3: #00B894;
   --flow-soft: #E3EEFB;
 
   /* Surfaces and inks that both themes redefine */
@@ -99,6 +103,9 @@
   --danger-border: #6E2A27;
   --danger-hover: #4A1D1B;
   --flow: #3B82F6;
+  --series-1: #338CED;
+  --series-2: #E76624;
+  --series-3: #00A888;
   --flow-soft: #132A45;
   --info-soft: #0E2A3A;
   --info-ink: #7DD3FC;
@@ -151,6 +158,9 @@
     --danger-border: #6E2A27;
     --danger-hover: #4A1D1B;
     --flow: #3B82F6;
+    --series-1: #338CED;
+    --series-2: #E76624;
+    --series-3: #00A888;
     --flow-soft: #132A45;
     --info-soft: #0E2A3A;
     --info-ink: #7DD3FC;
@@ -693,6 +703,70 @@ body.monitor .motor-only { display: none !important; }
   font-weight: 600;
   color: var(--ink);
 }
+
+/* History chart */
+.history-card { padding-bottom: 18px; }
+
+.hist-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.hist-tabs button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+}
+
+.hist-tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow-color); }
+.hist-metrics { margin: 6px 0 10px; }
+
+.hist-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; min-height: 20px; font-size: 0.85rem; color: var(--muted); }
+.hist-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.hist-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+
+.hist-plot { position: relative; margin-top: 8px; }
+.hist-plot svg { display: block; width: 100%; height: 240px; overflow: visible; touch-action: pan-y; }
+.hist-plot .grid { stroke: var(--border); stroke-width: 1; }
+.hist-plot .axis-label { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.hist-plot .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.hist-plot .cross { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.hist-plot .dot { stroke: var(--surface); stroke-width: 2; }
+
+.hist-tip {
+  position: absolute;
+  top: 4px;
+  min-width: 140px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 4px 14px var(--shadow-color);
+  font-size: 0.8rem;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.hist-tip .tip-time { color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+.hist-tip .tip-row { display: flex; align-items: center; gap: 6px; }
+.hist-tip .tip-row i { flex: none; display: inline-block; width: 10px; height: 3px; border-radius: 2px; }
+.hist-tip .tip-row b { margin-left: auto; padding-left: 10px; font-family: var(--mono); }
+
+.hist-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); font-size: 0.9rem; text-align: center; padding: 0 16px; }
+
+.hist-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 0.8rem; color: var(--muted); }
+.hist-foot a { color: var(--accent-ink); }
 
 /* Filter / pressure-drop card */
 .filter-flow {

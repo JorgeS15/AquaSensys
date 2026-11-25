@@ -341,8 +341,9 @@ Both apply as soon as they are saved, without a restart. `/api/device` reports
 the unit's time (`time`, empty until the first sync) and `time_synced`.
 
 Readings are written every `log_interval_minutes` (default 5; `0` turns
-logging off) to `/logs/YYYY-MM.csv`, one file a month by local date, or to
-`/logs/unsynced.csv` while the time is unknown. Columns:
+logging off) to `/logs/YYYY/YYYY-MM-DD.csv`, one file a day by local date (a
+month in one file from 3.6.10 to 3.6.15), or to `/logs/unsynced.csv` while
+the time is unknown. A day is about 25 KB at the default interval. Columns:
 
 ```
 time,epoch,uptime_s,pressure_in,pressure_out,flow_lpm,water_temp,current_l1,current_l2,current_l3,motor,water_total_l
@@ -354,6 +355,12 @@ means no reading. Events (each start, and from 3.6.11 the alarms) go to
 `/logs/events.csv` as `time,epoch,uptime_s,event,detail`.
 
 Firmware before 3.6.10 wrote `/log.csv` (uptime only); it is left as it was.
+
+The dashboard's **History** card draws these files: pressure (both sensors),
+flow, water temperature and, on a Controller, the three phase currents, over
+the last 24 hours or 7 days, with the value at any point on hover. It needs
+nothing but the unit (no Home Assistant, no internet), and only shows
+readings logged once the time was known.
 
 ## Updating a unit
 

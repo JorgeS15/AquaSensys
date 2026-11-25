@@ -10,8 +10,8 @@
 // (Portugal). Until the first sync, and on a unit with no internet, the time is
 // unknown: log lines then carry only the uptime.
 //
-// Readings go to /logs/YYYY-MM.csv, one file a month, or to /logs/unsynced.csv
-// while the time is unknown. Alarms and other events go to /logs/events.csv.
+// Readings go to /logs/YYYY/YYYY-MM-DD.csv, one file a day, or to
+// /logs/unsynced.csv while the time is unknown. Alarms and other events go to /logs/events.csv.
 
 // Starts NTP. Call once WiFi is up (it keeps retrying by itself afterwards).
 void timeBegin();
@@ -33,7 +33,7 @@ void formatLocalTime(char* out, size_t size);
 // Local hour and minute as minutes since midnight, or -1 while unknown
 int localMinuteOfDay();
 
-// Appends one line of readings to this month's log
+// Appends one line of readings to today's log
 void logReadings(float pressureIn, float pressureOut, float flow, float waterTemp,
                  float currentL1, float currentL2, float currentL3, bool motor,
                  double waterTotalLitres);

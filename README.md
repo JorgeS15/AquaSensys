@@ -68,6 +68,12 @@ On a **Monitor**, the motor controls are gone and the readings come first:
 
 ![Monitor dashboard](site/images/monitor.png)
 
+### History
+
+The dashboard charts the pressure, flow, water temperature and motor current
+over the last day or week, straight from the logs on the unit's SD card: no
+Home Assistant or internet needed. Point at any moment to see its values.
+
 ### Clogged-filter alarm
 
 With a second pressure sensor after the filter, AquaSensys shows the pressure

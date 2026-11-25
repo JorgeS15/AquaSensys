@@ -9,6 +9,14 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.16 — 2026-11-25
+- **[web UI]** History charts on the dashboard: pressure, flow, water
+  temperature and, on a Controller, the phase currents, over the last 24 hours
+  or 7 days, from the logs on the SD card. Hover (or touch) shows the values
+  at any time; a link downloads today's CSV.
+- Logs are now one file a day, `/logs/YYYY/YYYY-MM-DD.csv` (about 25 KB), so
+  the charts load only the days they show.
+
 ## 3.6.15 — 2026-11-25
 - Optional password for actions (`admin_password`, user `admin`). With it
   set, every change through the web UI or the API (settings, pump, restart,

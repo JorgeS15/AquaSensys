@@ -96,16 +96,22 @@ static File openLog(const char* path, const char* header) {
 void logReadings(float pressureIn, float pressureOut, float flow, float waterTemp,
                  float currentL1, float currentL2, float currentL3, bool motor,
                  double waterTotalLitres) {
-    char path[32];
+    char path[40];
     char stamp[24];
     formatLocalTime(stamp, sizeof(stamp));
+    if (!lockLogs()) return;
     if (stamp[0]) {
-        // One file a month, named by local date: "2026-11-25 ..." -> 2026-11
-        snprintf(path, sizeof(path), "%s/%.7s.csv", LOG_DIR, stamp);
+        // One file a day, in a folder a year, named by local date:
+        // "2026-11-25 ..." -> /logs/2026/2026-11-25.csv. A day is ~25 KB at
+        // the default interval, so the charts load only what they show.
+        char year[24];
+        snprintf(year, sizeof(year), "%s/%.4s", LOG_DIR, stamp);
+        ensureLogDir();
+        if (!SD.exists(year)) SD.mkdir(year);
+        snprintf(path, sizeof(path), "%s/%.10s.csv", year, stamp);
     } else {
         snprintf(path, sizeof(path), "%s/unsynced.csv", LOG_DIR);
     }
-    if (!lockLogs()) return;
     File f = openLog(path, LOG_HEADER);
     if (!f) { unlockLogs(); return; }
     // NAN (no reading) is written as an empty field

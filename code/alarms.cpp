@@ -81,6 +81,42 @@ void updateLeakState(float flowLpm) {
     }
 }
 
+static volatile uint32_t faults = 0;
+
+const char* faultName(uint32_t bit) {
+    switch (bit) {
+        case FAULT_DRY_RUN:         return "dry_run";
+        case FAULT_OVERCURRENT:     return "overcurrent";
+        case FAULT_PHASE_IMBALANCE: return "phase_imbalance";
+        case FAULT_PRESSURE:        return "pressure";
+        case FAULT_SHORT_CYCLE:     return "short_cycle";
+        default:                    return "unknown";
+    }
+}
+
+void faultSet(uint32_t bit, const char* detail) {
+    if (faults & bit) return;
+    faults |= bit;
+    logEvent(faultName(bit), detail);
+}
+
+void faultClear(uint32_t bits) {
+    faults &= ~bits;
+}
+
+void faultClearAll() {
+    if (faults) logEvent("fault_clear", "error cleared");
+    faults = 0;
+}
+
+bool faultActive(uint32_t bit) {
+    return (faults & bit) != 0;
+}
+
+uint32_t faultBits() {
+    return faults;
+}
+
 bool leakActive() {
     return leak;
 }

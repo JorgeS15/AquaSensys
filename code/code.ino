@@ -35,7 +35,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.11"; //Leak detection: continuous flow, and flow in the quiet hours
+const char* DEVICE_VERSION = "3.6.12"; //One alarm per fault cause in Home Assistant (dry run, overcurrent, ...)
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -669,8 +669,9 @@ void loop() {
             if (motor && flow == 0.0f) {
                 if (motorNoFlowStart == 0) motorNoFlowStart = millis();
                 else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
+                    if (!error) Serial.println("[Error] Motor running with no flow — possible dry run");
                     error = true;
-                    Serial.println("[Error] Motor running with no flow — possible dry run");
+                    faultSet(FAULT_DRY_RUN, "motor on with no flow for 10 s");
                 }
             } else {
                 motorNoFlowStart = 0;
@@ -874,27 +875,44 @@ void checkForErrors() {
     // so the flag tracks the live reading instead of latching.
     if (!isControllerDevice()) {
         error = (pressure < 1.0 || pressure > 5.0);
+        if (error) {
+            char detail[40];
+            snprintf(detail, sizeof(detail), "pressure %.2f bar", pressure);
+            faultSet(FAULT_PRESSURE, detail);
+        } else {
+            faultClear(FAULT_PRESSURE);
+        }
         return;
     }
 
     // Electrical faults apply in every mode: manual mode overrides the pressure
     // logic, not the motor's own protection.
     if (motor && currentTotal > config.max_current) {
-        if (!motorFault) Serial.printf("[Error] Overcurrent: %.2f A > %.2f A\n", currentTotal, config.max_current);
+        char detail[48];
+        snprintf(detail, sizeof(detail), "%.2f A > %.2f A", currentTotal, config.max_current);
+        if (!motorFault) Serial.printf("[Error] Overcurrent: %s\n", detail);
         motorFault = true;
+        faultSet(FAULT_OVERCURRENT, detail);
     }
     if (motor) {
         float maxI = max(currentL1, max(currentL2, currentL3));
         float minI = min(currentL1, min(currentL2, currentL3));
         if (maxI - minI > config.max_phase_imbalance) {
-            if (!motorFault) Serial.printf("[Error] Phase imbalance: %.2f A > %.2f A\n", maxI - minI, config.max_phase_imbalance);
+            char detail[64];
+            snprintf(detail, sizeof(detail), "%.2f A > %.2f A (L1 %.1f, L2 %.1f, L3 %.1f)",
+                     maxI - minI, config.max_phase_imbalance, currentL1, currentL2, currentL3);
+            if (!motorFault) Serial.printf("[Error] Phase imbalance: %s\n", detail);
             motorFault = true;
+            faultSet(FAULT_PHASE_IMBALANCE, detail);
         }
     }
 
     if (!manualOverride) {
         if (pressure < 1.0 || pressure > 5.0) {
             error = true;
+            char detail[40];
+            snprintf(detail, sizeof(detail), "pressure %.2f bar", pressure);
+            faultSet(FAULT_PRESSURE, detail);
         }
         // Optional: a leak also stops the pump, until someone clears the error
         if (config.leak_stop_pump && leakActive()) {
@@ -905,6 +923,7 @@ void checkForErrors() {
         // Manual mode is how an operator primes or refills an empty system, where
         // low pressure and no flow are expected — so those faults stay cleared.
         error = false;
+        faultClear(FAULT_DRY_RUN | FAULT_PRESSURE);
     }
     if (motorFault) {
         error = true;

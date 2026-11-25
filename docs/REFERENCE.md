@@ -206,6 +206,14 @@ litres (`device_class: water`, `state_class: total_increasing`), which the
 Energy dashboard lists under **Water consumption**. With two pressure sensors, they appear as **Pressure In**
 (before the filter) and **Pressure Out** (after it); with one, as **Pressure**.
 
+Faults have one `problem` binary sensor per cause, so notifications and
+automations can tell them apart: **Pressure Out of Range** on every unit, and
+on a Controller **Dry Run**, **Overcurrent** and **Phase Imbalance**.
+**System Error** stays as the summary of all of them. On a Controller the
+causes latch with the error and clear with it; on a Monitor the pressure alarm
+follows the reading. Each cause, and the error being cleared, is written to
+`/logs/events.csv`, and the dashboard names the cause in *System status*.
+
 Each unit also has a **Firmware** update entity (state on
 `homeassistant/<id>/update/state`), which appears under **Settings → Updates**
 when a newer release is out; **Install** there runs the update described under

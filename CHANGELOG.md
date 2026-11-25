@@ -9,6 +9,14 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.12 — 2026-11-25
+- Home Assistant gets one alarm per fault cause: **Pressure Out of Range**,
+  and on a Controller **Dry Run**, **Overcurrent** and **Phase Imbalance**.
+  **System Error** stays as the summary. Each cause is recorded in
+  `/logs/events.csv` with its reading.
+- **[web UI]** *System status* on the dashboard names the cause instead of
+  just "Error".
+
 ## 3.6.11 — 2026-11-25
 - Leak alarm. It goes off when the water hasn't stopped for an hour (a
   dripping tap, a running cistern or a burst pipe never let it stop), or,

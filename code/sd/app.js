@@ -106,6 +106,7 @@ const state = {
   leak: false,          // leak alarm, worked out by the firmware
   leakReason: '',       // "continuous" | "quiet_hours" | ""
   flowRunMin: 0,        // minutes the water has run without stopping
+  faults: 0,            // what the error is about: FAULTS bits below
   motor: false,
   manualOverride: false,
   mainSwitch: false,
@@ -214,6 +215,7 @@ function updateDashboard(data) {
   if (data.leak !== undefined) state.leak = data.leak;
   if (data.leakReason !== undefined) state.leakReason = data.leakReason;
   if (data.flowRunMin !== undefined) state.flowRunMin = data.flowRunMin;
+  if (data.faults !== undefined) state.faults = data.faults;
   if (data.motor !== undefined) state.motor = data.motor;
   if (data.manualOverride !== undefined) state.manualOverride = data.manualOverride;
   if (data.mainSwitch !== undefined) state.mainSwitch = data.mainSwitch;
@@ -285,7 +287,23 @@ function renderPump() {
   elements.systemStatus.classList.toggle('error', s.error);
   elements.systemStatus.querySelector('i').className =
     s.error ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
-  elements.systemStatusText.textContent = i18n(s.error ? 'statusError' : 'allOk');
+  elements.systemStatusText.textContent = s.error ? faultText(s.faults) : i18n('allOk');
+}
+
+// The firmware's FaultBit values (alarms.h) and their names
+const FAULTS = [
+  [1, 'faultDryRun'],
+  [2, 'faultOvercurrent'],
+  [4, 'faultPhase'],
+  [8, 'faultPressure'],
+  [16, 'faultShortCycle']
+];
+
+// "Dry run" / "Dry run, Overcurrent", or the generic "Fault" when the error
+// was set without a known cause (from Home Assistant, say)
+function faultText(bits) {
+  const names = FAULTS.filter(([bit]) => bits & bit).map(([, key]) => i18n(key));
+  return names.length ? names.join(', ') : i18n('statusError');
 }
 
 function renderPressure() {

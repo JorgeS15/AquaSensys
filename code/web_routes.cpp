@@ -106,6 +106,7 @@ void notifyClients() {
     doc["leak"] = leakActive();
     doc["leakReason"] = leakReason();   // "continuous" / "quiet_hours" / ""
     doc["flowRunMin"] = flowRunMinutes();
+    doc["faults"] = faultBits();        // FaultBit mask: what the error is about
     doc["deviceType"] = config.device_type;
     doc["connectionSize"] = config.connection_size;
     doc["error"] = error;
@@ -590,6 +591,7 @@ void webRoutes() {
                     if (mainSwitch) {
                         error = false;
                         motorFault = false;   // the reset also clears a latched electrical fault
+                        faultClearAll();      // and every cause
                     }
                 }
 

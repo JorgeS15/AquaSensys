@@ -24,4 +24,28 @@ uint32_t flowRunMinutes();
 
 static const uint32_t LEAK_GAP_S = 30;
 
+// ---- Fault causes ----
+// "System Error" (the `error` flag) says that something is wrong; these say
+// what. A Controller latches them, like the error: they stay set until the
+// error is cleared (main switch off and on, or from Home Assistant). On a
+// Monitor the pressure fault follows the live reading.
+enum FaultBit : uint32_t {
+    FAULT_DRY_RUN         = 1u << 0,   // motor on, no flow for 10 s
+    FAULT_OVERCURRENT     = 1u << 1,   // total current above max_current
+    FAULT_PHASE_IMBALANCE = 1u << 2,   // phases further apart than max_phase_imbalance
+    FAULT_PRESSURE        = 1u << 3,   // pressure below 1 bar or above 5 bar
+    FAULT_SHORT_CYCLE     = 1u << 4,   // too many pump starts an hour
+};
+static const uint32_t FAULT_ALL = 0x1F;
+
+// Sets a cause; logs an event the first time. `detail` is free text.
+void faultSet(uint32_t bit, const char* detail);
+// Clears causes (without logging); faultClearAll() logs that the error was cleared.
+void faultClear(uint32_t bits);
+void faultClearAll();
+bool faultActive(uint32_t bit);
+uint32_t faultBits();
+// Short name of a single cause: "dry_run", "overcurrent", ...
+const char* faultName(uint32_t bit);
+
 #endif // ALARMS_H

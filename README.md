@@ -126,7 +126,8 @@ broker and every entity appears on its own, with nothing to set up in YAML:
 - **Sensors**: pressure (inlet / outlet), filter pressure drop, flow rate, total water,
   water temperature, WiFi signal and uptime.
 - **Switches** (Controller): pump, main switch, manual mode.
-- **Alarms**: system fault, clogged filter and water leak.
+- **Alarms**: one per cause (dry run, overcurrent, phase imbalance, pressure
+  out of range), clogged filter and water leak, plus an overall system fault.
 - **Energy dashboard**: the total water used goes straight into *Water
   consumption*, and the flow rate can be shown as the water flow, both with
   long-term statistics. The total is counted by the unit and kept on its SD

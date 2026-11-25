@@ -84,7 +84,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         Serial.printf("Main switch: %s\n", mainSwitch ? "ON" : "OFF");
     } else if (controller && strcmp(topic, mqttTopicError) == 0) {
         error = (strcmp(message, "ON") == 0);
-        if (!error) motorFault = false;   // clearing the error clears a latched electrical fault
+        if (!error) {
+            motorFault = false;   // clearing the error clears a latched electrical fault
+            faultClearAll();      // and every cause
+        }
         Serial.printf("Error state: %s\n", error ? "ON" : "OFF");
     } else if (strcmp(topic, mqttTopicReboot) == 0 && strcmp(message, "PRESS") == 0) {
         Serial.println("Reboot requested via MQTT");
@@ -159,6 +162,13 @@ void publishState() {
         doc["main"]         = mainSwitch ? "ON" : "OFF";
     }
     doc["error"]            = error ? "ON" : "OFF";
+    // One alarm per cause; "error" above stays the summary
+    doc["fault_pressure"]   = faultActive(FAULT_PRESSURE) ? "ON" : "OFF";
+    if (isControllerDevice()) {
+        doc["fault_dry_run"]     = faultActive(FAULT_DRY_RUN) ? "ON" : "OFF";
+        doc["fault_overcurrent"] = faultActive(FAULT_OVERCURRENT) ? "ON" : "OFF";
+        doc["fault_phase"]       = faultActive(FAULT_PHASE_IMBALANCE) ? "ON" : "OFF";
+    }
     doc["reboot_requested"] = rebootRequested;
     doc["uptime"]           = millis() / 1000;
     doc["free_heap"]        = ESP.getFreeHeap();
@@ -284,6 +294,23 @@ void sendAutoDiscoveryConfigs() {
         removeDiscoveryConfig("switch", "main");
         removeDiscoveryConfig("switch", "override");
         removeDiscoveryConfig("switch", "error");
+    }
+
+    // One alarm per fault cause, so notifications and automations can tell
+    // them apart. "System Error" stays as the summary of all of them.
+    createBinarySensorConfig("fault_pressure", "Pressure Out of Range", "problem", "mdi:gauge-low",
+                             deviceDoc, stateTopic, "fault_pressure");
+    if (isControllerDevice()) {
+        createBinarySensorConfig("fault_dry_run",     "Dry Run",         "problem", "mdi:water-off",
+                                 deviceDoc, stateTopic, "fault_dry_run");
+        createBinarySensorConfig("fault_overcurrent", "Overcurrent",     "problem", "mdi:current-ac",
+                                 deviceDoc, stateTopic, "fault_overcurrent");
+        createBinarySensorConfig("fault_phase",       "Phase Imbalance", "problem", "mdi:sine-wave",
+                                 deviceDoc, stateTopic, "fault_phase");
+    } else {
+        removeDiscoveryConfig("binary_sensor", "fault_dry_run");
+        removeDiscoveryConfig("binary_sensor", "fault_overcurrent");
+        removeDiscoveryConfig("binary_sensor", "fault_phase");
     }
 
     createButtonConfig("reboot", "Reboot Device", "mdi:restart", deviceDoc, mqttTopicReboot);

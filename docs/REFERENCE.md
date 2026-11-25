@@ -181,14 +181,28 @@ the error off from Home Assistant. If the cause is still there, it trips again.
 
 On boot the motor output is held off from reset, and no fault is judged and no
 control decision is made until the sensors have produced a first real reading.
-A WiFi outage does not slow the control loop: reconnection runs in the
-background, one short step per loop pass.
 
-A watchdog checks the control loop every second. If it stops for 30 s, the
-unit restarts, rather than leaving the web UI and MQTT answering with frozen
-readings while the pump control and protections are stopped. The reason for
-the last start (`power_on`, `restart`, `loop_stall`, `crash`, `brownout`, …)
-is published as **Last Reset Reason** and in `/api/device` (`reset_reason`).
+The firmware runs as separate FreeRTOS tasks, so none of them waits on another
+(from 3.6.13):
+
+| Task | Priority | Runs | Does |
+|---|---|---|---|
+| control | 4 (highest) | every 20 ms | protections and the motor output; nothing else drives the motor |
+| leds | 3 | every 10 ms | the status LED |
+| sensors | 2 | every second | flow and ADC readings, filter, leak, water total, dry run, runtime |
+| loop | 1 | continuously | WiFi, time, logging, web UI and MQTT updates |
+
+A WiFi outage, a slow SD card or a busy web page does not delay the
+protections, and the LED's heartbeat blink no longer drops out while the
+sensors are read.
+
+A watchdog checks the tasks every second. If the control task stops for 10 s,
+or the sensor task or the main loop for 30 s, the unit restarts, rather than
+leaving the web UI and MQTT answering with frozen readings while the pump
+control and protections are stopped. The reason for the last start
+(`power_on`, `restart`, `control_stall`, `sensor_stall`, `loop_stall`,
+`crash`, `brownout`, …) is published as **Last Reset Reason**, in
+`/api/device` (`reset_reason`), and in `/logs/events.csv`.
 
 ## Home Assistant (MQTT)
 

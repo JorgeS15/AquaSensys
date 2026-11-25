@@ -81,7 +81,9 @@ void updateLeakState(float flowLpm) {
     }
 }
 
-static volatile uint32_t faults = 0;
+// Set by the control and sensor tasks, cleared from the web and MQTT tasks:
+// every change is an atomic read-modify-write, so none of them loses a bit
+static uint32_t faults = 0;
 
 const char* faultName(uint32_t bit) {
     switch (bit) {
@@ -95,26 +97,24 @@ const char* faultName(uint32_t bit) {
 }
 
 void faultSet(uint32_t bit, const char* detail) {
-    if (faults & bit) return;
-    faults |= bit;
-    logEvent(faultName(bit), detail);
+    uint32_t before = __atomic_fetch_or(&faults, bit, __ATOMIC_SEQ_CST);
+    if (!(before & bit)) logEvent(faultName(bit), detail);
 }
 
 void faultClear(uint32_t bits) {
-    faults &= ~bits;
+    __atomic_fetch_and(&faults, ~bits, __ATOMIC_SEQ_CST);
 }
 
 void faultClearAll() {
-    if (faults) logEvent("fault_clear", "error cleared");
-    faults = 0;
+    if (__atomic_exchange_n(&faults, 0u, __ATOMIC_SEQ_CST)) logEvent("fault_clear", "error cleared");
 }
 
 bool faultActive(uint32_t bit) {
-    return (faults & bit) != 0;
+    return (__atomic_load_n(&faults, __ATOMIC_SEQ_CST) & bit) != 0;
 }
 
 uint32_t faultBits() {
-    return faults;
+    return __atomic_load_n(&faults, __ATOMIC_SEQ_CST);
 }
 
 bool leakActive() {

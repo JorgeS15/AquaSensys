@@ -35,7 +35,7 @@ const char* DEVICE_NAME  = deviceNameBuf;
 const char* DEVICE_ID    = deviceIdBuf;
 const char* DEVICE_MODEL = deviceModelBuf;
 const char* DEVICE_MANUFACTURER = "JorgeS15";
-const char* DEVICE_VERSION = "3.6.12"; //One alarm per fault cause in Home Assistant (dry run, overcurrent, ...)
+const char* DEVICE_VERSION = "3.6.13"; //FreeRTOS tasks: sensors, control and LEDs no longer wait on each other or the network
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -71,7 +71,6 @@ MCP3208 adc;
 
 // Variables
 volatile uint32_t pulseCount = 0;
-unsigned long lastTime = 0;
 
 // Flow input conditioning.
 // A slow or noisy edge makes the GPIO input oscillate around its threshold, and
@@ -132,30 +131,65 @@ AsyncWebServer server(80);
 AsyncEventSource events("/events");
 
 // ------------------------------------------------------------
-// Loop watchdog
+// Tasks and their watchdog
 // ------------------------------------------------------------
-// The web server and MQTT run in their own tasks, so if loop() hangs they keep
-// answering with frozen readings and nothing ever resets the unit: it looks
-// alive while the pump control and protections are stopped. loop() stamps
-// loopHeartbeat on every pass; a 1 s timer restarts the unit once it is older
-// than LOOP_STALL_LIMIT_MS. The longest legitimate pass is well under a second
-// (the sensor reads take ~320 ms), so 30 s only catches a real hang.
-static const uint32_t LOOP_STALL_LIMIT_MS = 30000;
+// The work is split into FreeRTOS tasks, so that none of it waits on another:
+//   control  (priority 4, every 20 ms)  protections and the motor output; the
+//            only code that drives MOTOR_PIN once setup() is done
+//   leds     (priority 3, every 10 ms)  the status LED patterns
+//   sensors  (priority 2, every 1 s)    flow, ADC readings (~320 ms of them),
+//            filter, leak, water total, dry run, motor runtime
+//   loop()   (priority 1)               WiFi, time, logging, the web UI and
+//            MQTT updates, restarts
+// The web server, MQTT and the updater have their own tasks, as before.
+//
+// Each task stamps a heartbeat. A 1 s timer restarts the unit once one of them
+// is too old: the web server and MQTT would otherwise keep answering with
+// frozen readings while the pump control and protections are stopped. The
+// longest legitimate pass is well under a second, so the limits only catch a
+// real hang; the control task gets the shortest, since it guards the motor.
+static const uint32_t LOOP_STALL_LIMIT_MS    = 30000;
+static const uint32_t SENSOR_STALL_LIMIT_MS  = 30000;
+static const uint32_t CONTROL_STALL_LIMIT_MS = 10000;
+static const uint32_t SENSOR_PERIOD_MS  = 1000;
+static const uint32_t CONTROL_PERIOD_MS = 20;
+static const uint32_t LED_PERIOD_MS     = 10;
 volatile uint32_t loopHeartbeat = 0;
+volatile uint32_t sensorHeartbeat = 0;
+volatile uint32_t controlHeartbeat = 0;
+static volatile bool tasksStarted = false;
+// Set by the sensor task after each reading; loop() then logs and publishes it
+static volatile bool readingsPending = false;
 
 // Survives esp_restart() (not a power cut), so the next boot can tell a
-// watchdog restart from an ordinary one
+// watchdog restart from an ordinary one, and which task stalled
 RTC_NOINIT_ATTR static uint32_t resetMarker;
-static const uint32_t RESET_MARKER_LOOP_STALL = 0x4C4F4F50;   // "LOOP"
+static const uint32_t RESET_MARKER_LOOP_STALL    = 0x4C4F4F50;   // "LOOP"
+static const uint32_t RESET_MARKER_SENSOR_STALL  = 0x53454E53;   // "SENS"
+static const uint32_t RESET_MARKER_CONTROL_STALL = 0x4354524C;   // "CTRL"
 
 // Why the unit last started, for the diagnostics and Home Assistant
 const char* lastResetReason = "unknown";
 
+// Signed: a heartbeat stamped just after `now` was read must not look ancient
+static bool stale(uint32_t now, uint32_t heartbeat, uint32_t limitMs) {
+    return (int32_t)(now - heartbeat) > (int32_t)limitMs;
+}
+
 static void loopWatchdogCheck(void*) {
-    if (millis() - loopHeartbeat > LOOP_STALL_LIMIT_MS) {
-        esp_rom_printf("\n[Watchdog] loop() stalled for over %u s, restarting\n",
-                       (unsigned)(LOOP_STALL_LIMIT_MS / 1000));
-        resetMarker = RESET_MARKER_LOOP_STALL;
+    uint32_t now = millis();
+    uint32_t marker = 0;
+    const char* who = nullptr;
+    if (stale(now, loopHeartbeat, LOOP_STALL_LIMIT_MS)) {
+        marker = RESET_MARKER_LOOP_STALL; who = "loop()";
+    } else if (tasksStarted && stale(now, sensorHeartbeat, SENSOR_STALL_LIMIT_MS)) {
+        marker = RESET_MARKER_SENSOR_STALL; who = "sensor task";
+    } else if (tasksStarted && stale(now, controlHeartbeat, CONTROL_STALL_LIMIT_MS)) {
+        marker = RESET_MARKER_CONTROL_STALL; who = "control task";
+    }
+    if (marker) {
+        esp_rom_printf("\n[Watchdog] %s stalled, restarting\n", who);
+        resetMarker = marker;
         esp_restart();
     }
 }
@@ -170,12 +204,16 @@ static void startLoopWatchdog() {
 }
 
 static const char* describeResetReason() {
-    bool loopStall = resetMarker == RESET_MARKER_LOOP_STALL;
+    uint32_t marker = resetMarker;
     resetMarker = 0;
+    const char* software = marker == RESET_MARKER_LOOP_STALL    ? "loop_stall"
+                         : marker == RESET_MARKER_SENSOR_STALL  ? "sensor_stall"
+                         : marker == RESET_MARKER_CONTROL_STALL ? "control_stall"
+                         : "restart";
     switch (esp_reset_reason()) {
         case ESP_RST_POWERON:  return "power_on";
         case ESP_RST_EXT:      return "reset_pin";
-        case ESP_RST_SW:       return loopStall ? "loop_stall" : "restart";
+        case ESP_RST_SW:       return software;
         case ESP_RST_PANIC:    return "crash";
         case ESP_RST_INT_WDT:  return "interrupt_watchdog";
         case ESP_RST_TASK_WDT: return "task_watchdog";
@@ -209,6 +247,7 @@ double waterTotalLitres = 0;
 // value here and the loop applies it, so it never races the integration.
 double waterTotalSetValue = 0;
 volatile bool waterTotalSetPending = false;
+static volatile bool waterTotalSaveNow = false;   // a set total is saved at once
 const unsigned long RUNTIME_SAVE_INTERVAL_MS = 60000UL;
 
 // Data logging
@@ -390,6 +429,7 @@ void loadRuntime();
 void saveRuntime();
 void serviceWiFiReconnect();
 void castDNS();
+static void startTasks();
 
 // ============================================================
 // Setup and Main Functions
@@ -529,84 +569,118 @@ void setup() {
     readAllSensors();
     Serial.printf("Initial readings: pressure in %.2f bar, out %.2f bar\n", pressureIn, pressureOut);
 
-    lastTime = millis();
     startLoopWatchdog();
+    startTasks();
     Serial.println("=== Setup Complete ===\n");
 }
 
-void loop() {
-    loopHeartbeat = millis();   // see the loop watchdog
+// One reading: flow over the last window, the ADC sensors, and everything
+// worked out from them. Runs in the sensor task, once a second.
+static void measure() {
+    static unsigned long lastSample = millis();
+    unsigned long now = millis();
 
-    // ============================================================
-    // DEBUG MODE - Test all sensor readings
-    // ============================================================
+    // Snapshot the ISR counter, then do the maths with interrupts back on so
+    // pulses are not lost during the conversion
+    noInterrupts();
+    uint32_t pulses = pulseCount;
+    pulseCount = 0;
+    interrupts();
 
-    if (debug) {
-        static unsigned long lastDebugTime = 0;
-        
-        if (millis() - lastDebugTime >= 2000) {  // Print every 2 seconds
-            lastDebugTime = millis();
-            
-            Serial.println("\n=== Sensor Debug Readings ===");
-            
-            // Read all sensors
-            readAllSensors();
-            
-            // Print temperature readings
-            Serial.print("Ambient Temperature: ");
-            Serial.print(ambientTemp);
-            Serial.println(" °C");
-            
-            Serial.print("Water Temperature: ");
-            Serial.print(waterTemp);
-            Serial.println(" °C");
-            
-            // Print pressure readings
-            Serial.print("Input Pressure: ");
-            Serial.print(pressureIn);
-            Serial.println(" bar");
-            
-            Serial.print("Output Pressure: ");
-            Serial.print(pressureOut);
-            Serial.println(" bar");
-            
-            // Print current readings
-            Serial.print("Current L1: ");
-            Serial.print(currentL1);
-            Serial.println(" A");
-            
-            Serial.print("Current L2: ");
-            Serial.print(currentL2);
-            Serial.println(" A");
-            
-            Serial.print("Current L3: ");
-            Serial.print(currentL3);
-            Serial.println(" A");
-            
-            Serial.print("Total Current: ");
-            Serial.print(currentTotal);
-            Serial.println(" A");
-            
-            Serial.println("==============================\n");
-        }
-        
-        // Keep minimal system functions running in debug mode
-        if (rebootRequested) {
-            saveRuntime();
-            delay(1000);
-            ESP.restart();
-        }
-        
-        updateLights();
-        
-        return;  // Skip normal loop in debug mode
+    unsigned long elapsedMs = now - lastSample;
+    lastSample = now;
+    float measuredFlow = computeFlowLpm(pulses, elapsedMs);
+
+    // Electrical noise can still outrun the debounce. A reading beyond what
+    // the plumbing can physically deliver is not water, so keep the last
+    // good value rather than publishing a spike.
+    if (measuredFlow > config.max_flow_lpm) {
+        flowRejectedSamples++;
+        Serial.printf("[Flow] Discarded implausible reading: %.0f L/min (%lu pulses in %lu ms)\n",
+                      measuredFlow, (unsigned long)pulses, elapsedMs);
+    } else {
+        flow = measuredFlow;
     }
-    
-    // ============================================================
-    // NORMAL OPERATION MODE
-    // ============================================================
-    
-    // Reboot if requested
+    flowDebounceUs = config.flow_debounce_us;  // pick up live config changes
+
+    // Temperatures, pressures, currents
+    readAllSensors();
+    updateFilterState(pressureIn, pressureOut, flow);
+    updateLeakState(flow);
+
+    // Motor-related bookkeeping only exists on Controller units
+    if (isControllerDevice()) {
+        // Dry-run watchdog: motor on with no flow for > 10 s → error
+        if (motor && flow == 0.0f) {
+            if (motorNoFlowStart == 0) motorNoFlowStart = millis();
+            else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
+                if (!error) Serial.println("[Error] Motor running with no flow — possible dry run");
+                error = true;
+                faultSet(FAULT_DRY_RUN, "motor on with no flow for 10 s");
+            }
+        } else {
+            motorNoFlowStart = 0;
+        }
+
+        // Motor runtime accumulator
+        if (motor) motorRuntimeSeconds++;
+    }
+
+    // Water volume: litres = L/min x minutes in this window
+    if (waterTotalSetPending) {
+        waterTotalLitres = waterTotalSetValue;
+        waterTotalSetPending = false;
+        waterTotalSaveNow = true;
+        Serial.printf("[Water] Total set to %.1f L\n", waterTotalLitres);
+    } else if (flow > 0.0f) {
+        waterTotalLitres += (double)flow * (double)elapsedMs / 60000.0;
+    }
+}
+
+static void sensorTask(void*) {
+    TickType_t last = xTaskGetTickCount();
+    for (;;) {
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(SENSOR_PERIOD_MS));
+        sensorHeartbeat = millis();
+        measure();
+        readingsPending = true;
+    }
+}
+
+// Protections first, then the pump decision, on the latest readings. Also
+// picks up commands from the web UI and MQTT within 20 ms.
+static void controlTask(void*) {
+    for (;;) {
+        controlHeartbeat = millis();
+        checkForErrors();
+        controlMotor();
+        vTaskDelay(pdMS_TO_TICKS(CONTROL_PERIOD_MS));
+    }
+}
+
+static void ledTask(void*) {
+    for (;;) {
+        updateLights();
+        vTaskDelay(pdMS_TO_TICKS(LED_PERIOD_MS));
+    }
+}
+
+// Started at the end of setup(), once there is a first real reading. All on
+// core 1, next to loop(); WiFi and the web server live on core 0.
+static void startTasks() {
+    uint32_t now = millis();
+    sensorHeartbeat = now;
+    controlHeartbeat = now;
+    xTaskCreatePinnedToCore(controlTask, "control", 8192, NULL, 4, NULL, 1);
+    xTaskCreatePinnedToCore(ledTask,     "leds",    2048, NULL, 3, NULL, 1);
+    xTaskCreatePinnedToCore(sensorTask,  "sensors", 8192, NULL, 2, NULL, 1);
+    tasksStarted = true;
+}
+
+// Network, time, logging and publishing. Nothing here touches the motor.
+void loop() {
+    loopHeartbeat = millis();   // see the task watchdog
+
     if (rebootRequested) {
         saveRuntime();
         delay(1000);
@@ -624,73 +698,17 @@ void loop() {
             Serial.println("[WiFi] Connection lost");
         }
 
-        // WiFi reconnection — one non-blocking step per pass, so the pump
-        // control and protections below keep running while the network is down
+        // WiFi reconnection — one non-blocking step per pass
         serviceWiFiReconnect();
         timeService();   // a time server or zone changed in Settings
-
     }
-    
-    // Main measurement and control loop (every 1 second)
-    unsigned long currentTime = millis();
-    if (currentTime - lastTime >= 1000) {
-        // Read flow sensor — snapshot the ISR counter, then do the maths with
-        // interrupts back on so pulses are not lost during the conversion.
-        noInterrupts();
-        uint32_t pulses = pulseCount;
-        pulseCount = 0;
-        interrupts();
 
-        unsigned long elapsedMs = currentTime - lastTime;
-        float measuredFlow = computeFlowLpm(pulses, elapsedMs);
+    // After each reading (once a second)
+    if (readingsPending) {
+        readingsPending = false;
 
-        // Electrical noise can still outrun the debounce. A reading beyond what
-        // the plumbing can physically deliver is not water, so keep the last
-        // good value rather than publishing a spike.
-        if (measuredFlow > config.max_flow_lpm) {
-            flowRejectedSamples++;
-            Serial.printf("[Flow] Discarded implausible reading: %.0f L/min (%lu pulses in %lu ms)\n",
-                          measuredFlow, (unsigned long)pulses, elapsedMs);
-        } else {
-            flow = measuredFlow;
-        }
-
-        lastTime = millis();
-        flowDebounceUs = config.flow_debounce_us;  // pick up live config changes
-        
-        // Read all sensors (temperatures, pressures, currents)
-        readAllSensors();
-        updateFilterState(pressureIn, pressureOut, flow);
-        updateLeakState(flow);
-
-        // Motor-related bookkeeping only exists on Controller units
-        if (isControllerDevice()) {
-            // Dry-run watchdog: motor on with no flow for > 10 s → error
-            if (motor && flow == 0.0f) {
-                if (motorNoFlowStart == 0) motorNoFlowStart = millis();
-                else if (millis() - motorNoFlowStart > NO_FLOW_TIMEOUT_MS) {
-                    if (!error) Serial.println("[Error] Motor running with no flow — possible dry run");
-                    error = true;
-                    faultSet(FAULT_DRY_RUN, "motor on with no flow for 10 s");
-                }
-            } else {
-                motorNoFlowStart = 0;
-            }
-
-            // Motor runtime accumulator
-            if (motor) motorRuntimeSeconds++;
-        }
-
-        // Water volume: litres = L/min x minutes in this window
-        bool totalSet = waterTotalSetPending;
-        if (totalSet) {
-            waterTotalLitres = waterTotalSetValue;
-            waterTotalSetPending = false;
-            Serial.printf("[Water] Total set to %.1f L\n", waterTotalLitres);
-        } else if (flow > 0.0f) {
-            waterTotalLitres += (double)flow * (double)elapsedMs / 60000.0;
-        }
-        if (totalSet || millis() - lastRuntimeSave >= RUNTIME_SAVE_INTERVAL_MS) {
+        if (waterTotalSaveNow || millis() - lastRuntimeSave >= RUNTIME_SAVE_INTERVAL_MS) {
+            waterTotalSaveNow = false;
             lastRuntimeSave = millis();
             saveRuntime();   // writes only if something changed
         }
@@ -710,7 +728,7 @@ void loop() {
         }
         updateSerial();
     }
-    
+
     // Diagnostics at 5s, debug data at 30s — decoupled to avoid flooding async_tcp
     if (!OTA.isUpdating() && millis() - lastDiagnosticsUpdate >= DIAGNOSTICS_UPDATE_INTERVAL) {
         lastDiagnosticsUpdate = millis();
@@ -720,12 +738,7 @@ void loop() {
         lastDebugDataUpdate = millis();
         publishDebugData();
     }
-    // Check for error conditions
-    checkForErrors();
-    // Control logic
-    controlMotor();
-    updateLights();
-    delay(1);
+    delay(10);
 }
 
 // ============================================================

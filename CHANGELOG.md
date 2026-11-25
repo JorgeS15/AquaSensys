@@ -9,6 +9,20 @@ card (`sd-assets.zip`, uploaded through `/upload`). Entries marked **[web UI]**
 only reach a device once the new `sd-assets.zip` is uploaded. From 3.6.0 on, an
 automatic update installs both.
 
+## 3.6.13 — 2026-11-25
+- The firmware is split into FreeRTOS tasks: control and protections (every
+  20 ms, highest priority), the status LED (every 10 ms), the sensors (every
+  second) and the network and logging (the main loop). The protections no
+  longer wait for sensor reads, WiFi or the SD card, and commands from the
+  web UI or Home Assistant take effect within 20 ms.
+- Fixes the green heartbeat LED that stopped blinking after a while: its 50 ms
+  blink no longer has to fall between two sensor reads.
+- The watchdog watches every task (control 10 s, sensors and main loop
+  30 s). New reset reasons `control_stall` and `sensor_stall`.
+- Fixes a rare false restart of the watchdog itself: a heartbeat stamped just
+  after the check read the clock looked 49 days old.
+- Log writes and fault flags are safe from several tasks at once.
+
 ## 3.6.12 — 2026-11-25
 - Home Assistant gets one alarm per fault cause: **Pressure Out of Range**,
   and on a Controller **Dry Run**, **Overcurrent** and **Phase Imbalance**.

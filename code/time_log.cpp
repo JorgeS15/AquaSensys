@@ -64,6 +64,23 @@ int localMinuteOfDay() {
     return t.tm_hour * 60 + t.tm_min;
 }
 
+// The sensor, control and main tasks all write logs; one at a time
+static SemaphoreHandle_t logLock = nullptr;
+
+static bool lockLogs() {
+    if (!logLock) {
+        // Created on first use; the first log line is written by setup(),
+        // before any other task exists
+        logLock = xSemaphoreCreateMutex();
+        if (!logLock) return false;
+    }
+    return xSemaphoreTake(logLock, pdMS_TO_TICKS(2000)) == pdTRUE;
+}
+
+static void unlockLogs() {
+    xSemaphoreGive(logLock);
+}
+
 static void ensureLogDir() {
     if (!SD.exists(LOG_DIR)) SD.mkdir(LOG_DIR);
 }
@@ -88,8 +105,9 @@ void logReadings(float pressureIn, float pressureOut, float flow, float waterTem
     } else {
         snprintf(path, sizeof(path), "%s/unsynced.csv", LOG_DIR);
     }
+    if (!lockLogs()) return;
     File f = openLog(path, LOG_HEADER);
-    if (!f) return;
+    if (!f) { unlockLogs(); return; }
     // NAN (no reading) is written as an empty field
     char wt[12] = "";
     if (!isnan(waterTemp)) snprintf(wt, sizeof(wt), "%.1f", waterTemp);
@@ -98,15 +116,19 @@ void logReadings(float pressureIn, float pressureOut, float flow, float waterTem
              pressureIn, pressureOut, flow, wt,
              currentL1, currentL2, currentL3, motor ? 1 : 0, waterTotalLitres);
     f.close();
+    unlockLogs();
 }
 
 void logEvent(const char* type, const char* detail) {
     char stamp[24];
     formatLocalTime(stamp, sizeof(stamp));
-    File f = openLog(EVENTS_PATH, "time,epoch,uptime_s,event,detail");
     Serial.printf("[Event] %s %s\n", type, detail ? detail : "");
-    if (!f) return;
-    f.printf("%s,%lu,%lu,%s,%s\n", stamp, (unsigned long)epochNow(),
-             (unsigned long)(millis() / 1000), type, detail ? detail : "");
-    f.close();
+    if (!lockLogs()) return;
+    File f = openLog(EVENTS_PATH, "time,epoch,uptime_s,event,detail");
+    if (f) {
+        f.printf("%s,%lu,%lu,%s,%s\n", stamp, (unsigned long)epochNow(),
+                 (unsigned long)(millis() / 1000), type, detail ? detail : "");
+        f.close();
+    }
+    unlockLogs();
 }

@@ -19,25 +19,25 @@ step with them. See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
 | # | Item | Issue | Status |
 |---|---|---|---|
-| 6 | Total water volume counter (Energy dashboard ready) | [#48](https://github.com/JorgeS15/AquaSensys/issues/48) | 🔵 in review — 3.6.9 |
-| 7 | Leak detection | [#49](https://github.com/JorgeS15/AquaSensys/issues/49) | ⬜ planned |
-| 8 | Pump short-cycling detection | [#50](https://github.com/JorgeS15/AquaSensys/issues/50) | ⬜ planned |
-| 9 | Separate alarms in Home Assistant | [#51](https://github.com/JorgeS15/AquaSensys/issues/51) | ⬜ planned |
-| 10 | Real time (NTP) for logs and events | [#52](https://github.com/JorgeS15/AquaSensys/issues/52) | ⬜ planned |
+| 6 | Total water volume counter (Energy dashboard ready) | [#48](https://github.com/JorgeS15/AquaSensys/issues/48) | 🔵 in review — 3.6.9 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 7 | Leak detection | [#49](https://github.com/JorgeS15/AquaSensys/issues/49) | 🔵 in review — 3.6.11 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 8 | Pump short-cycling detection | [#50](https://github.com/JorgeS15/AquaSensys/issues/50) | 🔵 in review — 3.6.14 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 9 | Separate alarms in Home Assistant | [#51](https://github.com/JorgeS15/AquaSensys/issues/51) | 🔵 in review — 3.6.12 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 10 | Real time (NTP) for logs and events | [#52](https://github.com/JorgeS15/AquaSensys/issues/52) | 🔵 in review — 3.6.10 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
 
 ## Phase 3 — Architecture
 
 | # | Item | Issue | Status |
 |---|---|---|---|
-| 11 | Firmware restructured into FreeRTOS tasks (fixes the heartbeat LED) | [#53](https://github.com/JorgeS15/AquaSensys/issues/53) | ⬜ planned |
-| 12 | Password for actions (install, reboot, settings, pump) | [#54](https://github.com/JorgeS15/AquaSensys/issues/54) | ⬜ planned |
+| 11 | Firmware restructured into FreeRTOS tasks (fixes the heartbeat LED) | [#53](https://github.com/JorgeS15/AquaSensys/issues/53) | 🔵 in review — 3.6.13 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 12 | Password for actions (install, reboot, settings, pump) | [#54](https://github.com/JorgeS15/AquaSensys/issues/54) | 🔵 in review — 3.6.15 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
 
 ## Phase 4 — Data and convenience
 
 | # | Item | Issue | Status |
 |---|---|---|---|
-| 13 | History charts on the dashboard | [#55](https://github.com/JorgeS15/AquaSensys/issues/55) | ⬜ planned |
-| 14 | CSV export and configuration backup/restore | [#56](https://github.com/JorgeS15/AquaSensys/issues/56) | ⬜ planned |
+| 13 | History charts on the dashboard | [#55](https://github.com/JorgeS15/AquaSensys/issues/55) | 🔵 in review — 3.6.16 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
+| 14 | CSV export and configuration backup/restore | [#56](https://github.com/JorgeS15/AquaSensys/issues/56) | 🔵 in review — 3.6.17 ([#59](https://github.com/JorgeS15/AquaSensys/pull/59)) |
 
 ## Order and why
 
